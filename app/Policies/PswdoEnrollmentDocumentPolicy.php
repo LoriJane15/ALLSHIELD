@@ -19,9 +19,35 @@ class PswdoEnrollmentDocumentPolicy
 
     private function hasAccess(User $user, PswdoEnrollmentDocument $document): bool
     {
+        if (! $user->is_active) {
+            return false;
+        }
+
         $document->loadMissing('enrollment');
 
-        return $document->enrollment !== null
-            && $user->can('view', $document->enrollment);
+        $enrollment = $document->enrollment;
+        if ($enrollment === null) {
+            return false;
+        }
+
+        if ($user->hasRole('pswdo')) {
+            return $user->can('view', $enrollment);
+        }
+
+        if ($user->hasRole('39th_ib')) {
+            $enrollment->loadMissing('surfacedFormerRebel');
+
+            return $enrollment->surfacedFormerRebel !== null
+                && $user->can('view', $enrollment->surfacedFormerRebel);
+        }
+
+        if ($user->hasRole('japic')) {
+            $enrollment->loadMissing('surfacedFormerRebel.japicCertificationProcessing');
+            $processing = $enrollment->surfacedFormerRebel?->japicCertificationProcessing;
+
+            return $processing !== null && $user->can('view', $processing);
+        }
+
+        return false;
     }
 }

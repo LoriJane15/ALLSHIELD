@@ -8,8 +8,10 @@ use App\Enums\JapicCertificationStatus;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
+use App\Services\SurfacedFrDocumentsRecordsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use Tests\TestCase;
 
 class JapicCertificationProfileTest extends TestCase
@@ -41,7 +43,7 @@ class JapicCertificationProfileTest extends TestCase
         $this->actingAs($other)->get(route('japic.certifications.show', $processing))->assertForbidden();
     }
 
-    public function test_both_profiles_present_the_same_status_and_four_monitoring_destinations(): void
+    public function test_both_profiles_present_the_same_ordered_documents_and_monitoring_destinations(): void
     {
         $japic = User::factory()->role('japic')->create();
         $processing = $this->processing();
@@ -52,8 +54,11 @@ class JapicCertificationProfileTest extends TestCase
         $ib39Response = $this->actingAs($ib39)->get(route('ib39.fr-profiles.show', $fr))->assertOk();
         foreach ([$japicResponse, $ib39Response] as $response) {
             $response->assertSee('CDR Completed')->assertSeeInOrder([
-                'CDR', 'FEA Processing Documents', 'Assistance Records', 'JAPIC Certification',
+                'CDR', 'JAPIC Certification', 'PSWDO Enrollment Documents',
+                'E-CLIP Enrollment Form', 'Initial Interview Form', 'Profiling Interview Form', 'Endorsement Letter',
+                'FEA Processing Documents', 'Assistance Records',
             ]);
+            $response->assertSee('No PSWDO enrollment document is available yet.', false);
         }
         foreach ([
             'japic.certifications.records.cdr',
@@ -107,6 +112,27 @@ class JapicCertificationProfileTest extends TestCase
         $monitoringComponent = file_get_contents(resource_path('views/components/surfaced-fr-documents-records.blade.php'));
         $this->assertStringNotContainsString('route(', $monitoringComponent);
         $this->assertStringNotContainsString('App\\Enums', $monitoringComponent);
+    }
+
+    public function test_documents_service_rejects_a_missing_eager_loaded_pswdo_relationship(): void
+    {
+        $processing = $this->processing();
+        $processing->load([
+            'surfacedFormerRebel.cdrProcessing.currentFinalVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
+            'currentFinalVersion',
+        ]);
+        $record = $processing->surfacedFormerRebel;
+        $record->setRelation('japicCertificationProcessing', $processing);
+
+        $this->expectException(LogicException::class);
+        app(SurfacedFrDocumentsRecordsService::class)->summaries(
+            $record,
+            fn (): string => '',
+            fn (): string => '',
+        );
     }
 
     public function test_static_timeline_maps_every_internal_status_without_clickable_steps(): void

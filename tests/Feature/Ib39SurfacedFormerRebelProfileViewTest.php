@@ -81,12 +81,17 @@ class Ib39SurfacedFormerRebelProfileViewTest extends TestCase
             ->assertSeeInOrder([
                 'CDR',
                 'No completed CDR document is available yet.',
+                'JAPIC Certification',
+                'No final JAPIC certification document is available yet.',
+                'PSWDO Enrollment Documents',
+                'E-CLIP Enrollment Form',
+                'Initial Interview Form',
+                'Profiling Interview Form',
+                'Endorsement Letter',
                 'FEA Processing Documents',
                 'No FEA processing documents are available yet.',
                 'Assistance Records',
                 'No assistance records are available yet.',
-                'JAPIC Certification',
-                'No final JAPIC certification document is available yet.',
             ])
             ->assertSee('href="'.route('ib39.fr-profiles.records.cdr', $record).'"', false)
             ->assertSee('href="'.route('ib39.fr-profiles.records.fea', $record).'"', false)

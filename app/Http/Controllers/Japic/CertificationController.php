@@ -77,13 +77,17 @@ class CertificationController extends Controller
 
         return view('japic.certifications.show', [
             'processing' => $japicCertificationProcessing,
-            'documentSummaries' => $documents->summaries($record),
+            'documentSummaries' => $documents->summaries(
+                $record,
+                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.download', [$enrollment, $document]),
+            ),
             'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('japic.certifications.records.cdr', $japicCertificationProcessing),
+                'japic' => route('japic.certifications.records.certification', $japicCertificationProcessing),
                 'fea' => route('japic.certifications.records.fea', $japicCertificationProcessing),
                 'assistance' => route('japic.certifications.records.assistance', $japicCertificationProcessing),
-                'japic' => route('japic.certifications.records.certification', $japicCertificationProcessing),
             ],
         ]);
     }

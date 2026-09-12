@@ -33,27 +33,20 @@ class EnrollmentController extends Controller
         $this->loadProfile($pswdoEnrollment);
         $record = $pswdoEnrollment->surfacedFormerRebel;
         $record->setRelation('pswdoEnrollment', $pswdoEnrollment);
-        $summaries = $records->summaries($record);
-        foreach (PswdoEnrollmentDocumentType::cases() as $type) {
-            $document = $pswdoEnrollment->documents->firstWhere('document_type', $type);
-            $summaries[$type->value] = [
-                'status' => $document ? 'Completed' : 'Pending',
-                'availability' => $document ? 'Final signed PDF is available.' : 'No final signed PDF is available yet.',
-            ];
-        }
 
         return view('pswdo.enrollments.show', [
             'enrollment' => $pswdoEnrollment,
-            'documentSummaries' => $summaries,
+            'documentSummaries' => $records->summaries(
+                $record,
+                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.download', [$enrollment, $document]),
+            ),
             'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('pswdo.enrollments.records.cdr', $pswdoEnrollment),
                 'japic' => route('pswdo.enrollments.records.certification', $pswdoEnrollment),
                 'fea' => route('pswdo.enrollments.records.fea', $pswdoEnrollment),
                 'assistance' => route('pswdo.enrollments.records.assistance', $pswdoEnrollment),
-                ...collect(PswdoEnrollmentDocumentType::cases())->mapWithKeys(fn ($type) => [
-                    $type->value => route('pswdo.enrollments.workspace', $pswdoEnrollment).'#'.$type->value,
-                ])->all(),
             ],
         ]);
     }

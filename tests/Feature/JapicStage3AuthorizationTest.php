@@ -18,13 +18,14 @@ class JapicStage3AuthorizationTest extends TestCase
     public function test_route_inventory_has_only_the_six_approved_stage_three_routes_and_methods(): void
     {
         $routes = collect(app('router')->getRoutes()->getRoutes())->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'japic.'));
-        $this->assertCount(23, $routes);
-        $this->assertCount(18, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
+        $this->assertCount(25, $routes);
+        $this->assertCount(20, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
         $this->assertCount(1, $routes->filter(fn ($route) => $route->methods() === ['PUT']));
         $this->assertCount(4, $routes->filter(fn ($route) => $route->methods() === ['POST']));
         $this->assertSame([], $routes->filter(fn ($route) => array_intersect($route->methods(), ['DELETE', 'PATCH']))->values()->all());
         foreach (['japic.certifications.records.cdr', 'japic.certifications.records.fea', 'japic.certifications.records.assistance', 'japic.certifications.records.certification', 'japic.certifications.history',
-            'japic.certifications.document-versions.preview', 'japic.certifications.document-versions.download'] as $name) {
+            'japic.certifications.document-versions.preview', 'japic.certifications.document-versions.download',
+            'japic.pswdo-enrollment-documents.preview', 'japic.pswdo-enrollment-documents.download'] as $name) {
             $this->assertSame(['GET', 'HEAD'], $routes->first(fn ($route) => $route->getName() === $name)->methods());
         }
     }

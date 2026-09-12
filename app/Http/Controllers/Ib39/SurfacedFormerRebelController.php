@@ -95,13 +95,17 @@ class SurfacedFormerRebelController extends Controller
             'recordedBy' => filled($ib39SurfacedFormerRebel->creator?->name)
                 ? $ib39SurfacedFormerRebel->creator->name
                 : 'Unknown user',
-            'documentSummaries' => $documents->summaries($ib39SurfacedFormerRebel),
+            'documentSummaries' => $documents->summaries(
+                $ib39SurfacedFormerRebel,
+                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.download', [$enrollment, $document]),
+            ),
             'progressTimeline' => $progressTimeline->timeline($ib39SurfacedFormerRebel),
             'documentLinks' => [
                 'cdr' => route('ib39.fr-profiles.records.cdr', $ib39SurfacedFormerRebel),
+                'japic' => route('ib39.fr-profiles.records.certification', $ib39SurfacedFormerRebel),
                 'fea' => route('ib39.fr-profiles.records.fea', $ib39SurfacedFormerRebel),
                 'assistance' => route('ib39.fr-profiles.records.assistance', $ib39SurfacedFormerRebel),
-                'japic' => route('ib39.fr-profiles.records.certification', $ib39SurfacedFormerRebel),
             ],
         ]);
     }

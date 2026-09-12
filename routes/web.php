@@ -179,6 +179,8 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::get('/fea/{fea}/documents/{document}/draft-versions/{version}/download', [Ib39\FeaUploadController::class, 'download'])->name('fea.documents.versions.download');
     Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/preview', [Japic\CertificationDocumentController::class, 'previewFinal'])->name('japic-certifications.document-versions.preview');
     Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/download', [Japic\CertificationDocumentController::class, 'downloadFinal'])->name('japic-certifications.document-versions.download');
+    Route::get('/pswdo-enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('pswdo-enrollment-documents.preview');
+    Route::get('/pswdo-enrollments/{pswdoEnrollment}/documents/{document}/download', [Pswdo\EnrollmentDocumentController::class, 'download'])->name('pswdo-enrollment-documents.download');
 
     Route::get('/areas', [Ib39\AreaController::class, 'index'])->name('areas.index');
     Route::post('/areas', [Ib39\AreaController::class, 'store'])->name('areas.store');
@@ -216,6 +218,8 @@ Route::middleware(['auth', 'role:japic'])->prefix('japic')->name('japic.')->grou
     Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/download', [Ib39\FeaUploadController::class, 'download'])->name('fea.documents.versions.download');
+    Route::get('/pswdo-enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('pswdo-enrollment-documents.preview');
+    Route::get('/pswdo-enrollments/{pswdoEnrollment}/documents/{document}/download', [Pswdo\EnrollmentDocumentController::class, 'download'])->name('pswdo-enrollment-documents.download');
 });
 
 Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->group(function () {

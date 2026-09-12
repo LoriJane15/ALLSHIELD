@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Enums\Ib39FeaUploadSlot;
 use App\Enums\Ib39FrCategory;
 use App\Enums\JapicCertificationStatus;
+use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Ib39FeaDocumentVersion;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationDocumentVersion;
 use App\Models\JapicCertificationProcessing;
+use App\Models\PswdoEnrollment;
 use App\Models\User;
 use App\Services\Ib39SurfacedFormerRebelService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -150,6 +152,89 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $unrelated = User::factory()->role('admin')->create();
         $this->actingAs($inactive)->get(route('ib39.japic-certifications.document-versions.preview', [$processing, $current]))->assertRedirect(route('login'));
         $this->actingAs($unrelated)->get(route('ib39.japic-certifications.document-versions.preview', [$processing, $current]))->assertForbidden();
+    }
+
+    public function test_all_three_profiles_share_authorized_private_pswdo_document_access(): void
+    {
+        Storage::fake('local');
+        [$japic, $record, $processing] = $this->context(false);
+        $ib39 = User::query()->findOrFail($record->created_by);
+        $pswdo = User::factory()->role('pswdo')->create();
+
+        $certificationPath = "japic/certifications/{$processing->id}/final-documents/current.pdf";
+        $certification = JapicCertificationDocumentVersion::query()->forceCreate([
+            'processing_id' => $processing->id, 'version_number' => 1, 'storage_path' => $certificationPath,
+            'original_filename' => 'certification.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 16,
+            'sha256' => str_repeat('a', 64), 'uploaded_by' => $japic->id, 'all_signatories_confirmed' => true,
+            'correct_final_confirmed' => true, 'uploaded_at' => now(),
+        ]);
+        $processing->forceFill([
+            'status' => JapicCertificationStatus::Completed,
+            'current_final_version_id' => $certification->id,
+            'completed_at' => now(),
+            'completed_by' => $japic->id,
+        ])->save();
+
+        $enrollment = PswdoEnrollment::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $record->id]);
+        $path = "pswdo/enrollments/{$enrollment->id}/eclip_enrollment_form/final.pdf";
+        $document = $enrollment->documents()->create([
+            'document_type' => PswdoEnrollmentDocumentType::EclipEnrollmentForm,
+            'storage_path' => $path,
+            'original_filename' => 'eclip-final.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 17,
+            'sha256' => str_repeat('f', 64),
+            'uploaded_by' => $pswdo->id,
+            'correct_document_type_confirmed' => true,
+            'belongs_to_fr_confirmed' => true,
+            'final_signed_confirmed' => true,
+            'uploaded_at' => now(),
+        ]);
+        Storage::disk('local')->put($path, '%PDF-1.4 private');
+
+        foreach ([
+            [$ib39, 'ib39.fr-profiles.show', $record, 'ib39.pswdo-enrollment-documents.preview', 'ib39.pswdo-enrollment-documents.download'],
+            [$japic, 'japic.certifications.show', $processing, 'japic.pswdo-enrollment-documents.preview', 'japic.pswdo-enrollment-documents.download'],
+            [$pswdo, 'pswdo.enrollments.show', $enrollment, 'pswdo.enrollments.documents.preview', 'pswdo.enrollments.documents.download'],
+        ] as [$user, $profileRoute, $profileParent, $previewRoute, $downloadRoute]) {
+            $profile = $this->actingAs($user)->get(route($profileRoute, $profileParent))->assertOk()
+                ->assertSee('E-CLIP Enrollment Form')
+                ->assertSee('href="'.route($previewRoute, [$enrollment, $document]).'"', false)
+                ->assertSee('href="'.route($downloadRoute, [$enrollment, $document]).'"', false)
+                ->assertDontSee($path)
+                ->assertDontSee(str_repeat('f', 64));
+
+            $this->assertStringNotContainsString('type="file"', $this->documentsSection($profile->getContent()));
+            foreach ([$previewRoute, $downloadRoute] as $routeName) {
+                $response = $this->actingAs($user)->get(route($routeName, [$enrollment, $document]))->assertOk();
+                $this->assertStringContainsString('private', (string) $response->headers->get('Cache-Control'));
+                $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+                $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+            }
+        }
+
+        $processing->forceFill(['assigned_to' => $japic->id])->save();
+        $otherJapic = User::factory()->role('japic')->create();
+        $this->actingAs($otherJapic)->get(route('japic.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertForbidden();
+        auth()->logout();
+        $this->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertRedirect(route('login'));
+        $inactive = User::factory()->role('39th_ib')->create(['is_active' => false]);
+        $this->actingAs($inactive)->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertRedirect(route('login'));
+        $this->actingAs(User::factory()->role('admin')->create())
+            ->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertForbidden();
+
+        [, $otherRecord] = $this->context(false);
+        $otherEnrollment = PswdoEnrollment::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $otherRecord->id]);
+        $this->actingAs($ib39)->get(route('ib39.pswdo-enrollment-documents.preview', [$otherEnrollment, $document]))->assertNotFound();
+        $this->actingAs($ib39)->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, 999999999]))->assertNotFound();
+    }
+
+    private function documentsSection(string $html): string
+    {
+        $start = strpos($html, 'id="documents-records-heading"');
+        $end = $start === false ? false : strpos($html, '</section>', $start);
+
+        return $start === false || $end === false ? '' : substr($html, $start, $end - $start);
     }
 
     private function context(bool $firearms): array
