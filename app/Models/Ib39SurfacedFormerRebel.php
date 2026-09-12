@@ -179,4 +179,9 @@ class Ib39SurfacedFormerRebel extends Model
     {
         return $this->hasOne(JapicCertificationProcessing::class, 'ib39_surfaced_former_rebel_id');
     }
+
+    public function pswdoEnrollment(): HasOne
+    {
+        return $this->hasOne(PswdoEnrollment::class, 'ib39_surfaced_former_rebel_id');
+    }
 }

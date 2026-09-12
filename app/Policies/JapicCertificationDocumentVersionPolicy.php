@@ -6,6 +6,7 @@ use App\Enums\JapicCertificationStatus;
 use App\Models\JapicCertificationDocumentVersion;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
+use App\Services\PswdoEligibilityService;
 
 class JapicCertificationDocumentVersionPolicy
 {
@@ -34,6 +35,14 @@ class JapicCertificationDocumentVersionPolicy
 
         if ($user->hasRole('japic')) {
             return app(JapicCertificationProcessingPolicy::class)->view($user, $processing);
+        }
+
+        if ($user->hasRole('pswdo')) {
+            $processing->loadMissing('surfacedFormerRebel.pswdoEnrollment');
+            $record = $processing->surfacedFormerRebel;
+
+            return $record?->pswdoEnrollment !== null
+                && app(PswdoEligibilityService::class)->isEligible($record);
         }
 
         if (! $user->hasRole('39th_ib')) {

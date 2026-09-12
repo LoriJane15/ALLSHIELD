@@ -25,7 +25,10 @@ use Throwable;
 
 class JapicCertificationDocumentService
 {
-    public function __construct(private readonly JapicCertificationDraftSchema $schema) {}
+    public function __construct(
+        private readonly JapicCertificationDraftSchema $schema,
+        private readonly PswdoEnrollmentIntakeService $pswdoIntake,
+    ) {}
 
     public function data(JapicCertificationProcessing $processing): array
     {
@@ -193,6 +196,7 @@ class JapicCertificationDocumentService
                     'ip_address' => $ipAddress,
                     'user_agent' => $userAgent ? mb_substr($userAgent, 0, 1000) : null,
                 ]);
+                $this->pswdoIntake->receiveEligible($locked->ib39_surfaced_former_rebel_id);
 
                 return $version;
             }, 5);

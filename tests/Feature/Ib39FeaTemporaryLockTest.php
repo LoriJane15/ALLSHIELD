@@ -8,10 +8,13 @@ use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\Ib39FeaDocumentType;
 use App\Enums\Ib39FeaUploadSlot;
 use App\Enums\Ib39FrCategory;
+use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Barangay;
 use App\Models\Ib39FeaDocument;
 use App\Models\Ib39SurfacedFormerRebel;
+use App\Models\JapicCertificationProcessing;
 use App\Models\Municipality;
+use App\Models\PswdoEnrollment;
 use App\Models\User;
 use App\Services\Ib39FeaDocumentWorkflowService;
 use App\Services\Ib39FeaDraftSchema;
@@ -50,7 +53,7 @@ class Ib39FeaTemporaryLockTest extends TestCase
         ], $this->actor);
     }
 
-    public function test_locked_provider_is_bound_and_never_infers_readiness(): void
+    public function test_readiness_is_derived_only_from_all_four_pswdo_final_documents(): void
     {
         $readiness = app(Ib39FeaReadiness::class);
 
@@ -58,6 +61,26 @@ class Ib39FeaTemporaryLockTest extends TestCase
         $this->assertFalse($readiness->isReady($this->record));
         $this->assertSame(self::MESSAGE, $readiness->denialMessage());
         $this->assertLocked(fn () => $readiness->assertReady($this->record));
+
+        $this->completePswdoEnrollment();
+        $this->assertTrue($readiness->isReady($this->record));
+        $readiness->assertReady($this->record);
+    }
+
+    public function test_fea_actions_unlock_after_pswdo_completion_and_no_firearms_remains_not_applicable(): void
+    {
+        $this->completePswdoEnrollment();
+        $processing = $this->record->feaProcessing;
+        $document = $processing->documents()->where('document_type', Ib39FeaDocumentType::Tir)->firstOrFail();
+
+        $this->actingAs($this->actor)->get(route('ib39.fea.show', $processing))->assertOk()
+            ->assertDontSee(self::MESSAGE)->assertSee('Start Preliminary Work');
+        $this->actingAs($this->actor)->post(route('ib39.fea.documents.start', [$processing, $document]))->assertRedirect();
+        $this->assertSame(Ib39FeaDocumentStatus::Processing, $document->fresh()->status);
+
+        $this->record->update(['possessed_firearms' => false]);
+        $this->assertFalse(app(Ib39FeaReadiness::class)->isReady($this->record->fresh()));
+        $this->assertSame('Not Applicable', $processing->fresh('surfacedFormerRebel', 'documents')->overallStatus()->value);
     }
 
     public function test_initialization_profile_queue_and_workspace_remain_available_with_lock_notice(): void
@@ -202,5 +225,40 @@ class Ib39FeaTemporaryLockTest extends TestCase
             'barangay_id' => $this->record->barangay_id,
             'surfaced_at' => '2026-09-02', 'possessed_firearms' => true,
         ], $this->actor);
+    }
+
+    private function completePswdoEnrollment(): PswdoEnrollment
+    {
+        $cdr = $this->record->cdrProcessing;
+        $cdrVersion = $cdr->documentVersions()->create([
+            'version_number' => 1, 'source_type' => 'uploaded', 'storage_path' => 'ib39/cdr/test/final.pdf',
+            'original_filename' => 'cdr.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20,
+            'sha256' => str_repeat('c', 64), 'created_by' => $this->actor->id, 'finalized_at' => now(),
+        ]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $this->actor->id, 'current_final_version_id' => $cdrVersion->id]);
+        $japic = JapicCertificationProcessing::query()->forceCreate([
+            'ib39_surfaced_former_rebel_id' => $this->record->id, 'triggering_cdr_document_version_id' => $cdrVersion->id,
+            'status' => 'Completed', 'received_at' => now(), 'due_at' => now()->addDays(14),
+            'completed_at' => now(), 'completed_by' => $this->actor->id, 'lock_version' => 1,
+        ]);
+        $japicVersion = $japic->documentVersions()->create([
+            'version_number' => 1, 'storage_path' => 'japic/certifications/test/final.pdf', 'original_filename' => 'japic.pdf',
+            'mime_type' => 'application/pdf', 'size_bytes' => 20, 'sha256' => str_repeat('j', 64),
+            'uploaded_by' => $this->actor->id, 'all_signatories_confirmed' => true,
+            'correct_final_confirmed' => true, 'uploaded_at' => now(),
+        ]);
+        $japic->forceFill(['current_final_version_id' => $japicVersion->id])->save();
+        $enrollment = $this->record->pswdoEnrollment()->create(['lock_version' => 0]);
+        foreach (PswdoEnrollmentDocumentType::cases() as $position => $type) {
+            $enrollment->documents()->create([
+                'document_type' => $type, 'storage_path' => "pswdo/enrollments/{$enrollment->id}/{$type->value}/final.pdf",
+                'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20,
+                'sha256' => hash('sha256', $type->value), 'uploaded_by' => $this->actor->id,
+                'correct_document_type_confirmed' => true, 'belongs_to_fr_confirmed' => true,
+                'final_signed_confirmed' => true, 'uploaded_at' => now()->addSeconds($position),
+            ]);
+        }
+
+        return $enrollment;
     }
 }

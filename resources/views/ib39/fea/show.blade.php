@@ -1,7 +1,6 @@
 @extends('layouts.skydash-v')
 @section('title', 'FEA Record')
 @section('heading', 'FEA Record')
-@inject('readiness', 'App\Contracts\Ib39FeaReadiness')
 
 @push('styles')
 <style>
@@ -13,11 +12,10 @@
 @section('content')
 @php
     $record = $fea->surfacedFormerRebel;
-    $isReady = $readiness->isReady($record);
 @endphp
 <div class="fea-workspace">
     <header class="fea-workspace-hero mb-4"><div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between" style="gap:1rem"><div><h2 class="mb-1">FEA Record {{ $record->reference_number }}</h2><p class="mb-0">Preliminary document workspace</p></div><span class="overall-badge">{{ $fea->overallStatus()->value }}</span></div></header>
-    <div class="alert alert-warning" role="status">{{ $readiness->denialMessage() }}</div>
+    @unless($isReady)<div class="alert alert-warning" role="status">{{ $readiness->denialMessage() }}</div>@endunless
     @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
     @if($errors->any())<div class="validation-summary mb-4"><strong>The preliminary metadata was not saved.</strong><ul class="mb-0 mt-2">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
     <div class="row">

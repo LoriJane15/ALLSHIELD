@@ -8,6 +8,7 @@ use App\Http\Controllers\Japic;
 use App\Http\Controllers\Lgu;
 use App\Http\Controllers\Mblrc;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Pswdo;
 use App\Http\Controllers\SuperAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -213,6 +214,27 @@ Route::middleware(['auth', 'role:japic'])->prefix('japic')->name('japic.')->grou
 
     Route::get('/cdr/{cdr}/document-versions/{version}/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
     Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
+    Route::get('/fea/{fea}/documents/{document}/versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');
+    Route::get('/fea/{fea}/documents/{document}/versions/{version}/download', [Ib39\FeaUploadController::class, 'download'])->name('fea.documents.versions.download');
+});
+
+Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->group(function () {
+    Route::get('/', [Pswdo\DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/enrollments', [Pswdo\EnrollmentController::class, 'index'])->name('enrollments.index');
+    Route::get('/enrollments/{pswdoEnrollment}', [Pswdo\EnrollmentController::class, 'show'])->name('enrollments.show');
+    Route::get('/enrollments/{pswdoEnrollment}/workspace', [Pswdo\EnrollmentController::class, 'workspace'])->name('enrollments.workspace');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/cdr', [Pswdo\EnrollmentController::class, 'cdr'])->name('enrollments.records.cdr');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/japic-certification', [Pswdo\EnrollmentController::class, 'certification'])->name('enrollments.records.certification');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/fea', [Pswdo\EnrollmentController::class, 'fea'])->name('enrollments.records.fea');
+    Route::get('/enrollments/{pswdoEnrollment}/assistance', [Pswdo\EnrollmentController::class, 'assistance'])->name('enrollments.records.assistance');
+    Route::post('/enrollments/{pswdoEnrollment}/documents/{documentType}/final-document', [Pswdo\EnrollmentDocumentController::class, 'store'])->name('enrollments.documents.store');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('enrollments.documents.preview');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/download', [Pswdo\EnrollmentDocumentController::class, 'download'])->name('enrollments.documents.download');
+
+    Route::get('/cdr/{cdr}/document-versions/{version}/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
+    Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
+    Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/preview', [Japic\CertificationDocumentController::class, 'previewFinal'])->name('japic.document-versions.preview');
+    Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/download', [Japic\CertificationDocumentController::class, 'downloadFinal'])->name('japic.document-versions.download');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/download', [Ib39\FeaUploadController::class, 'download'])->name('fea.documents.versions.download');
 });

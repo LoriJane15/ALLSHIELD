@@ -9,6 +9,7 @@ use App\Models\Ib39FeaProcessing;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
+use App\Services\PswdoEligibilityService;
 
 class Ib39FeaDocumentPolicy
 {
@@ -75,6 +76,14 @@ class Ib39FeaDocumentPolicy
 
         if ($user->hasRole('39th_ib')) {
             return $processing->surfacedFormerRebel()->exists();
+        }
+
+        if ($user->hasRole('pswdo')) {
+            $processing->loadMissing('surfacedFormerRebel.pswdoEnrollment');
+            $record = $processing->surfacedFormerRebel;
+
+            return $record?->pswdoEnrollment !== null
+                && app(PswdoEligibilityService::class)->isEligible($record);
         }
 
         if (! $user->hasRole('japic')) {

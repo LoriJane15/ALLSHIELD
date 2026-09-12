@@ -1,7 +1,6 @@
 @extends('layouts.skydash-v')
 @section('title', 'FEA Processing')
 @section('heading', 'FEA Processing')
-@inject('readiness', 'App\Contracts\Ib39FeaReadiness')
 
 @push('styles')
 <style>
@@ -16,8 +15,6 @@
         <p class="mb-0">Preliminary 39th IB queue for surfaced FR records with a recorded firearms indicator of Yes.</p>
     </header>
 
-    <div class="alert alert-warning" role="status">{{ $readiness->denialMessage() }}</div>
-
     <section class="card fea-card" aria-label="FEA processing queue">
         <div class="table-responsive">
             <table class="table fea-table">
@@ -31,7 +28,10 @@
                         <td>{{ $record->surfaced_at->format('M d, Y') }}</td>
                         <td>{{ $record->barangay?->name ? $record->barangay->name.', ' : '' }}{{ $record->municipality->name }}, {{ $record->province }}</td>
                         <td><span class="fea-status">{{ $fea->overallStatus()->value }}</span></td>
-                        <td><a class="btn btn-sm btn-outline-primary" href="{{ route('ib39.fea.show', $fea) }}">View FEA Record</a></td>
+                        <td class="fea-access">
+                            <a class="btn btn-sm btn-outline-primary" href="{{ route('ib39.fea.show', $fea) }}">View FEA Record</a>
+                            @unless($readinessByProcessing[$fea->id])<small class="d-block mt-2">{{ $readiness->denialMessage() }}</small>@endunless
+                        </td>
                     </tr>
                 @empty
                     <tr><td colspan="6" class="fea-empty">No surfaced FR records currently require FEA processing.</td></tr>

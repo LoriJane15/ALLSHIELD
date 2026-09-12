@@ -10,7 +10,7 @@ class JapicCertificationUploadedFile
 {
     public const MAX_BYTES = 5 * 1024 * 1024;
 
-    public const FINAL_PDF_MAX_BYTES = 20 * 1024 * 1024;
+    public const FINAL_PDF_MAX_BYTES = PrivatePdfUpload::MAX_BYTES;
 
     public const MIN_DIMENSION = 100;
 
@@ -80,49 +80,18 @@ class JapicCertificationUploadedFile
 
     public static function inspectFinalPdf(UploadedFile $file): array
     {
-        $path = $file->getRealPath();
-        $extension = strtolower($file->getClientOriginalExtension());
-        $mimeType = $file->getMimeType();
-        $size = $file->getSize();
-
-        if (! is_string($path) || ! is_file($path) || ! is_int($size) || $size < 1
-            || $size > self::FINAL_PDF_MAX_BYTES || $extension !== 'pdf' || $mimeType !== 'application/pdf') {
-            self::invalidFinalPdf();
-        }
-
-        $handle = fopen($path, 'rb');
-        $signature = $handle === false ? false : fread($handle, 5);
-        if (is_resource($handle)) {
-            fclose($handle);
-        }
-        $tail = file_get_contents($path, false, null, max(0, $size - 2048));
-        if ($signature !== '%PDF-' || ! is_string($tail) || ! str_contains($tail, '%%EOF')) {
-            self::invalidFinalPdf();
-        }
-
-        $original = pathinfo(basename($file->getClientOriginalName()), PATHINFO_FILENAME);
-        $safeBase = Str::of($original)->ascii()->replaceMatches('/[^A-Za-z0-9._-]+/', '-')->trim('.-_')->limit(180, '')->toString();
-
-        return [
-            'mime_type' => 'application/pdf',
-            'extension' => 'pdf',
-            'original_filename' => ($safeBase !== '' ? $safeBase : 'final-certification').'.pdf',
-            'size_bytes' => $size,
-            'sha256' => hash_file('sha256', $path),
-        ];
+        return PrivatePdfUpload::inspect(
+            $file,
+            'final-certification',
+            'document',
+            'The final certification must be a valid non-empty PDF whose extension, detected MIME type, signature, EOF marker, and size are allowed.',
+        );
     }
 
     private static function invalid(): never
     {
         throw ValidationException::withMessages([
             'photo' => 'The photograph must be a valid JPEG or PNG whose extension, signature, decoded contents, dimensions, and size are allowed.',
-        ]);
-    }
-
-    private static function invalidFinalPdf(): never
-    {
-        throw ValidationException::withMessages([
-            'document' => 'The final certification must be a valid non-empty PDF whose extension, detected MIME type, signature, EOF marker, and size are allowed.',
         ]);
     }
 }

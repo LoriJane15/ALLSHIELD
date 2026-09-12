@@ -1,6 +1,6 @@
 @extends('layouts.skydash-v')
 @section('title', 'Assistance Records')
-@section('heading', 'JAPIC Certification')
+@section('heading', $heading ?? 'JAPIC Certification')
 
 @section('content')
 <a href="{{ $backUrl }}" class="d-inline-block mb-3">&larr; Back to surfaced FR profile</a>

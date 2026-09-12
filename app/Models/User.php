@@ -56,6 +56,7 @@ class User extends Authenticatable
             'mblrc' => 'mblrc.dashboard',
             'afp' => 'afp.dashboard',
             'japic' => 'japic.dashboard',
+            'pswdo' => 'pswdo.dashboard',
             default => 'login',
         };
     }
@@ -84,5 +85,10 @@ class User extends Authenticatable
     public function assignedJapicCertificationProcessings(): HasMany
     {
         return $this->hasMany(JapicCertificationProcessing::class, 'assigned_to');
+    }
+
+    public function uploadedPswdoEnrollmentDocuments(): HasMany
+    {
+        return $this->hasMany(PswdoEnrollmentDocument::class, 'uploaded_by');
     }
 }

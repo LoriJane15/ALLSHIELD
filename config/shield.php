@@ -77,5 +77,12 @@ return [
                 ['label' => 'FRs for Certification', 'route' => 'japic.certifications.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs'],
             ],
         ],
+        'pswdo' => [
+            'label' => 'PSWDO',
+            'nav' => [
+                ['label' => 'Dashboard', 'route' => 'pswdo.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
+                ['label' => 'FRs for Enrollment', 'route' => 'pswdo.enrollments.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs'],
+            ],
+        ],
     ],
 ];
