@@ -8,6 +8,7 @@ use App\Http\Requests\Japic\IndexCertificationRequest;
 use App\Models\JapicCertificationProcessing;
 use App\Services\JapicCertificationRevisionHistoryService;
 use App\Services\SurfacedFrDocumentsRecordsService;
+use App\Services\SurfacedFrProgressTimelineService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -56,6 +57,7 @@ class CertificationController extends Controller
     public function show(
         JapicCertificationProcessing $japicCertificationProcessing,
         SurfacedFrDocumentsRecordsService $documents,
+        SurfacedFrProgressTimelineService $progressTimeline,
     ): View {
         Gate::authorize('view', $japicCertificationProcessing);
         $japicCertificationProcessing->load([
@@ -65,6 +67,7 @@ class CertificationController extends Controller
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
+            'surfacedFormerRebel.pswdoEnrollment.documents',
             'draft.lastSavedBy',
             'currentFinalVersion',
             'histories' => fn ($query) => $query->with('actor:id,name')->oldest('occurred_at'),
@@ -75,6 +78,7 @@ class CertificationController extends Controller
         return view('japic.certifications.show', [
             'processing' => $japicCertificationProcessing,
             'documentSummaries' => $documents->summaries($record),
+            'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('japic.certifications.records.cdr', $japicCertificationProcessing),
                 'fea' => route('japic.certifications.records.fea', $japicCertificationProcessing),

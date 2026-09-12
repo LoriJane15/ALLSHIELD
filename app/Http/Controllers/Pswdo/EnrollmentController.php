@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PswdoEnrollment;
 use App\Services\PswdoEligibilityService;
 use App\Services\SurfacedFrDocumentsRecordsService;
+use App\Services\SurfacedFrProgressTimelineService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -23,11 +24,15 @@ class EnrollmentController extends Controller
         return view('pswdo.enrollments.index', compact('enrollments'));
     }
 
-    public function show(PswdoEnrollment $pswdoEnrollment, SurfacedFrDocumentsRecordsService $records): View
-    {
+    public function show(
+        PswdoEnrollment $pswdoEnrollment,
+        SurfacedFrDocumentsRecordsService $records,
+        SurfacedFrProgressTimelineService $progressTimeline,
+    ): View {
         Gate::authorize('view', $pswdoEnrollment);
         $this->loadProfile($pswdoEnrollment);
         $record = $pswdoEnrollment->surfacedFormerRebel;
+        $record->setRelation('pswdoEnrollment', $pswdoEnrollment);
         $summaries = $records->summaries($record);
         foreach (PswdoEnrollmentDocumentType::cases() as $type) {
             $document = $pswdoEnrollment->documents->firstWhere('document_type', $type);
@@ -40,6 +45,7 @@ class EnrollmentController extends Controller
         return view('pswdo.enrollments.show', [
             'enrollment' => $pswdoEnrollment,
             'documentSummaries' => $summaries,
+            'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('pswdo.enrollments.records.cdr', $pswdoEnrollment),
                 'japic' => route('pswdo.enrollments.records.certification', $pswdoEnrollment),

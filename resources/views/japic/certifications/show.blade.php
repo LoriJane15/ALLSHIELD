@@ -10,6 +10,8 @@
         <ol class="module-breadcrumb" aria-label="Breadcrumb"><li><a href="{{ route('japic.dashboard') }}">Dashboard</a></li><li class="separator"><i class="mdi mdi-chevron-right"></i></li><li><a href="{{ route('japic.certifications.index') }}">Certifications</a></li><li class="separator"><i class="mdi mdi-chevron-right"></i></li><li class="active">{{ $fr->reference_number }}</li></ol>
     </div>
 
+    <x-surfaced-fr-progress-timeline :phases="$progressTimeline" />
+
     <x-surfaced-fr-profile :record="$fr" information-heading="FR Profile Information" />
 
     @push('styles')

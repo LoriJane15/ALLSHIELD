@@ -10,6 +10,7 @@ use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Municipality;
 use App\Services\Ib39SurfacedFormerRebelService;
 use App\Services\SurfacedFrDocumentsRecordsService;
+use App\Services\SurfacedFrProgressTimelineService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -72,6 +73,7 @@ class SurfacedFormerRebelController extends Controller
     public function show(
         Ib39SurfacedFormerRebel $ib39SurfacedFormerRebel,
         SurfacedFrDocumentsRecordsService $documents,
+        SurfacedFrProgressTimelineService $progressTimeline,
     ): View {
         Gate::authorize('view', $ib39SurfacedFormerRebel);
 
@@ -84,6 +86,7 @@ class SurfacedFormerRebelController extends Controller
             'feaProcessing.documents.currentSupportingPhotoVersion',
             'feaProcessing.documents.currentSurrenderedPhotoVersion',
             'japicCertificationProcessing.currentFinalVersion',
+            'pswdoEnrollment.documents',
             'cancellation.cancelledBy',
         ]);
 
@@ -93,6 +96,7 @@ class SurfacedFormerRebelController extends Controller
                 ? $ib39SurfacedFormerRebel->creator->name
                 : 'Unknown user',
             'documentSummaries' => $documents->summaries($ib39SurfacedFormerRebel),
+            'progressTimeline' => $progressTimeline->timeline($ib39SurfacedFormerRebel),
             'documentLinks' => [
                 'cdr' => route('ib39.fr-profiles.records.cdr', $ib39SurfacedFormerRebel),
                 'fea' => route('ib39.fr-profiles.records.fea', $ib39SurfacedFormerRebel),

@@ -13,6 +13,8 @@
         </ol>
     </div>
 
+    <x-surfaced-fr-progress-timeline :phases="$progressTimeline" />
+
     <x-surfaced-fr-profile :record="$record" />
 
     <x-surfaced-fr-documents-records :summaries="$documentSummaries" :links="$documentLinks" />
