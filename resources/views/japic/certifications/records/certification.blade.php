@@ -8,10 +8,11 @@
     <p><strong>Status:</strong> {{ $certificationStatus }}</p>
     @if($finalCertification)
         <p>The current final signed JAPIC certification is available for secure viewing.</p>
+        <p class="text-muted"><strong>{{ $date['label'] ? $date['label'].':' : '' }}</strong>{{ $date['label'] ? ' ' : '' }}{{ $date['value'] }}</p>
         <a class="btn btn-outline-primary" href="{{ $previewUrl }}">Secure preview</a>
         <a class="btn btn-outline-secondary" href="{{ $downloadUrl }}">Secure download</a>
     @else
-        <p class="text-muted mb-0">No final JAPIC certification document is available yet.</p>
+        <p class="text-muted mb-0">No documents available</p>
     @endif
 </div></section>
 @endsection

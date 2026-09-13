@@ -36,15 +36,12 @@ class EnrollmentController extends Controller
 
         return view('pswdo.enrollments.show', [
             'enrollment' => $pswdoEnrollment,
-            'documentSummaries' => $records->summaries(
-                $record,
-                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.preview', [$enrollment, $document]),
-                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.download', [$enrollment, $document]),
-            ),
+            'documentSummaries' => $records->summaries($record),
             'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('pswdo.enrollments.records.cdr', $pswdoEnrollment),
                 'japic' => route('pswdo.enrollments.records.certification', $pswdoEnrollment),
+                'pswdo' => route('pswdo.enrollments.records.pswdo', $pswdoEnrollment),
                 'fea' => route('pswdo.enrollments.records.fea', $pswdoEnrollment),
                 'assistance' => route('pswdo.enrollments.records.assistance', $pswdoEnrollment),
             ],
@@ -111,6 +108,24 @@ class EnrollmentController extends Controller
                 $pswdoEnrollment->surfacedFormerRebel,
                 fn ($fea, $document, $version): string => route('pswdo.fea.documents.versions.preview', [$fea, $document, $version]),
                 fn ($fea, $document, $version): string => route('pswdo.fea.documents.versions.download', [$fea, $document, $version]),
+            ),
+        ]);
+    }
+
+    public function pswdo(PswdoEnrollment $pswdoEnrollment, SurfacedFrDocumentsRecordsService $records): View
+    {
+        Gate::authorize('view', $pswdoEnrollment);
+        $pswdoEnrollment->load(['documents', 'surfacedFormerRebel']);
+        $record = $pswdoEnrollment->surfacedFormerRebel;
+        $record->setRelation('pswdoEnrollment', $pswdoEnrollment);
+
+        return view('japic.certifications.records.pswdo', [
+            'heading' => 'PSWDO Enrollment',
+            'backUrl' => route('pswdo.enrollments.show', $pswdoEnrollment),
+            'documents' => $records->pswdoRecords(
+                $record,
+                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('pswdo.enrollments.documents.download', [$enrollment, $document]),
             ),
         ]);
     }

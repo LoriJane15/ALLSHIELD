@@ -18,8 +18,8 @@ class JapicStage3AuthorizationTest extends TestCase
     public function test_route_inventory_has_only_the_six_approved_stage_three_routes_and_methods(): void
     {
         $routes = collect(app('router')->getRoutes()->getRoutes())->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'japic.'));
-        $this->assertCount(25, $routes);
-        $this->assertCount(20, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
+        $this->assertCount(26, $routes);
+        $this->assertCount(21, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
         $this->assertCount(1, $routes->filter(fn ($route) => $route->methods() === ['PUT']));
         $this->assertCount(4, $routes->filter(fn ($route) => $route->methods() === ['POST']));
         $this->assertSame([], $routes->filter(fn ($route) => array_intersect($route->methods(), ['DELETE', 'PATCH']))->values()->all());

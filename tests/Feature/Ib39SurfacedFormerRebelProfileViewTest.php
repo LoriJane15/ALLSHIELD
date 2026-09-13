@@ -63,7 +63,7 @@ class Ib39SurfacedFormerRebelProfileViewTest extends TestCase
         ]);
         $user = User::factory()->role('39th_ib')->create();
 
-        $this->actingAs($user)
+        $response = $this->actingAs($user)
             ->get(route('ib39.fr-profiles.show', $record))
             ->assertOk()
             ->assertSee('Read-only surfaced former rebel profile')
@@ -80,23 +80,21 @@ class Ib39SurfacedFormerRebelProfileViewTest extends TestCase
             ->assertSee('Documents/Records')
             ->assertSeeInOrder([
                 'CDR',
-                'No completed CDR document is available yet.',
                 'JAPIC Certification',
-                'No final JAPIC certification document is available yet.',
                 'PSWDO Enrollment Documents',
-                'E-CLIP Enrollment Form',
-                'Initial Interview Form',
-                'Profiling Interview Form',
-                'Endorsement Letter',
                 'FEA Processing Documents',
-                'No FEA processing documents are available yet.',
                 'Assistance Records',
-                'No assistance records are available yet.',
             ])
             ->assertSee('href="'.route('ib39.fr-profiles.records.cdr', $record).'"', false)
+            ->assertSee('href="'.route('ib39.fr-profiles.records.pswdo', $record).'"', false)
             ->assertSee('href="'.route('ib39.fr-profiles.records.fea', $record).'"', false)
             ->assertSee('href="'.route('ib39.fr-profiles.records.assistance', $record).'"', false)
             ->assertSee('href="'.route('ib39.fr-profiles.records.certification', $record).'"', false)
+            ->assertSee('Open records', false)
+            ->assertDontSee('E-CLIP Enrollment Form')
+            ->assertDontSee('No documents available')
+            ->assertDontSee('Secure preview')
+            ->assertDontSee('Secure download')
             ->assertDontSee('creator-secret@example.test')
             ->assertDontSee('876543210')
             ->assertDontSee('Forwarded')
@@ -106,6 +104,8 @@ class Ib39SurfacedFormerRebelProfileViewTest extends TestCase
             ->assertDontSee('Archive Profile')
             ->assertDontSee('method="PUT"', false)
             ->assertDontSee('method="DELETE"', false);
+
+        $this->assertSame(5, substr_count($response->getContent(), 'Open records'));
     }
 
     public function test_non_firearms_profile_marks_fea_process_and_documents_not_applicable(): void

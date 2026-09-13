@@ -13,6 +13,7 @@ use App\Models\JapicCertificationProcessing;
 use App\Models\PswdoEnrollment;
 use App\Models\User;
 use App\Services\Ib39SurfacedFormerRebelService;
+use App\Services\SurfacedFrDocumentsRecordsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -30,8 +31,12 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $ib39 = User::query()->findOrFail($record->created_by);
         Storage::disk('local')->put($current->getRawOriginal('storage_path'), '%PDF-1.4 current');
 
+        $cdr->update(['completed_at' => '2026-09-12 22:33:00']);
+        DB::table('ib39_cdr_document_versions')->where('id', $current->id)->update(['finalized_at' => '2026-09-11 09:15:00']);
+
         $this->actingAs($japic)->get(route('japic.certifications.records.cdr', $processing))
             ->assertOk()->assertSee('current authoritative final CDR')->assertSee('Secure preview')
+            ->assertSee('Completed:')->assertSee('September 12, 2026 · 10:33 PM')
             ->assertDontSee('CDR History')->assertDontSee('private/cdr');
         $this->actingAs($japic)->get(route('japic.cdr.documents.preview', [$cdr, $current]))->assertOk();
         $this->actingAs($japic)->get(route('japic.cdr.documents.download', [$cdr, $current]))->assertOk();
@@ -48,6 +53,13 @@ class JapicRelatedDocumentAccessTest extends TestCase
 
         Storage::disk('local')->delete($current->getRawOriginal('storage_path'));
         $this->actingAs($japic)->get(route('japic.cdr.documents.preview', [$cdr, $current]))->assertNotFound();
+
+        $cdr->update(['completed_at' => null]);
+        $this->actingAs($japic)->get(route('japic.certifications.records.cdr', $processing))
+            ->assertOk()->assertSee('Finalized:')->assertSee('September 11, 2026 · 09:15 AM');
+        DB::table('ib39_cdr_document_versions')->where('id', $current->id)->update(['source_type' => 'generated']);
+        $this->actingAs($japic)->get(route('japic.certifications.records.cdr', $processing))
+            ->assertOk()->assertSee('Secure preview')->assertDontSee('Secure download');
         $this->assertNotNull($processing);
     }
 
@@ -60,13 +72,15 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $document = $fea->documents->first();
         $version = Ib39FeaDocumentVersion::query()->forceCreate(['fea_processing_id' => $fea->id, 'fea_document_id' => $document->id,
             'slot' => Ib39FeaUploadSlot::Primary, 'version_number' => 1, 'storage_path' => "ib39/fea/{$fea->id}/test.pdf",
-            'original_filename' => 'evidence.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('e', 64), 'uploaded_by' => $japic->id]);
+            'original_filename' => 'evidence.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('e', 64),
+            'uploaded_by' => $japic->id, 'created_at' => '2026-09-12 22:33:00', 'updated_at' => '2026-09-12 22:33:00']);
         $document->update(['current_draft_version_id' => $version->id]);
         Storage::disk('local')->put($version->getRawOriginal('storage_path'), '%PDF-1.4 fea');
 
         $this->actingAs($japic)->get(route('japic.certifications.records.fea', $processing))
             ->assertOk()->assertSee($document->document_type->label())->assertSee($version->slot->label())
-            ->assertSee('Secure preview')->assertSee('Secure download')->assertDontSee('Upload');
+            ->assertSee('Uploaded:')->assertSee('September 12, 2026 · 10:33 PM')
+            ->assertSee('Secure preview')->assertSee('Secure download')->assertDontSee('Upload document');
         $this->actingAs($japic)->get(route('japic.fea.documents.versions.preview', [$fea, $document, $version]))->assertOk();
         $this->actingAs($japic)->get(route('japic.fea.documents.versions.download', [$fea, $document, $version]))->assertOk();
         $this->actingAs($ib39)->get(route('ib39.fr-profiles.records.fea', $record))
@@ -77,6 +91,10 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $this->actingAs($japic)->get(route('japic.fea.documents.versions.preview', [$fea, $otherDocument, $version]))->assertNotFound();
 
         $this->actingAs($japic)->post(route('ib39.fea.documents.versions.store', [$fea, $document]))->assertForbidden();
+
+        DB::table('ib39_fea_document_versions')->where('id', $version->id)->update(['created_at' => null]);
+        $this->actingAs($japic)->get(route('japic.certifications.records.fea', $processing))
+            ->assertOk()->assertSee('Date unavailable');
     }
 
     public function test_record_pages_use_exact_empty_states_and_never_infer_assistance(): void
@@ -85,22 +103,25 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $record->cdrProcessing->update(['current_final_version_id' => null]);
 
         $this->actingAs($japic)->get(route('japic.certifications.records.cdr', $processing))
-            ->assertOk()->assertSee('No completed CDR document is available yet.');
+            ->assertOk()->assertSee('No documents available');
         $this->actingAs($japic)->get(route('japic.certifications.records.fea', $processing))
-            ->assertOk()->assertSee('No FEA processing documents are available yet.');
+            ->assertOk()->assertSee('No documents available');
+        $this->actingAs($japic)->get(route('japic.certifications.records.pswdo', $processing))
+            ->assertOk()->assertSee('No documents available');
         $this->actingAs($japic)->get(route('japic.certifications.records.assistance', $processing))
-            ->assertOk()->assertSee('No assistance records are available yet.');
+            ->assertOk()->assertSee('No documents available')->assertDontSee('Secure preview')->assertDontSee('Secure download');
         $this->actingAs($japic)->get(route('japic.certifications.records.certification', $processing))
-            ->assertOk()->assertSee('No final JAPIC certification document is available yet.');
+            ->assertOk()->assertSee('No documents available');
 
         $ib39 = User::query()->findOrFail($record->created_by);
         foreach ([
-            'ib39.fr-profiles.records.cdr' => 'No completed CDR document is available yet.',
-            'ib39.fr-profiles.records.fea' => 'No FEA processing documents are available yet.',
-            'ib39.fr-profiles.records.assistance' => 'No assistance records are available yet.',
-            'ib39.fr-profiles.records.certification' => 'No final JAPIC certification document is available yet.',
-        ] as $routeName => $message) {
-            $this->actingAs($ib39)->get(route($routeName, $record))->assertOk()->assertSee($message);
+            'ib39.fr-profiles.records.cdr',
+            'ib39.fr-profiles.records.fea',
+            'ib39.fr-profiles.records.pswdo',
+            'ib39.fr-profiles.records.assistance',
+            'ib39.fr-profiles.records.certification',
+        ] as $routeName) {
+            $this->actingAs($ib39)->get(route($routeName, $record))->assertOk()->assertSee('No documents available');
         }
         $this->assertSame(0, DB::table('fr_government_assistances')->count());
     }
@@ -115,13 +136,15 @@ class JapicRelatedDocumentAccessTest extends TestCase
             'processing_id' => $processing->id, 'version_number' => 1, 'storage_path' => $path,
             'original_filename' => 'certification.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 16,
             'sha256' => str_repeat('a', 64), 'uploaded_by' => $japic->id, 'all_signatories_confirmed' => true,
-            'correct_final_confirmed' => true, 'uploaded_at' => now(),
+            'correct_final_confirmed' => true, 'uploaded_at' => '2026-09-11 09:15:00',
         ]);
-        $processing->forceFill(['status' => JapicCertificationStatus::Completed, 'current_final_version_id' => $current->id, 'completed_at' => now(), 'completed_by' => $japic->id])->save();
+        $processing->forceFill(['status' => JapicCertificationStatus::Completed, 'current_final_version_id' => $current->id,
+            'completed_at' => '2026-09-12 22:33:00', 'completed_by' => $japic->id])->save();
         Storage::disk('local')->put($path, '%PDF-1.4 secure');
 
         $this->actingAs($japic)->get(route('japic.certifications.records.certification', $processing))
-            ->assertOk()->assertSee('Secure preview')->assertSee('Secure download')->assertDontSee($path)->assertDontSee(str_repeat('a', 64));
+            ->assertOk()->assertSee('Completed:')->assertSee('September 12, 2026 · 10:33 PM')
+            ->assertSee('Secure preview')->assertSee('Secure download')->assertDontSee($path)->assertDontSee(str_repeat('a', 64));
         $this->actingAs($ib39)->get(route('ib39.fr-profiles.records.certification', $record))
             ->assertOk()->assertSee('Secure preview')->assertSee('Secure download')->assertDontSee($path)->assertDontSee(str_repeat('a', 64));
 
@@ -152,6 +175,15 @@ class JapicRelatedDocumentAccessTest extends TestCase
         $unrelated = User::factory()->role('admin')->create();
         $this->actingAs($inactive)->get(route('ib39.japic-certifications.document-versions.preview', [$processing, $current]))->assertRedirect(route('login'));
         $this->actingAs($unrelated)->get(route('ib39.japic-certifications.document-versions.preview', [$processing, $current]))->assertForbidden();
+
+        $processing->update(['completed_at' => null]);
+        $this->actingAs($japic)->get(route('japic.certifications.records.certification', $processing))
+            ->assertOk()->assertSee('Uploaded:')->assertSee('September 11, 2026 · 09:15 AM');
+        $current->setAttribute('uploaded_at', null);
+        $processing->setRelation('currentFinalVersion', $current);
+        $record->setRelation('japicCertificationProcessing', $processing);
+        $this->assertSame('Date unavailable', app(SurfacedFrDocumentsRecordsService::class)
+            ->certificationRecord($record)['date']['value']);
     }
 
     public function test_all_three_profiles_share_authorized_private_pswdo_document_access(): void
@@ -176,35 +208,65 @@ class JapicRelatedDocumentAccessTest extends TestCase
         ])->save();
 
         $enrollment = PswdoEnrollment::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $record->id]);
-        $path = "pswdo/enrollments/{$enrollment->id}/eclip_enrollment_form/final.pdf";
-        $document = $enrollment->documents()->create([
-            'document_type' => PswdoEnrollmentDocumentType::EclipEnrollmentForm,
-            'storage_path' => $path,
-            'original_filename' => 'eclip-final.pdf',
-            'mime_type' => 'application/pdf',
-            'size_bytes' => 17,
-            'sha256' => str_repeat('f', 64),
-            'uploaded_by' => $pswdo->id,
-            'correct_document_type_confirmed' => true,
-            'belongs_to_fr_confirmed' => true,
-            'final_signed_confirmed' => true,
-            'uploaded_at' => now(),
-        ]);
-        Storage::disk('local')->put($path, '%PDF-1.4 private');
+        $documents = collect(PswdoEnrollmentDocumentType::cases())->mapWithKeys(function (PswdoEnrollmentDocumentType $type) use ($enrollment, $pswdo): array {
+            $path = "pswdo/enrollments/{$enrollment->id}/{$type->value}/final.pdf";
+            $document = $enrollment->documents()->create([
+                'document_type' => $type,
+                'storage_path' => $path,
+                'original_filename' => $type->value.'-internal.pdf',
+                'mime_type' => 'application/pdf',
+                'size_bytes' => 17,
+                'sha256' => hash('sha256', $type->value),
+                'uploaded_by' => $pswdo->id,
+                'correct_document_type_confirmed' => true,
+                'belongs_to_fr_confirmed' => true,
+                'final_signed_confirmed' => true,
+                'uploaded_at' => '2026-09-12 22:33:00',
+            ]);
+            Storage::disk('local')->put($path, '%PDF-1.4 private');
+
+            return [$type->value => $document];
+        });
+        $document = $documents->get(PswdoEnrollmentDocumentType::EclipEnrollmentForm->value);
+        $path = $document->getRawOriginal('storage_path');
+        $writesBefore = [
+            DB::table('pswdo_enrollments')->count(),
+            DB::table('pswdo_enrollment_documents')->count(),
+        ];
 
         foreach ([
-            [$ib39, 'ib39.fr-profiles.show', $record, 'ib39.pswdo-enrollment-documents.preview', 'ib39.pswdo-enrollment-documents.download'],
-            [$japic, 'japic.certifications.show', $processing, 'japic.pswdo-enrollment-documents.preview', 'japic.pswdo-enrollment-documents.download'],
-            [$pswdo, 'pswdo.enrollments.show', $enrollment, 'pswdo.enrollments.documents.preview', 'pswdo.enrollments.documents.download'],
-        ] as [$user, $profileRoute, $profileParent, $previewRoute, $downloadRoute]) {
+            [$ib39, 'ib39.fr-profiles.show', $record, 'ib39.fr-profiles.records.pswdo', 'ib39.pswdo-enrollment-documents.preview', 'ib39.pswdo-enrollment-documents.download'],
+            [$japic, 'japic.certifications.show', $processing, 'japic.certifications.records.pswdo', 'japic.pswdo-enrollment-documents.preview', 'japic.pswdo-enrollment-documents.download'],
+            [$pswdo, 'pswdo.enrollments.show', $enrollment, 'pswdo.enrollments.records.pswdo', 'pswdo.enrollments.documents.preview', 'pswdo.enrollments.documents.download'],
+        ] as [$user, $profileRoute, $profileParent, $recordsRoute, $previewRoute, $downloadRoute]) {
             $profile = $this->actingAs($user)->get(route($profileRoute, $profileParent))->assertOk()
-                ->assertSee('E-CLIP Enrollment Form')
-                ->assertSee('href="'.route($previewRoute, [$enrollment, $document]).'"', false)
-                ->assertSee('href="'.route($downloadRoute, [$enrollment, $document]).'"', false)
+                ->assertSee('href="'.route($recordsRoute, $profileParent).'"', false)
+                ->assertDontSee('E-CLIP Enrollment Form')
+                ->assertDontSee('Secure preview')
+                ->assertDontSee('Secure download')
                 ->assertDontSee($path)
                 ->assertDontSee(str_repeat('f', 64));
 
             $this->assertStringNotContainsString('type="file"', $this->documentsSection($profile->getContent()));
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $recordsPage = $this->actingAs($user)->get(route($recordsRoute, $profileParent))->assertOk()
+                ->assertSee('Uploaded:')->assertSee('September 12, 2026 · 10:33 PM')
+                ->assertDontSee($path)
+                ->assertDontSee('pswdo_enrollment_documents')->assertDontSee('PswdoEnrollmentDocument');
+            foreach (PswdoEnrollmentDocumentType::cases() as $type) {
+                $item = $documents->get($type->value);
+                $recordsPage->assertSee($type->label())
+                    ->assertSee('href="'.route($previewRoute, [$enrollment, $item]).'"', false)
+                    ->assertSee('href="'.route($downloadRoute, [$enrollment, $item]).'"', false)
+                    ->assertDontSee($item->getRawOriginal('original_filename'))
+                    ->assertDontSee($item->getRawOriginal('storage_path'))
+                    ->assertDontSee($item->getRawOriginal('sha256'));
+            }
+            $documentQueries = collect(DB::getQueryLog())->filter(
+                fn (array $query): bool => str_contains(strtolower($query['query']), 'pswdo_enrollment_documents')
+            );
+            $this->assertCount(1, $documentQueries);
             foreach ([$previewRoute, $downloadRoute] as $routeName) {
                 $response = $this->actingAs($user)->get(route($routeName, [$enrollment, $document]))->assertOk();
                 $this->assertStringContainsString('private', (string) $response->headers->get('Cache-Control'));
@@ -212,14 +274,29 @@ class JapicRelatedDocumentAccessTest extends TestCase
                 $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
             }
         }
+        $this->assertSame($writesBefore, [
+            DB::table('pswdo_enrollments')->count(),
+            DB::table('pswdo_enrollment_documents')->count(),
+        ]);
+
+        $document->setAttribute('uploaded_at', null);
+        $enrollment->setRelation('documents', collect([$document]));
+        $record->setRelation('pswdoEnrollment', $enrollment);
+        $unavailable = app(SurfacedFrDocumentsRecordsService::class)->pswdoRecords($record, fn (): string => '', fn (): string => '');
+        $this->assertSame('Date unavailable', $unavailable->first()['date']['value']);
 
         $processing->forceFill(['assigned_to' => $japic->id])->save();
         $otherJapic = User::factory()->role('japic')->create();
+        $this->actingAs($otherJapic)->get(route('japic.certifications.records.pswdo', $processing))->assertForbidden();
         $this->actingAs($otherJapic)->get(route('japic.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertForbidden();
         auth()->logout();
+        $this->get(route('ib39.fr-profiles.records.pswdo', $record))->assertRedirect(route('login'));
         $this->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertRedirect(route('login'));
         $inactive = User::factory()->role('39th_ib')->create(['is_active' => false]);
+        $this->actingAs($inactive)->get(route('ib39.fr-profiles.records.pswdo', $record))->assertRedirect(route('login'));
         $this->actingAs($inactive)->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertRedirect(route('login'));
+        $this->actingAs(User::factory()->role('admin')->create())
+            ->get(route('ib39.fr-profiles.records.pswdo', $record))->assertForbidden();
         $this->actingAs(User::factory()->role('admin')->create())
             ->get(route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]))->assertForbidden();
 

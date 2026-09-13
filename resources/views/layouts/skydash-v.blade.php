@@ -21,7 +21,9 @@
 @php
     $role = auth()->user()->role;
     $meta = config("shield.roles.$role");
-    $nav = collect($meta['nav'] ?? [])->filter(fn ($i) => \Illuminate\Support\Facades\Route::has($i['route']));
+    $nav = collect($meta['nav'] ?? [])
+        ->concat(config('shield.shared_nav', []))
+        ->filter(fn ($i) => \Illuminate\Support\Facades\Route::has($i['route']));
 @endphp
 <div class="container-scroller">
     {{-- Top navbar --}}
@@ -79,9 +81,16 @@
                         $isActive = request()->routeIs(...$patterns);
                     @endphp
                     <li class="nav-item {{ $isActive ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route($item['route']) }}">
+                        <a class="nav-link" href="{{ route($item['route']) }}"
+                           @if ($item['route'] === 'chat.index') data-chat-nav data-unread-url="{{ route('chat.unread') }}" @endif>
                             <i class="{{ $item['skyicon'] ?? 'icon-grid' }} menu-icon"></i>
                             <span class="menu-title">{{ $item['label'] }}</span>
+                            @if ($item['route'] === 'chat.index')
+                                <span class="badge badge-danger ml-2 {{ ($chatUnread['total'] ?? 0) > 0 ? '' : 'd-none' }}"
+                                      data-chat-nav-badge aria-label="{{ $chatUnread['total'] ?? 0 }} unread messages">
+                                    {{ $chatUnread['total_text'] ?? '0' }}
+                                </span>
+                            @endif
                         </a>
                     </li>
                 @endforeach

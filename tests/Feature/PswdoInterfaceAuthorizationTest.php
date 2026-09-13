@@ -51,13 +51,19 @@ class PswdoInterfaceAuthorizationTest extends TestCase
             ->assertSee('Documents/Records')
             ->assertSeeInOrder([
                 'CDR', 'JAPIC Certification', 'PSWDO Enrollment Documents',
-                'E-CLIP Enrollment Form', 'Initial Interview Form', 'Profiling Interview Form', 'Endorsement Letter',
                 'FEA Processing Documents', 'Assistance Records',
             ])
-            ->assertSee('No PSWDO enrollment document is available yet.')
+            ->assertSee('href="'.route('pswdo.enrollments.records.pswdo', $enrollment).'"', false)
+            ->assertDontSee('E-CLIP Enrollment Form')
+            ->assertDontSee('No documents available')
             ->assertDontSee('type="file"', false)
             ->assertDontSee('Upload Final Signed PDF')
             ->assertDontSee('Replace')->assertDontSee('Delete');
+        $this->actingAs($pswdo)->get(route('pswdo.enrollments.records.pswdo', $enrollment))->assertOk()
+            ->assertSee('No documents available')
+            ->assertDontSee('E-CLIP Enrollment Form')
+            ->assertDontSee('Secure preview')
+            ->assertDontSee('Secure download');
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.workspace', $enrollment))->assertOk()
             ->assertSee('Upload Final Signed PDF')->assertSee('Endorsement Letter is locked')
             ->assertDontSee('Drafting')->assertDontSee('For Signature');

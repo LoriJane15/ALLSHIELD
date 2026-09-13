@@ -77,15 +77,12 @@ class CertificationController extends Controller
 
         return view('japic.certifications.show', [
             'processing' => $japicCertificationProcessing,
-            'documentSummaries' => $documents->summaries(
-                $record,
-                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.preview', [$enrollment, $document]),
-                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.download', [$enrollment, $document]),
-            ),
+            'documentSummaries' => $documents->summaries($record),
             'progressTimeline' => $progressTimeline->timeline($record),
             'documentLinks' => [
                 'cdr' => route('japic.certifications.records.cdr', $japicCertificationProcessing),
                 'japic' => route('japic.certifications.records.certification', $japicCertificationProcessing),
+                'pswdo' => route('japic.certifications.records.pswdo', $japicCertificationProcessing),
                 'fea' => route('japic.certifications.records.fea', $japicCertificationProcessing),
                 'assistance' => route('japic.certifications.records.assistance', $japicCertificationProcessing),
             ],
@@ -123,6 +120,22 @@ class CertificationController extends Controller
                 $japicCertificationProcessing->surfacedFormerRebel,
                 fn ($fea, $document, $version): string => route('japic.fea.documents.versions.preview', [$fea, $document, $version]),
                 fn ($fea, $document, $version): string => route('japic.fea.documents.versions.download', [$fea, $document, $version]),
+            ),
+        ]);
+    }
+
+    public function pswdo(JapicCertificationProcessing $japicCertificationProcessing, SurfacedFrDocumentsRecordsService $documents): View
+    {
+        Gate::authorize('view', $japicCertificationProcessing);
+        $japicCertificationProcessing->load('surfacedFormerRebel.pswdoEnrollment.documents');
+        $record = $japicCertificationProcessing->surfacedFormerRebel;
+
+        return view('japic.certifications.records.pswdo', [
+            'backUrl' => route('japic.certifications.show', $japicCertificationProcessing),
+            'documents' => $documents->pswdoRecords(
+                $record,
+                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('japic.pswdo-enrollment-documents.download', [$enrollment, $document]),
             ),
         ]);
     }

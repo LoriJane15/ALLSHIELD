@@ -8,6 +8,9 @@
 */
 
 return [
+    'shared_nav' => [
+        ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*']],
+    ],
     'roles' => [
         'super_admin' => [
             'label' => 'Super Admin',

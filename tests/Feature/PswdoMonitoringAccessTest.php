@@ -32,7 +32,7 @@ class PswdoMonitoringAccessTest extends TestCase
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.records.cdr', $enrollment))->assertOk()->assertSee('Secure preview');
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.records.certification', $enrollment))->assertOk()->assertSee('Secure preview');
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.records.assistance', $enrollment))->assertOk()
-            ->assertSee('No assistance records are available yet.')->assertDontSee('Must not be inferred');
+            ->assertSee('No documents available')->assertDontSee('Must not be inferred');
 
         foreach ([
             route('pswdo.cdr.documents.preview', [$cdr, $cdrFinal]),

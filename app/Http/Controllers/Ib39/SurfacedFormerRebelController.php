@@ -95,15 +95,12 @@ class SurfacedFormerRebelController extends Controller
             'recordedBy' => filled($ib39SurfacedFormerRebel->creator?->name)
                 ? $ib39SurfacedFormerRebel->creator->name
                 : 'Unknown user',
-            'documentSummaries' => $documents->summaries(
-                $ib39SurfacedFormerRebel,
-                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]),
-                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.download', [$enrollment, $document]),
-            ),
+            'documentSummaries' => $documents->summaries($ib39SurfacedFormerRebel),
             'progressTimeline' => $progressTimeline->timeline($ib39SurfacedFormerRebel),
             'documentLinks' => [
                 'cdr' => route('ib39.fr-profiles.records.cdr', $ib39SurfacedFormerRebel),
                 'japic' => route('ib39.fr-profiles.records.certification', $ib39SurfacedFormerRebel),
+                'pswdo' => route('ib39.fr-profiles.records.pswdo', $ib39SurfacedFormerRebel),
                 'fea' => route('ib39.fr-profiles.records.fea', $ib39SurfacedFormerRebel),
                 'assistance' => route('ib39.fr-profiles.records.assistance', $ib39SurfacedFormerRebel),
             ],
@@ -140,6 +137,21 @@ class SurfacedFormerRebelController extends Controller
                 $ib39SurfacedFormerRebel,
                 fn ($fea, $document, $version): string => route('ib39.fea.documents.versions.preview', [$fea, $document, $version]),
                 fn ($fea, $document, $version): string => route('ib39.fea.documents.versions.download', [$fea, $document, $version]),
+            ),
+        ]);
+    }
+
+    public function pswdo(Ib39SurfacedFormerRebel $ib39SurfacedFormerRebel, SurfacedFrDocumentsRecordsService $documents): View
+    {
+        Gate::authorize('view', $ib39SurfacedFormerRebel);
+        $ib39SurfacedFormerRebel->load('pswdoEnrollment.documents');
+
+        return view('japic.certifications.records.pswdo', [
+            'backUrl' => route('ib39.fr-profiles.show', $ib39SurfacedFormerRebel),
+            'documents' => $documents->pswdoRecords(
+                $ib39SurfacedFormerRebel,
+                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.preview', [$enrollment, $document]),
+                fn ($enrollment, $document): string => route('ib39.pswdo-enrollment-documents.download', [$enrollment, $document]),
             ),
         ]);
     }

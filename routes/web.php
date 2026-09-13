@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\Afp;
+use App\Http\Controllers\ChatConversationController;
+use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\GovAgency;
 use App\Http\Controllers\Ib39;
 use App\Http\Controllers\Japic;
@@ -21,6 +23,20 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/rcsp-form/{form}/evidence', [Lgu\MonitoringController::class, 'evidence'])->name('rcsp.evidence');
+
+    Route::get('/chat', [ChatConversationController::class, 'index'])->name('chat.index');
+    Route::get('/chat/unread', [ChatConversationController::class, 'unread'])
+        ->middleware('throttle:30,1')->name('chat.unread');
+    Route::post('/chat/conversations', [ChatConversationController::class, 'store'])
+        ->middleware('throttle:20,1')->name('chat.conversations.store');
+    Route::get('/chat/conversations/{chatConversation}', [ChatConversationController::class, 'show'])
+        ->name('chat.conversations.show');
+    Route::get('/chat/conversations/{chatConversation}/messages', [ChatMessageController::class, 'index'])
+        ->middleware('throttle:30,1')->name('chat.messages.index');
+    Route::post('/chat/conversations/{chatConversation}/read', [ChatConversationController::class, 'markRead'])
+        ->middleware('throttle:60,1')->name('chat.conversations.read');
+    Route::post('/chat/conversations/{chatConversation}/messages', [ChatMessageController::class, 'store'])
+        ->middleware('throttle:60,1')->name('chat.messages.store');
 });
 
 /*
@@ -143,6 +159,7 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::post('/fr-profiles', [Ib39\SurfacedFormerRebelController::class, 'store'])->name('fr-profiles.store');
     Route::get('/fr-profiles/{ib39SurfacedFormerRebel}', [Ib39\SurfacedFormerRebelController::class, 'show'])->name('fr-profiles.show');
     Route::get('/fr-profiles/{ib39SurfacedFormerRebel}/documents/cdr', [Ib39\SurfacedFormerRebelController::class, 'cdr'])->name('fr-profiles.records.cdr');
+    Route::get('/fr-profiles/{ib39SurfacedFormerRebel}/documents/pswdo-enrollment', [Ib39\SurfacedFormerRebelController::class, 'pswdo'])->name('fr-profiles.records.pswdo');
     Route::get('/fr-profiles/{ib39SurfacedFormerRebel}/documents/fea', [Ib39\SurfacedFormerRebelController::class, 'fea'])->name('fr-profiles.records.fea');
     Route::get('/fr-profiles/{ib39SurfacedFormerRebel}/assistance', [Ib39\SurfacedFormerRebelController::class, 'assistance'])->name('fr-profiles.records.assistance');
     Route::get('/fr-profiles/{ib39SurfacedFormerRebel}/documents/japic-certification', [Ib39\SurfacedFormerRebelController::class, 'certification'])->name('fr-profiles.records.certification');
@@ -198,6 +215,7 @@ Route::middleware(['auth', 'role:japic'])->prefix('japic')->name('japic.')->grou
     Route::get('/certifications', [Japic\CertificationController::class, 'index'])->name('certifications.index');
     Route::get('/certifications/{japicCertificationProcessing}', [Japic\CertificationController::class, 'show'])->name('certifications.show');
     Route::get('/certifications/{japicCertificationProcessing}/documents/cdr', [Japic\CertificationController::class, 'cdr'])->name('certifications.records.cdr');
+    Route::get('/certifications/{japicCertificationProcessing}/documents/pswdo-enrollment', [Japic\CertificationController::class, 'pswdo'])->name('certifications.records.pswdo');
     Route::get('/certifications/{japicCertificationProcessing}/documents/fea', [Japic\CertificationController::class, 'fea'])->name('certifications.records.fea');
     Route::get('/certifications/{japicCertificationProcessing}/assistance', [Japic\CertificationController::class, 'assistance'])->name('certifications.records.assistance');
     Route::get('/certifications/{japicCertificationProcessing}/documents/certification', [Japic\CertificationController::class, 'certification'])->name('certifications.records.certification');
@@ -229,6 +247,7 @@ Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->grou
     Route::get('/enrollments/{pswdoEnrollment}/workspace', [Pswdo\EnrollmentController::class, 'workspace'])->name('enrollments.workspace');
     Route::get('/enrollments/{pswdoEnrollment}/documents/cdr', [Pswdo\EnrollmentController::class, 'cdr'])->name('enrollments.records.cdr');
     Route::get('/enrollments/{pswdoEnrollment}/documents/japic-certification', [Pswdo\EnrollmentController::class, 'certification'])->name('enrollments.records.certification');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/pswdo-enrollment', [Pswdo\EnrollmentController::class, 'pswdo'])->name('enrollments.records.pswdo');
     Route::get('/enrollments/{pswdoEnrollment}/documents/fea', [Pswdo\EnrollmentController::class, 'fea'])->name('enrollments.records.fea');
     Route::get('/enrollments/{pswdoEnrollment}/assistance', [Pswdo\EnrollmentController::class, 'assistance'])->name('enrollments.records.assistance');
     Route::post('/enrollments/{pswdoEnrollment}/documents/{documentType}/final-document', [Pswdo\EnrollmentDocumentController::class, 'store'])->name('enrollments.documents.store');

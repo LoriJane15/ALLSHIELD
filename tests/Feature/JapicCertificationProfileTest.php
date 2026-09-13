@@ -55,13 +55,15 @@ class JapicCertificationProfileTest extends TestCase
         foreach ([$japicResponse, $ib39Response] as $response) {
             $response->assertSee('CDR Completed')->assertSeeInOrder([
                 'CDR', 'JAPIC Certification', 'PSWDO Enrollment Documents',
-                'E-CLIP Enrollment Form', 'Initial Interview Form', 'Profiling Interview Form', 'Endorsement Letter',
                 'FEA Processing Documents', 'Assistance Records',
-            ]);
-            $response->assertSee('No PSWDO enrollment document is available yet.', false);
+            ])->assertDontSee('E-CLIP Enrollment Form')
+                ->assertDontSee('No documents available')
+                ->assertDontSee('Secure preview')
+                ->assertDontSee('Secure download');
         }
         foreach ([
             'japic.certifications.records.cdr',
+            'japic.certifications.records.pswdo',
             'japic.certifications.records.fea',
             'japic.certifications.records.assistance',
             'japic.certifications.records.certification',
@@ -70,6 +72,7 @@ class JapicCertificationProfileTest extends TestCase
         }
         foreach ([
             'ib39.fr-profiles.records.cdr',
+            'ib39.fr-profiles.records.pswdo',
             'ib39.fr-profiles.records.fea',
             'ib39.fr-profiles.records.assistance',
             'ib39.fr-profiles.records.certification',
@@ -128,11 +131,7 @@ class JapicCertificationProfileTest extends TestCase
         $record->setRelation('japicCertificationProcessing', $processing);
 
         $this->expectException(LogicException::class);
-        app(SurfacedFrDocumentsRecordsService::class)->summaries(
-            $record,
-            fn (): string => '',
-            fn (): string => '',
-        );
+        app(SurfacedFrDocumentsRecordsService::class)->summaries($record);
     }
 
     public function test_static_timeline_maps_every_internal_status_without_clickable_steps(): void

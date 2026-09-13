@@ -5,72 +5,39 @@ namespace App\Services;
 use App\Enums\Ib39CdrDocumentSource;
 use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Ib39SurfacedFormerRebel;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use LogicException;
 
 class SurfacedFrDocumentsRecordsService
 {
-    public function summaries(
-        Ib39SurfacedFormerRebel $record,
-        callable $pswdoPreviewUrl,
-        callable $pswdoDownloadUrl,
-    ): array {
+    public function summaries(Ib39SurfacedFormerRebel $record): array
+    {
         $this->assertRelationsLoaded($record);
         $certification = $record->japicCertificationProcessing;
         $enrollment = $record->pswdoEnrollment;
-        $feaCount = $this->availableFeaDocuments($record)->count();
-
-        $pswdoDocuments = collect(PswdoEnrollmentDocumentType::cases())->map(function (PswdoEnrollmentDocumentType $type) use ($enrollment, $pswdoPreviewUrl, $pswdoDownloadUrl): array {
-            $document = $enrollment?->documents->firstWhere('document_type', $type);
-
-            return [
-                'label' => $type->label(),
-                'status' => $document ? 'Completed' : 'Pending',
-                'availability' => $document
-                    ? 'Final signed PDF is available.'
-                    : 'No PSWDO enrollment document is available yet.',
-                'previewUrl' => $document ? $pswdoPreviewUrl($enrollment, $document) : null,
-                'downloadUrl' => $document ? $pswdoDownloadUrl($enrollment, $document) : null,
-            ];
-        })->all();
-
-        $availablePswdoCount = collect($pswdoDocuments)->whereNotNull('previewUrl')->count();
 
         return [
             'cdr' => [
                 'label' => 'CDR',
                 'status' => $record->cdr_status,
-                'availability' => $record->hasCompletedCdrWithCurrentFinalDocument()
-                    ? 'Current final CDR document is available.'
-                    : 'No completed CDR document is available yet.',
             ],
             'japic' => [
                 'label' => 'JAPIC Certification',
                 'status' => $certification?->status->value ?? 'Not Available',
-                'availability' => $record->hasCompletedJapicCertificationWithCurrentFinalDocument()
-                    ? 'Current final JAPIC certification is available.'
-                    : 'No final JAPIC certification document is available yet.',
             ],
             'pswdo' => [
                 'label' => 'PSWDO Enrollment Documents',
                 'status' => $enrollment?->isCompleted() ? 'Completed' : ($enrollment ? 'Pending' : 'Not Available'),
-                'availability' => $availablePswdoCount > 0
-                    ? $availablePswdoCount.' of 4 final signed PSWDO '.($availablePswdoCount === 1 ? 'document is' : 'documents are').' available.'
-                    : 'No PSWDO enrollment documents are available yet.',
-                'documents' => $pswdoDocuments,
             ],
             'fea' => [
                 'label' => 'FEA Processing Documents',
                 'status' => $record->feaProcessing?->overallStatus()->value ?? ($record->possessed_firearms ? 'Not Available' : 'Not Applicable'),
-                'availability' => $feaCount > 0
-                    ? $feaCount.' FEA processing document '.($feaCount === 1 ? 'type is' : 'types are').' available.'
-                    : 'No FEA processing documents are available yet.',
             ],
             'assistance' => [
                 'label' => 'Assistance Records',
                 'status' => 'Not Available',
-                'availability' => 'No assistance records are available yet.',
             ],
         ];
     }
@@ -86,7 +53,37 @@ class SurfacedFrDocumentsRecordsService
             'cdr' => $cdr,
             'finalCdr' => $final,
             'canDownload' => $final?->source_type === Ib39CdrDocumentSource::Uploaded,
+            'date' => $this->date($cdr?->completed_at, 'Completed', $final?->finalized_at, 'Finalized'),
         ];
+    }
+
+    public function pswdoRecords(
+        Ib39SurfacedFormerRebel $record,
+        callable $previewUrl,
+        callable $downloadUrl,
+    ): Collection {
+        $this->assertPswdoLoaded($record);
+        $enrollment = $record->pswdoEnrollment;
+        if (! $enrollment) {
+            return collect();
+        }
+
+        return collect(PswdoEnrollmentDocumentType::cases())
+            ->map(function (PswdoEnrollmentDocumentType $type) use ($enrollment, $previewUrl, $downloadUrl): ?array {
+                $document = $enrollment->documents->firstWhere('document_type', $type);
+                if (! $document) {
+                    return null;
+                }
+
+                return [
+                    'label' => $type->label(),
+                    'date' => $this->date($document->uploaded_at, 'Uploaded'),
+                    'previewUrl' => $previewUrl($enrollment, $document),
+                    'downloadUrl' => $downloadUrl($enrollment, $document),
+                ];
+            })
+            ->filter()
+            ->values();
     }
 
     public function feaRecords(Ib39SurfacedFormerRebel $record, callable $previewUrl, callable $downloadUrl): Collection
@@ -104,11 +101,16 @@ class SurfacedFrDocumentsRecordsService
                 $document->currentSurrenderedPhotoVersion,
             ])->filter()->map(fn ($version): array => [
                 'label' => $version->slot->label(),
+                'date' => $this->date($version->created_at, 'Uploaded'),
                 'previewUrl' => $previewUrl($fea, $document, $version),
                 'downloadUrl' => $downloadUrl($fea, $document, $version),
             ])->values();
 
-            return ['label' => $document->document_type->label(), 'versions' => $versions];
+            return [
+                'label' => $document->document_type->label(),
+                'status' => $document->status->value,
+                'versions' => $versions,
+            ];
         })->values();
     }
 
@@ -122,6 +124,24 @@ class SurfacedFrDocumentsRecordsService
             'certificationStatus' => $certification?->status->value ?? 'Not Available',
             'certification' => $certification,
             'finalCertification' => $final,
+            'date' => $this->date($certification?->completed_at, 'Completed', $final?->uploaded_at, 'Uploaded'),
+        ];
+    }
+
+    private function date(
+        ?DateTimeInterface $primary,
+        string $primaryLabel,
+        ?DateTimeInterface $fallback = null,
+        ?string $fallbackLabel = null,
+    ): array {
+        $date = $primary ?? $fallback;
+        if (! $date) {
+            return ['label' => null, 'value' => 'Date unavailable'];
+        }
+
+        return [
+            'label' => $primary ? $primaryLabel : $fallbackLabel,
+            'value' => $date->format('F d, Y · h:i A'),
         ];
     }
 
