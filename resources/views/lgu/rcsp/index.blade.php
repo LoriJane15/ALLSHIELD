@@ -98,7 +98,7 @@
 
     {{-- Add RCSP Barangay modal --}}
     <div class="modal fade" id="addRcspModal" tabindex="-1">
-        <div class="modal-dialog modal-md">
+        <div class="modal-dialog modal-dialog-centered modal-md">
             <div class="modal-content">
                 <div class="modal-header d-flex justify-content-between align-items-start">
                     <div>

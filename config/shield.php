@@ -9,7 +9,7 @@
 
 return [
     'shared_nav' => [
-        ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*']],
+        ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*'], 'group' => 'Communication'],
     ],
     'roles' => [
         'super_admin' => [
@@ -51,19 +51,18 @@ return [
         'mblrc' => [
             'label' => 'MBLRC',
             'nav' => [
-                ['label' => 'Dashboard',     'route' => 'mblrc.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
-                ['label' => 'Former Rebels', 'route' => 'mblrc.fr.index',  'icon' => 'user-group',  'skyicon' => 'icon-people'],
+                ['label' => 'Dashboard',     'route' => 'mblrc.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid',   'group' => 'Overview'],
+                ['label' => 'Former Rebels', 'route' => 'mblrc.fr.index',  'icon' => 'user-group',  'skyicon' => 'icon-people', 'group' => 'Reintegration'],
             ],
         ],
         '39th_ib' => [
             'label' => '39th IB',
             'nav' => [
-                ['label' => 'Dashboard', 'route' => 'ib39.dashboard',   'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
-                ['label' => 'FR Profiles', 'route' => 'ib39.fr-profiles.index', 'icon' => 'users', 'skyicon' => 'icon-people'],
-                ['label' => 'Record Surfaced FR', 'route' => 'ib39.fr-profiles.create', 'icon' => 'user-plus', 'skyicon' => 'icon-user-follow'],
-                ['label' => 'FEA Processing', 'route' => 'ib39.fea.index', 'icon' => 'document-text', 'skyicon' => 'icon-docs'],
-                ['label' => 'Add Area',  'route' => 'ib39.areas.index', 'icon' => 'map-pin',     'skyicon' => 'icon-map'],
-                ['label' => 'Map',       'route' => 'ib39.map',         'icon' => 'map',         'skyicon' => 'icon-location-pin'],
+                ['label' => 'Dashboard',       'route' => 'ib39.dashboard',          'icon' => 'squares-2x2',    'skyicon' => 'icon-grid',         'group' => 'Overview'],
+                ['label' => 'FR Profiles',     'route' => 'ib39.fr-profiles.index',  'icon' => 'users',          'skyicon' => 'icon-people',       'group' => 'Former Rebels'],
+                ['label' => 'FEA Processing',  'route' => 'ib39.fea.index',          'icon' => 'document-text',  'skyicon' => 'icon-docs',         'group' => 'Former Rebels'],
+                ['label' => 'Area Management', 'route' => 'ib39.areas.index',        'icon' => 'map-pin',        'skyicon' => 'icon-map',          'group' => 'Area Monitoring'],
+                ['label' => 'Area Map',        'route' => 'ib39.map',                'icon' => 'map',            'skyicon' => 'icon-location-pin', 'group' => 'Area Monitoring'],
             ],
         ],
         'afp' => [
@@ -83,8 +82,8 @@ return [
         'pswdo' => [
             'label' => 'PSWDO',
             'nav' => [
-                ['label' => 'Dashboard', 'route' => 'pswdo.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
-                ['label' => 'FRs for Enrollment', 'route' => 'pswdo.enrollments.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs'],
+                ['label' => 'Dashboard', 'route' => 'pswdo.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid', 'group' => 'Overview'],
+                ['label' => 'FRs for Enrollment', 'route' => 'pswdo.enrollments.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs', 'group' => 'Enrollment'],
             ],
         ],
     ],

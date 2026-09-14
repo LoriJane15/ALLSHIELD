@@ -194,6 +194,18 @@ class SurfacedFormerRebelController extends Controller
 
         return redirect()
             ->route('ib39.dashboard')
-            ->with('success', "Surfaced FR {$record->reference_number} was recorded successfully.");
+            ->with('success', "Surfaced FR {$record->reference_number} was recorded successfully.")
+            ->with('surfaced_fr_modal', [
+                'id' => $record->id,
+                'reference_number' => $record->reference_number,
+                'name' => $record->display_name,
+                'category' => $record->category->value,
+                'surfaced_at' => $record->surfaced_at->format('M d, Y'),
+                'area' => collect([$record->barangay?->name, $record->municipality->name, $record->province])->filter()->join(', '),
+                'possessed_firearms' => (bool) $record->possessed_firearms,
+                'show_url' => route('ib39.fr-profiles.show', $record),
+                'fea_url' => $record->possessed_firearms ? route('ib39.fea.index') : null,
+                'cdr_url' => route('ib39.cdr.show', $record),
+            ]);
     }
 }

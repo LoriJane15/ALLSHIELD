@@ -184,7 +184,7 @@
 
     {{-- Edit modal (Refocus Implementation Plan) --}}
     <div class="modal fade" id="editImplanModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
@@ -260,8 +260,8 @@
 
     {{-- Add File modal --}}
     <div class="modal fade" id="addFileModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
@@ -294,8 +294,8 @@
 
     {{-- Add Photo modal --}}
     <div class="modal fade" id="addPhotoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
@@ -320,7 +320,7 @@
 
     {{-- Reject modal --}}
     <div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">

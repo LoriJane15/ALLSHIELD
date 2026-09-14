@@ -7,9 +7,30 @@
     <title>Login — SHIELD</title>
     <link rel="stylesheet" href="{{ asset('assets/vendors/feather/feather.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/vendors/ti-icons/css/themify-icons.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/vendors/font-awesome/css/font-awesome.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/vendors/css/vendor.bundle.base.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/vertical-layout-light/style.css') }}">
     <link rel="shortcut icon" href="{{ asset('assets/img/SHEILD.png') }}" />
+    <style>
+        .back-to-landing {
+            color: #6c757d;
+            font-size: 0.9rem;
+            transition: all 0.2s ease-in-out;
+            text-decoration: none;
+        }
+        .back-to-landing:hover {
+            color: #4B49AC;
+            text-decoration: none;
+            transform: translateX(-3px);
+        }
+        .password-toggle-btn {
+            cursor: pointer;
+            user-select: none;
+        }
+        .password-toggle-btn:hover i {
+            color: #4B49AC !important;
+        }
+    </style>
 </head>
 
 <body class="sidebar-icon-only">
@@ -19,6 +40,12 @@
                 <div class="row flex-grow">
                     <div class="col-lg-6 d-flex align-items-center justify-content-center">
                         <div class="auth-form-transparent text-left p-3">
+                            <div class="mb-4">
+                                <a href="{{ route('landing') }}" class="back-to-landing d-inline-flex align-items-center font-weight-medium">
+                                    <i class="ti-arrow-left mr-2 font-weight-bold"></i> Back to Landing Page
+                                </a>
+                            </div>
+
                             <div class="brand-logo">
                                 <img src="{{ asset('assets/img/SHIELD horizontal.png') }}" alt="logo">
                             </div>
@@ -55,9 +82,15 @@
                                                 <i class="ti-lock text-primary"></i>
                                             </span>
                                         </div>
-                                        <input type="password" class="form-control form-control-lg border-left-0"
+                                        <input type="password" class="form-control form-control-lg border-left-0 border-right-0"
                                                id="password" name="password" placeholder="password"
                                                required autocomplete="current-password">
+                                        <div class="input-group-append bg-transparent">
+                                            <span class="input-group-text bg-transparent border-left-0 password-toggle-btn"
+                                                  id="togglePassword" role="button" tabindex="0" title="Show/Hide password">
+                                                <i class="fa fa-eye text-primary" id="togglePasswordIcon"></i>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="my-2 d-flex justify-content-between align-items-center">
@@ -89,6 +122,30 @@
     <script src="{{ asset('assets/js/hoverable-collapse.js') }}"></script>
     <script src="{{ asset('assets/js/template.js') }}"></script>
     <script src="{{ asset('assets/js/settings.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const togglePassword = document.getElementById('togglePassword');
+            const passwordInput = document.getElementById('password');
+            const togglePasswordIcon = document.getElementById('togglePasswordIcon');
+
+            if (togglePassword && passwordInput && togglePasswordIcon) {
+                function togglePasswordVisibility() {
+                    const isPassword = passwordInput.getAttribute('type') === 'password';
+                    passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+                    togglePasswordIcon.classList.toggle('fa-eye', !isPassword);
+                    togglePasswordIcon.classList.toggle('fa-eye-slash', isPassword);
+                }
+
+                togglePassword.addEventListener('click', togglePasswordVisibility);
+                togglePassword.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        togglePasswordVisibility();
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 
 </html>

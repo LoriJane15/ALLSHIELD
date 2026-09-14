@@ -12,10 +12,16 @@ class AgencyController extends Controller
 {
     public function index(Request $request): View
     {
+        $stats = [
+            'total' => GovAgency::count(),
+            'active_users' => \App\Models\User::whereNotNull('gov_agency_id')->count(),
+        ];
+
         return view('super_admin.agencies.index', [
             'agencies' => GovAgency::withCount('users')
                 ->when($request->search, fn ($q, $s) => $q->where('acronym', 'like', "%{$s}%")->orWhere('name', 'like', "%{$s}%"))
                 ->orderBy('acronym')->paginate(15)->withQueryString(),
+            'stats' => $stats,
         ]);
     }
 

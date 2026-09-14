@@ -24,11 +24,20 @@ class UserController extends Controller
             ->orderBy('role')->orderBy('name')
             ->paginate(15)->withQueryString();
 
+        $stats = [
+            'total' => User::count(),
+            'roles_count' => count(config('shield.roles')),
+            'lgu_count' => User::where('role', 'lgu')->count(),
+            'agency_count' => User::where('role', 'gov_agency')->count(),
+            'core_admin_count' => User::whereIn('role', ['super_admin', 'admin'])->count(),
+        ];
+
         return view('super_admin.users.index', [
             'users' => $users,
             'roles' => config('shield.roles'),
             'municipalities' => Municipality::orderBy('name')->get(),
             'agencies' => GovAgency::orderBy('acronym')->get(),
+            'stats' => $stats,
         ]);
     }
 

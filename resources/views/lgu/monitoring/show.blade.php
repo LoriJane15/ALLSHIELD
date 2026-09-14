@@ -219,7 +219,7 @@
 
     {{-- View Phases modal (approved compliance report) --}}
     <div class="modal fade" id="phasesModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h3 class="modal-title"><i class="mdi mdi-format-list-checks me-2"></i>RCSP Compliance Report</h3>

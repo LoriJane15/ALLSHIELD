@@ -4,70 +4,407 @@
 
 @push('styles')
 <style>
-    .surfaced-fr-container{max-width:1120px;margin:0 auto;padding-bottom:2rem}
-    .module-nav-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem}
-    .module-back-link{display:inline-flex;align-items:center;gap:.45rem;color:#4a5568;font-size:.84rem;font-weight:700;text-decoration:none!important;transition:color .15s ease}
-    .module-back-link:hover{color:#401595}
-    .module-back-link i{font-size:1.1rem}
-    .module-breadcrumb{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:#718096;margin:0;padding:0;list-style:none}
-    .module-breadcrumb li a{color:#718096;text-decoration:none;font-weight:600}
-    .module-breadcrumb li a:hover{color:#401595}
-    .module-breadcrumb li.active{color:#2d3748;font-weight:700}
-    .module-breadcrumb .separator{color:#cbd5e0;font-size:.7rem}
-    .surfaced-hero{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(115deg,#152a4d 0%,#172f57 58%,#123c4d 100%);border-radius:15px;color:#fff;padding:1.35rem 1.6rem;margin-bottom:1.25rem;min-height:110px;box-shadow:0 8px 24px rgba(21,42,77,.12);position:relative;overflow:hidden}
-    .hero-main{display:flex;align-items:center;gap:1.1rem;min-width:0;position:relative;z-index:1}
-    .hero-icon-box{display:flex;align-items:center;justify-content:center;width:54px;height:54px;flex:0 0 54px;border-radius:13px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);color:#45e0ba;font-size:1.55rem}
-    .hero-eyebrow{color:#ff9a62;font-size:.62rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
-    .surfaced-hero h1{color:#fff;font-size:1.45rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.2rem;line-height:1.2}
-    .surfaced-hero p{color:#bac7e5;font-size:.8rem;margin:0}
-    .hero-ref-badge{display:flex;align-items:center;gap:.6rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:.6rem .9rem;color:#d9e2f1;font-size:.74rem;position:relative;z-index:1}
-    .hero-ref-badge i{color:#45e0ba;font-size:1.2rem}
-    .surfaced-card{background:#fff;border:1px solid #e4e4e7;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.03);overflow:hidden}
-    .surfaced-card-body{padding:1.8rem}
-    .privacy-notice{display:flex;align-items:flex-start;gap:.75rem;background:#f4effa;border-left:4px solid #401595;border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1.8rem;color:#43286b;font-size:.8rem;line-height:1.45}
-    .privacy-notice i{color:#401595;font-size:1.1rem;margin-top:.1rem}
-    .form-segment{margin-bottom:2rem}
-    .form-segment:last-of-type{margin-bottom:1rem}
-    .segment-header{display:flex;align-items:center;gap:.65rem;padding-bottom:.65rem;border-bottom:1px solid #edf1f6;margin-bottom:1.25rem}
-    .segment-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:#f1ebfa;color:#401595;font-size:.72rem;font-weight:800;border-radius:7px}
-    .segment-title{color:#1e293b;font-size:.95rem;font-weight:750;margin:0}
-    .segment-desc{color:#8a97aa;font-size:.72rem;margin:0 0 0 auto}
-    .form-group label,.field-label{color:#334155;font-size:.75rem;font-weight:700;margin-bottom:.35rem}
-    .required-mark{color:#dc2626;font-weight:700}
-    .form-control{border:1px solid #d8e0ea;border-radius:9px;font-size:.82rem;color:#1e293b;padding:.65rem .85rem;min-height:42px;transition:all .15s ease}
-    .form-control:focus{border-color:#401595;box-shadow:0 0 0 3px rgba(64,21,149,.11)}
-    .form-control[readonly]{background-color:#f8fafc;color:#64748b;border-color:#e2e8f0}
-    .radio-pills{display:flex;gap:.75rem}
-    .radio-pill-label{display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.1rem;border:1px solid #d8e0ea;border-radius:9px;background:#fff;color:#475569;font-size:.8rem;font-weight:650;cursor:pointer;transition:all .15s ease}
-    .radio-pill-label:has(input:checked){background:#f1ebfa;border-color:#401595;color:#401595;box-shadow:0 0 0 1px #401595}
-    .radio-pill-label input{accent-color:#401595}
-    .conditional-field[hidden]{display:none!important}
-    .invalid-feedback{display:block;font-size:.74rem;font-weight:600;color:#dc2626}
-    .character-hint{color:#8492a6;font-size:.68rem;margin-top:.25rem}
-    .form-footer-actions{display:flex;align-items:center;justify-content:flex-end;gap:.75rem;padding-top:1.25rem;border-top:1px solid #edf1f6;margin-top:1rem}
-    .btn-submit-custom{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;background:#401595;border:1px solid #401595;color:#fff;font-size:.82rem;font-weight:750;padding:.65rem 1.35rem;border-radius:9px;box-shadow:0 4px 12px rgba(64,21,149,.2);transition:all .15s ease}
-    .btn-submit-custom:hover,.btn-submit-custom:focus{background:#280274;border-color:#280274;color:#fff;box-shadow:0 6px 16px rgba(40,2,116,.25)}
-    .btn-cancel-custom{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;background:#f8fafc;border:1px solid #d8e0ea;color:#475569;font-size:.82rem;font-weight:650;padding:.65rem 1.2rem;border-radius:9px;text-decoration:none!important;transition:all .15s ease}
-    .btn-cancel-custom:hover,.btn-cancel-custom:focus{background:#f1f5f9;color:#1e293b}
-    @media(max-width:767px){.surfaced-hero{flex-direction:column;align-items:flex-start;gap:1rem;padding:1.2rem}.hero-ref-badge{width:100%}.surfaced-card-body{padding:1.2rem}.segment-header{flex-wrap:wrap}.segment-desc{margin:0;width:100%}.form-footer-actions{flex-direction:column-reverse}.btn-submit-custom,.btn-cancel-custom{width:100%}}
+    .surfaced-fr-container {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding-bottom: 2rem;
+    }
+    .history-nav-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+    .history-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #eef2ff;
+        color: #4338ca;
+        font-size: 0.72rem;
+        font-weight: 750;
+        padding: 0.25rem 0.65rem;
+        border-radius: 6px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .module-back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: #475569;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        padding: 0.4rem 0.85rem;
+        border-radius: 8px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        text-decoration: none !important;
+        transition: all 0.2s ease;
+    }
+    .module-back-link:hover {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        color: #4338ca;
+        transform: translateX(-2px);
+    }
+    .module-back-link i {
+        font-size: 1.1rem;
+    }
+    .module-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.8125rem;
+        color: #64748b;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .module-breadcrumb li a {
+        color: #64748b;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.15s ease;
+    }
+    .module-breadcrumb li a:hover {
+        color: #4338ca;
+    }
+    .module-breadcrumb li.active {
+        color: #0f172a;
+        font-weight: 700;
+    }
+    .module-breadcrumb .separator {
+        color: #cbd5e1;
+        font-size: 0.75rem;
+    }
+    .surfaced-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 14px !important;
+        color: #fff !important;
+        padding: 1.25rem 1.75rem !important;
+        margin-bottom: 1.25rem !important;
+        box-shadow: 0 8px 24px -4px rgba(30, 27, 75, 0.25) !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    .surfaced-hero::after {
+        content: '';
+        position: absolute;
+        right: -30px;
+        bottom: -30px;
+        width: 160px;
+        height: 160px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .hero-main {
+        display: flex;
+        align-items: center;
+        gap: 1.15rem;
+        min-width: 0;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-icon-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 50px;
+        height: 50px;
+        flex: 0 0 50px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        color: #67e8f9;
+        font-size: 1.45rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .hero-eyebrow {
+        color: #f59e0b;
+        font-size: 0.6875rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 0.2rem;
+    }
+    .surfaced-hero h1 {
+        color: #fff !important;
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.01em !important;
+        margin-bottom: 0.2rem !important;
+        line-height: 1.25 !important;
+    }
+    .surfaced-hero p {
+        color: #c7d2fe !important;
+        font-size: 0.85rem !important;
+        margin: 0 !important;
+        font-weight: 500 !important;
+    }
+    .hero-ref-badge {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 0.65rem 1rem;
+        color: #e0e7ff;
+        font-size: 0.78rem;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-ref-badge i {
+        color: #67e8f9;
+        font-size: 1.35rem;
+    }
+    .surfaced-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+    }
+    .surfaced-card-body {
+        padding: 2rem;
+    }
+    .privacy-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        background: #eef2ff;
+        border-left: 4px solid #4338ca;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 2rem;
+        color: #312e81;
+        font-size: 0.8125rem;
+        line-height: 1.5;
+    }
+    .privacy-notice i {
+        color: #4338ca;
+        font-size: 1.25rem;
+        margin-top: 0.05rem;
+    }
+    .form-segment {
+        margin-bottom: 2.25rem;
+    }
+    .form-segment:last-of-type {
+        margin-bottom: 1.25rem;
+    }
+    .segment-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        margin-bottom: 1.5rem;
+    }
+    .segment-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        background: #eef2ff;
+        color: #4338ca;
+        font-size: 0.75rem;
+        font-weight: 800;
+        border-radius: 8px;
+    }
+    .segment-title {
+        color: #0f172a;
+        font-size: 1rem;
+        font-weight: 750;
+        margin: 0;
+    }
+    .segment-desc {
+        color: #64748b;
+        font-size: 0.75rem;
+        margin: 0 0 0 auto;
+    }
+    .form-group label, .field-label {
+        color: #334155;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 0.4rem;
+    }
+    .required-mark {
+        color: #ef4444;
+        font-weight: 700;
+    }
+    .form-control {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        font-size: 0.84rem;
+        color: #0f172a;
+        padding: 0.65rem 0.95rem;
+        min-height: 42px;
+        transition: all 0.2s ease;
+    }
+    .form-control:focus {
+        border-color: #4338ca;
+        box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+    }
+    .form-control[readonly] {
+        background-color: #f8fafc;
+        color: #64748b;
+        border-color: #e2e8f0;
+    }
+    .radio-pills {
+        display: flex;
+        gap: 0.85rem;
+    }
+    .radio-pill-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.65rem 1.25rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #475569;
+        font-size: 0.8125rem;
+        font-weight: 650;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .radio-pill-label:has(input:checked) {
+        background: #eef2ff;
+        border-color: #4338ca;
+        color: #4338ca;
+        box-shadow: 0 0 0 1px #4338ca;
+    }
+    .radio-pill-label input {
+        accent-color: #4338ca;
+    }
+    .conditional-field[hidden] {
+        display: none !important;
+    }
+    .invalid-feedback {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #ef4444;
+    }
+    .character-hint {
+        color: #94a3b8;
+        font-size: 0.72rem;
+        margin-top: 0.35rem;
+    }
+    .form-footer-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.85rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #f1f5f9;
+        margin-top: 1.25rem;
+    }
+    .btn-submit-custom {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        background: #4338ca;
+        border: 1px solid #4338ca;
+        color: #ffffff;
+        font-size: 0.84rem;
+        font-weight: 750;
+        padding: 0.7rem 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3);
+        transition: all 0.2s ease;
+    }
+    .btn-submit-custom:hover, .btn-submit-custom:focus {
+        background: #312e81;
+        border-color: #312e81;
+        color: #ffffff;
+        box-shadow: 0 6px 18px rgba(49, 46, 129, 0.35);
+        transform: translateY(-1px);
+    }
+    .btn-cancel-custom {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        font-size: 0.84rem;
+        font-weight: 650;
+        padding: 0.7rem 1.35rem;
+        border-radius: 10px;
+        text-decoration: none !important;
+        transition: all 0.2s ease;
+    }
+    .btn-cancel-custom:hover, .btn-cancel-custom:focus {
+        background: #f1f5f9;
+        color: #0f172a;
+    }
+    @media(max-width:767px){
+        .surfaced-hero {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1.25rem;
+            padding: 1.25rem;
+        }
+        .hero-ref-badge {
+            width: 100%;
+        }
+        .surfaced-card-body {
+            padding: 1.25rem;
+        }
+        .segment-header {
+            flex-wrap: wrap;
+        }
+        .segment-desc {
+            margin: 0;
+            width: 100%;
+        }
+        .form-footer-actions {
+            flex-direction: column-reverse;
+        }
+        .btn-submit-custom, .btn-cancel-custom {
+            width: 100%;
+        }
+    }
 </style>
 @endpush
 
+
 @section('content')
 <div class="surfaced-fr-container">
-    {{-- Top Navigation & History --}}
-    <div class="module-nav-top">
-        <a href="{{ route('ib39.fr-profiles.index') }}" class="module-back-link">
-            <i class="mdi mdi-arrow-left"></i>
-            <span>Back to FR Profiles</span>
-        </a>
-        <ol class="module-breadcrumb" aria-label="Breadcrumb">
-            <li><a href="{{ route('ib39.dashboard') }}">Dashboard</a></li>
-            <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
-            <li><a href="{{ route('ib39.fr-profiles.index') }}">FR Profiles</a></li>
-            <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
-            <li class="active" aria-current="page">Record Surfaced FR</li>
-        </ol>
+    {{-- History & Navigation Path Above --}}
+    <div class="history-nav-card">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="history-tag">
+                    <i class="mdi mdi-history"></i> History
+                </span>
+                <nav aria-label="Breadcrumb">
+                    <ol class="module-breadcrumb">
+                        <li><a href="{{ route('ib39.dashboard') }}"><i class="mdi mdi-view-dashboard-outline me-1"></i>Dashboard</a></li>
+                        <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
+                        <li><a href="{{ route('ib39.fr-profiles.index') }}"><i class="mdi mdi-account-group-outline me-1"></i>FR Profiles</a></li>
+                        <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
+                        <li class="active" aria-current="page">Record Surfaced FR</li>
+                    </ol>
+                </nav>
+            </div>
+            <a href="{{ route('ib39.fr-profiles.index') }}" class="module-back-link">
+                <i class="mdi mdi-arrow-left"></i>
+                <span>Back to FR Profiles</span>
+            </a>
+        </div>
     </div>
 
     {{-- Modern Hero Banner --}}
@@ -77,7 +414,6 @@
                 <i class="mdi mdi-account-plus-outline" aria-hidden="true"></i>
             </div>
             <div>
-                <div class="hero-eyebrow mb-1">39th Infantry Battalion · Reintegration</div>
                 <h1>Record Surfaced Former Rebel</h1>
                 <p>Register approved surfaced FR details for authorized 39th IB monitoring.</p>
             </div>

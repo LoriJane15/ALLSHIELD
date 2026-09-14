@@ -1,85 +1,349 @@
 /*
- * MBLRC dashboard — card design carried over from the legacy
- * accounts/mblrc/index.php, where the gradients were inline styles.
+ * MBLRC Dashboard Modern Design System
  */
 
-.mblrc-stat-card {
-    color: #fff;
-    border: none;
-    border-radius: 20px;
+.mblrc-dashboard-container {
+    padding-bottom: 2.5rem;
 }
 
-.mblrc-stat-card .card-body { position: relative; }
+/* ---- Hero Banner (SHIELD Brand Design) ------------------------------- */
+.mblrc-hero {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+    border-radius: 16px;
+    padding: 1.35rem 1.65rem;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 24px -4px rgba(30, 27, 75, 0.25);
+    margin-bottom: 1.5rem;
+}
 
-.mblrc-stat-card .fs-30 { font-size: 1.875rem; line-height: 1.2; }
+.mblrc-hero-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a5f3fc;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
 
-.mblrc-stat-card .opacity-90 { opacity: 0.9; }
-.mblrc-stat-card .opacity-75 { opacity: 0.75; }
+.mblrc-hero-eyebrow {
+    color: #fbbf24;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.15rem;
+}
 
-.mblrc-card-icon { opacity: 0.5; }
+.mblrc-hero-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.2rem;
+    line-height: 1.3;
+}
+
+.mblrc-hero-sub {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+}
+
+/* ---- Modern Metric Cards --------------------------------------------- */
+.mblrc-stat-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.2rem 1.35rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+}
+
+.mblrc-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px -4px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1;
+}
+
+.mblrc-stat-card .fs-30 {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0.25rem 0 0.4rem 0;
+}
+
+.mblrc-stat-card .card-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.mblrc-stat-card .card-title-text {
+    font-size: 0.785rem;
+    font-weight: 750;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mblrc-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
 
 .mblrc-stat-card .progress {
-    height: 4px;
-    background: rgba(255, 255, 255, 0.2);
+    height: 6px;
+    background: #f1f5f9;
     border-radius: 9999px;
+    overflow: hidden;
+    margin-top: 0.75rem;
 }
 
-.mblrc-stat-card .progress-bar {
-    background: rgba(255, 255, 255, 0.8);
-}
-
-/* ---- The legacy gradients, one per metric --------------------------- */
+/* Card Theme Accents */
 .mblrc-card-registered {
-    background: linear-gradient(135deg, #FF8A00 0%, #FF6B00 100%);
-    box-shadow: 0 8px 25px rgba(255, 138, 0, 0.3);
+    border-top: 3px solid #312e81;
 }
+.mblrc-card-registered .fs-30 { color: #1e1b4b; }
+.mblrc-card-registered .mblrc-card-icon { background: #eef2ff; color: #312e81; }
+.mblrc-card-registered .progress-bar { background: #312e81; }
 
 .mblrc-card-enrolled {
-    background: linear-gradient(135deg, #FFB84D 0%, #FF9500 100%);
-    box-shadow: 0 8px 25px rgba(255, 184, 77, 0.3);
+    border-top: 3px solid #d97706;
 }
+.mblrc-card-enrolled .fs-30 { color: #78350f; }
+.mblrc-card-enrolled .mblrc-card-icon { background: #fffbeb; color: #d97706; }
+.mblrc-card-enrolled .progress-bar { background: #d97706; }
 
 .mblrc-card-completed {
-    background: linear-gradient(135deg, #4B97FF 0%, #2E7BFF 100%);
-    box-shadow: 0 8px 25px rgba(75, 151, 255, 0.3);
+    border-top: 3px solid #2563eb;
 }
+.mblrc-card-completed .fs-30 { color: #1e3a8a; }
+.mblrc-card-completed .mblrc-card-icon { background: #eff6ff; color: #2563eb; }
+.mblrc-card-completed .progress-bar { background: #2563eb; }
 
 .mblrc-card-reintegrated {
-    background: linear-gradient(135deg, #3D0075 0%, #5A1A9B 100%);
-    box-shadow: 0 8px 25px rgba(61, 0, 117, 0.3);
+    border-top: 3px solid #7c3aed;
 }
+.mblrc-card-reintegrated .fs-30 { color: #4c1d95; }
+.mblrc-card-reintegrated .mblrc-card-icon { background: #f5f3ff; color: #7c3aed; }
+.mblrc-card-reintegrated .progress-bar { background: #7c3aed; }
 
+/* Secondary Strip Cards */
 .mblrc-card-notstarted {
-    background: linear-gradient(135deg, #FF4B4B 0%, #E63946 100%);
-    box-shadow: 0 8px 25px rgba(255, 75, 75, 0.3);
+    border-top: 3px solid #e11d48;
 }
+.mblrc-card-notstarted .fs-30 { color: #881337; }
+.mblrc-card-notstarted .mblrc-card-icon { background: #fff1f2; color: #e11d48; }
 
 .mblrc-card-ongoing {
-    background: linear-gradient(135deg, #FFA500 0%, #FF8C00 100%);
-    box-shadow: 0 8px 25px rgba(255, 165, 0, 0.3);
+    border-top: 3px solid #ea580c;
 }
+.mblrc-card-ongoing .fs-30 { color: #7c2d12; }
+.mblrc-card-ongoing .mblrc-card-icon { background: #fff7ed; color: #ea580c; }
 
 .mblrc-card-actions {
-    background: linear-gradient(135deg, #28A745 0%, #20C997 100%);
-    box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+    border-top: 3px solid #312e81;
+    background: linear-gradient(180deg, #eef2ff 0%, #ffffff 80%);
 }
+.mblrc-card-actions .mblrc-card-icon { background: #e0e7ff; color: #312e81; }
 
 .mblrc-quick-btn {
-    background: rgba(255, 255, 255, 0.9);
-    color: #157347;
-    font-weight: 600;
-    border-radius: 9999px;
-    padding: 0.35rem 1rem;
+    background: #312e81;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-weight: 750;
+    font-size: 0.8125rem;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: none;
+    box-shadow: 0 2px 6px rgba(49, 46, 129, 0.25);
+    transition: all 0.2s ease;
 }
 
-.mblrc-quick-btn:hover {
-    background: #fff;
-    color: #0f5132;
+.mblrc-quick-btn:hover,
+.mblrc-quick-btn:focus,
+.mblrc-quick-btn:active {
+    color: #ffffff !important;
+    text-decoration: none !important;
+    background: #1e1b4b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(49, 46, 129, 0.35);
+}
+
+/* ---- Modern Table & Chart Cards -------------------------------------- */
+.mblrc-modern-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.mblrc-card-header-clean {
+    padding: 1.15rem 1.4rem;
+    background: #fafbfc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.mblrc-card-header-clean h2,
+.mblrc-card-header-clean h4 {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    letter-spacing: -0.01em;
+}
+
+.mblrc-card-header-clean p {
+    font-size: 0.8125rem;
+    color: #64748b;
+    margin: 0.2rem 0 0 0;
+}
+
+/* ---- Chart Container (Fixes infinite height loop!) ------------------ */
+.mblrc-chart-wrapper {
+    position: relative;
+    height: 260px;
+    width: 100%;
+    max-height: 280px;
 }
 
 /* ---- Map ------------------------------------------------------------- */
 #frMap {
     height: 420px;
     width: 100%;
-    border-radius: 8px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
 }
+
+/* ---- Modern Form System -------------------------------------------- */
+.mblrc-form-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    transition: box-shadow 0.2s ease;
+}
+
+.mblrc-form-card:hover {
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.06);
+}
+
+.mblrc-form-card-header {
+    padding: 1.15rem 1.5rem;
+    background: #fafbfc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.mblrc-form-header-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.mblrc-form-card-body {
+    padding: 1.5rem 1.65rem;
+}
+
+.mblrc-label {
+    font-size: 0.8125rem;
+    font-weight: 750;
+    color: #334155;
+    margin-bottom: 0.4rem;
+    display: block;
+    letter-spacing: 0.01em;
+}
+
+.mblrc-input,
+.mblrc-select {
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 0.65rem 0.95rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    background-color: #ffffff;
+    width: 100%;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    height: auto;
+    min-height: 42px;
+}
+
+.mblrc-input:focus,
+.mblrc-select:focus {
+    border-color: #4338ca;
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+    outline: none;
+    background-color: #ffffff;
+}
+
+.mblrc-input::placeholder {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.mblrc-input-readonly {
+    background-color: #f8fafc !important;
+    color: #475569 !important;
+    font-weight: 600;
+    border-color: #e2e8f0 !important;
+    cursor: default;
+}
+
+/* Form Action Bar */
+.mblrc-action-bar {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+

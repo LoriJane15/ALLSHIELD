@@ -335,7 +335,7 @@ class Ib39SurfacedFormerRebelListTest extends TestCase
         $ib39Routes = $roles->get('39th_ib')['nav'];
 
         $this->assertContains('ib39.fr-profiles.index', array_column($ib39Routes, 'route'));
-        $this->assertContains('ib39.fr-profiles.create', array_column($ib39Routes, 'route'));
+        $this->assertNotContains('ib39.fr-profiles.create', array_column($ib39Routes, 'route'));
 
         $roles->except('39th_ib')->each(function (array $role): void {
             $routes = array_column($role['nav'] ?? [], 'route');

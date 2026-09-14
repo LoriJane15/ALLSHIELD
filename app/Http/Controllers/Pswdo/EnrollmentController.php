@@ -8,18 +8,28 @@ use App\Models\PswdoEnrollment;
 use App\Services\PswdoEligibilityService;
 use App\Services\SurfacedFrDocumentsRecordsService;
 use App\Services\SurfacedFrProgressTimelineService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class EnrollmentController extends Controller
 {
-    public function index(PswdoEligibilityService $eligibility): View
+    public function index(Request $request, PswdoEligibilityService $eligibility): View
     {
         Gate::authorize('viewAny', PswdoEnrollment::class);
+        $status = $request->query('status');
+        $requiredDocuments = count(PswdoEnrollmentDocumentType::cases());
         $enrollments = PswdoEnrollment::query()
             ->whereHas('surfacedFormerRebel', fn ($query) => $eligibility->apply($query))
+            ->when($status === 'completed', fn ($query) => $query->whereHas('documents', fn ($documents) => $documents
+                ->selectRaw('1')->groupBy('pswdo_enrollment_id')
+                ->havingRaw('COUNT(DISTINCT document_type) = ?', [$requiredDocuments])))
+            ->when($status === 'pending', fn ($query) => $query->whereRaw(
+                '(SELECT COUNT(DISTINCT document_type) FROM pswdo_enrollment_documents WHERE pswdo_enrollment_documents.pswdo_enrollment_id = pswdo_enrollments.id) < ?',
+                [$requiredDocuments],
+            ))
             ->with(['documents', 'surfacedFormerRebel.municipality', 'surfacedFormerRebel.barangay'])
-            ->latest('id')->paginate(20);
+            ->latest('id')->paginate(20)->withQueryString();
 
         return view('pswdo.enrollments.index', compact('enrollments'));
     }
