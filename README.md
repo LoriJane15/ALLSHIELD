@@ -38,18 +38,44 @@ LEGACY_DB_USERNAME=root
 LEGACY_DB_PASSWORD=
 ```
 
-Then:
+Then — a fresh clone gets the **full dataset from the seeder**, no legacy
+database required:
 
 ```bash
 mysql -u root -e "CREATE DATABASE shield_db CHARACTER SET utf8mb4"
-mysql -u root -e "CREATE DATABASE kp_datacenter CHARACTER SET utf8mb4"
-mysql -u root kp_datacenter < "../shield/Database/kp_datacenter (6).sql"
 
-php artisan migrate
-php artisan import:legacy --fresh   # transforms kp_datacenter -> shield_db
-php artisan storage:link
+php artisan migrate --seed    # schema + the committed legacy dataset
+php artisan storage:link      # exposes the committed uploads under public/
 npm run build
 php artisan serve
+```
+
+The dataset carried over from the legacy system travels with the repo, so it is
+identical on every clone:
+
+- **`database/seeders/data/legacy-snapshot.sql`** — a data-only snapshot of the
+  transformed `shield_db`, loaded by `LegacyDataSeeder` (idempotent: it truncates
+  and reloads, so `migrate:fresh --seed` always yields the same 24 tables).
+- **`storage/app/public/{rcsp,implan,fr}/`** — the RCSP form files, IMPLAN
+  agendas/photos and FR certificates those rows reference, committed so the paths
+  resolve everywhere.
+
+### Regenerating the snapshot from the legacy dump
+
+Only needed to re-derive the dataset from a fresher `kp_datacenter` dump:
+
+```bash
+mysql -u root -e "CREATE DATABASE kp_datacenter CHARACTER SET utf8mb4"
+mysql -u root kp_datacenter < "../shield/Database/kp_datacenter (6).sql"
+php artisan migrate
+php artisan import:legacy --fresh    # transforms kp_datacenter -> shield_db
+# re-fold RCSP file paths, then dump the result back into the seeder:
+mysqldump -u root --no-create-info --skip-triggers --complete-insert \
+  --ignore-table=shield_db.migrations --ignore-table=shield_db.cache \
+  --ignore-table=shield_db.cache_locks --ignore-table=shield_db.sessions \
+  --ignore-table=shield_db.jobs --ignore-table=shield_db.job_batches \
+  --ignore-table=shield_db.failed_jobs --ignore-table=shield_db.password_reset_tokens \
+  shield_db > database/seeders/data/legacy-snapshot.sql
 ```
 
 ## Roles and areas
