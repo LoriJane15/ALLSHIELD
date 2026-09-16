@@ -32,5 +32,28 @@ return Application::configure(basePath: dirname(__DIR__))
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        /*
+         * A stale CSRF token (session expired, or a login form restored from the
+         * browser's back-forward cache) throws a 419. Rather than dead-ending on
+         * the "Session expired" page, bounce back to the form — which now carries
+         * a fresh token — so the next submit just works.
+         *
+         * Laravel converts TokenMismatchException to a 419 HttpException before
+         * render callbacks run, so match the status code, not the original type.
+         */
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, \Illuminate\Http\Request $request) {
+            if ($e->getStatusCode() !== 419 || $request->expectsJson()) {
+                return null; // fall through to the default handler
+            }
+
+            if ($request->is('login')) {
+                return redirect()->route('login')
+                    ->withInput($request->except('password', '_token'))
+                    ->with('status', 'Your session refreshed — please sign in again.');
+            }
+
+            return redirect()->back()
+                ->withInput($request->except('_token'))
+                ->with('status', 'Your session refreshed — please try again.');
+        });
     })->create();
