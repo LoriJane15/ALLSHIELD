@@ -109,18 +109,6 @@
     box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
 }
 
-.sa-btn-delete {
-    background: var(--sa-rose-light);
-    color: var(--sa-rose);
-    border: 1px solid #fecdd3;
-}
-
-.sa-btn-delete:hover {
-    background: var(--sa-rose);
-    color: #ffffff !important;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(225, 29, 72, 0.25);
-}
 </style>
 @endpush
 
@@ -149,6 +137,12 @@
             </div>
         </div>
     </div>
+
+    @if ($errors->has('account_lifecycle') || $errors->has('is_active'))
+        <div class="alert alert-danger" role="alert">
+            {{ $errors->first('account_lifecycle') ?: $errors->first('is_active') }}
+        </div>
+    @endif
 
     {{-- Top Quick Metric Cards (4 Cards) --}}
     <div class="sa-stat-grid mb-4">
@@ -255,6 +249,7 @@
                             <th>User Profile</th>
                             <th>Username</th>
                             <th>Assigned Role</th>
+                            <th>Status</th>
                             <th>Operational Scope</th>
                             <th>Created Date</th>
                             <th class="text-end">Actions</th>
@@ -321,6 +316,13 @@
                                     </span>
                                 </td>
 
+                                {{-- Status --}}
+                                <td>
+                                    <span class="badge rounded-pill {{ $u->is_active ? 'bg-success' : 'bg-secondary' }}">
+                                        {{ $u->is_active ? 'Active' : 'Inactive' }}
+                                    </span>
+                                </td>
+
                                 {{-- Scope --}}
                                 <td>
                                     @if ($u->municipality)
@@ -357,30 +359,18 @@
                                                 data-username="{{ $u->username }}"
                                                 data-name="{{ $u->name }}"
                                                 data-role="{{ $roleKey }}"
+                                                data-active="{{ $u->is_active ? '1' : '0' }}"
                                                 data-municipality="{{ $u->municipality_id }}"
                                                 data-agency="{{ $u->gov_agency_id }}"
                                                 data-action="{{ route('super_admin.users.update', $u) }}">
                                             <i class="mdi mdi-pencil"></i>
                                         </button>
-
-                                        @if ($u->id !== auth()->id())
-                                            <form method="POST" action="{{ route('super_admin.users.destroy', $u) }}"
-                                                  data-confirm="Are you sure you want to delete user '{{ $u->username }}'?"
-                                                  data-confirm-title="Confirm User Deletion"
-                                                  data-confirm-action="Delete User"
-                                                  style="display:inline;">
-                                                @csrf @method('DELETE')
-                                                <button type="submit" class="sa-btn-action sa-btn-delete" title="Delete User">
-                                                    <i class="mdi mdi-delete"></i>
-                                                </button>
-                                            </form>
-                                        @endif
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6">
+                                <td colspan="7">
                                     <div class="sa-empty-state py-5">
                                         <div class="sa-empty-icon">
                                             <i class="mdi mdi-account-search"></i>
@@ -530,30 +520,43 @@
             syncRoleFields(form);
         });
 
-        // Populate + open edit modal.
-        document.querySelectorAll('[data-edit-user]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const f = document.querySelector('[data-edit-form]');
-                f.action = btn.dataset.action;
-                f.querySelector('[name=username]').value = btn.dataset.username;
-                f.querySelector('[name=name]').value = btn.dataset.name;
-                f.querySelector('[name=role]').value = btn.dataset.role;
-                f.querySelector('[name=municipality_id]').value = btn.dataset.municipality || '';
-                f.querySelector('[name=gov_agency_id]').value = btn.dataset.agency || '';
-                f.querySelector('[name=password]').value = '';
-                
-                // Reset file preview
-                const fileDisplay = f.querySelector('.sa-file-name-display');
-                const previewBox = f.querySelector('.sa-preview-box');
-                if (fileDisplay) fileDisplay.style.display = 'none';
-                if (previewBox) previewBox.innerHTML = '<i class="mdi mdi-image-outline text-muted fs-4"></i>';
+        // Populate + open the single edit modal.
+        function openEditUserModal(user) {
+            const f = document.querySelector('[data-edit-form]');
+            f.action = user.action;
+            f.querySelector('[name=username]').value = user.username;
+            f.querySelector('[name=name]').value = user.name;
+            f.querySelector('[name=role]').value = user.role;
+            f.querySelector('[name=is_active]').value = user.active;
+            f.querySelector('[name=municipality_id]').value = user.municipality || '';
+            f.querySelector('[name=gov_agency_id]').value = user.agency || '';
+            f.querySelector('[name=password]').value = '';
+            f.querySelector('[name=password_confirmation]').value = '';
 
-                syncRoleFields(f);
-                new bootstrap.Modal(document.getElementById('editUserModal')).show();
-            });
+            const fileDisplay = f.querySelector('.sa-file-name-display');
+            const previewBox = f.querySelector('.sa-preview-box');
+            if (fileDisplay) fileDisplay.style.display = 'none';
+            if (previewBox) previewBox.innerHTML = '<i class="mdi mdi-image-outline text-muted fs-4"></i>';
+
+            syncRoleFields(f);
+            new bootstrap.Modal(document.getElementById('editUserModal')).show();
+        }
+
+        document.querySelectorAll('[data-edit-user]').forEach((btn) => {
+            btn.addEventListener('click', () => openEditUserModal(btn.dataset));
         });
 
-        @if ($errors->any())
+        @if ($editingUser)
+            document.addEventListener('DOMContentLoaded', () => openEditUserModal({
+                action: @json(route('super_admin.users.update', $editingUser)),
+                username: @json(old('username', $editingUser->username)),
+                name: @json(old('name', $editingUser->name)),
+                role: @json(old('role', $editingUser->role)),
+                active: @json((string) old('is_active', $editingUser->is_active ? '1' : '0')),
+                municipality: @json((string) old('municipality_id', $editingUser->municipality_id)),
+                agency: @json((string) old('gov_agency_id', $editingUser->gov_agency_id)),
+            }));
+        @elseif ($errors->any() && ! $errors->has('account_lifecycle') && ! $errors->has('is_active'))
             document.addEventListener('DOMContentLoaded', () => new bootstrap.Modal(document.getElementById('addUserModal')).show());
         @endif
     </script>

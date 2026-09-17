@@ -13,6 +13,7 @@ use App\Services\Ib39SurfacedFormerRebelService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class Ib39RecordSurfacedFormerRebelTest extends TestCase
@@ -242,9 +243,19 @@ class Ib39RecordSurfacedFormerRebelTest extends TestCase
     {
         $actor = $this->ib39User();
 
-        foreach (['ib39.dashboard', 'ib39.areas.index', 'ib39.map', 'ib39.map.data'] as $routeName) {
+        foreach (['ib39.dashboard', 'ib39.areas.index', 'ib39.map'] as $routeName) {
             $this->actingAs($actor)->get(route($routeName))->assertSuccessful();
         }
+
+        $this->actingAs($actor)->get(route('ib39.area.data'))->assertSuccessful();
+        $this->actingAs($actor)->get(route('ib39.barangays', [
+            'municipality_id' => $this->municipality->id,
+        ]))->assertSuccessful();
+        $this->actingAs($actor)->get(route('ib39.barangay.data', [
+            'barangay_id' => $this->barangay->id,
+        ]))->assertSuccessful();
+
+        $this->assertFalse(Route::has('ib39.map.data'));
     }
 
     private function postAsIb39(array $overrides = [])

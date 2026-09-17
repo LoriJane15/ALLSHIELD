@@ -3,8 +3,21 @@
     $isPhoto = in_array($document->document_type, [\App\Enums\Ib39FeaDocumentType::FirearmPhoto, \App\Enums\Ib39FeaDocumentType::FrWithFirearmPhoto], true);
     $primaryVersions = $document->versions->where('slot', \App\Enums\Ib39FeaUploadSlot::Primary);
     $canUpload = auth()->user()->can('uploadDraft', [$document, $fea]);
+    $final = $document->currentFinalVersion;
+    $canUploadFinal = auth()->user()->can('uploadFinal', [$document, $fea]);
 @endphp
 <section class="compact-upload" aria-label="{{ $document->document_type->label() }} upload controls">
+    @if($final)
+        <div class="current-upload"><strong>Final version {{ $final->version_number }}</strong><span>{{ $final->original_filename }} · {{ $final->created_at->format('F d, Y · h:i A') }} · {{ $final->uploader?->name ?? 'User unavailable' }}</span></div>
+        <a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="{{ route('ib39.fea.documents.versions.preview', [$fea, $document, $final]) }}">Preview Final</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ route('ib39.fea.documents.versions.download', [$fea, $document, $final]) }}">Download Final</a>
+    @elseif($canUploadFinal)
+        <form method="POST" enctype="multipart/form-data" action="{{ route('ib39.fea.documents.final-versions.store', [$fea, $document]) }}" class="compact-upload-row d-flex flex-wrap align-items-center">@csrf
+            <label for="final-file-{{ $document->id }}">Upload Final {{ $document->document_type->label() }}</label>
+            <input id="final-file-{{ $document->id }}" class="form-control-file" type="file" name="file" accept="{{ $isPhoto ? '.jpg,.jpeg,.png,image/jpeg,image/png' : '.pdf,application/pdf' }}" required>
+            <button class="btn btn-sm btn-primary" type="submit">Upload Final {{ $document->document_type->label() }}</button>
+        </form>
+    @endif
     @if($primary)
         <div class="current-upload"><strong>Current: Version {{ $primary->version_number }}</strong><span>{{ $primary->original_filename }} · {{ $primary->mime_type }} · {{ number_format($primary->size_bytes / 1024, 1) }} KiB · {{ $primary->created_at->format('F d, Y · h:i A') }} · {{ $primary->uploader?->name ?? 'User unavailable' }}</span></div>
         <a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="{{ route('ib39.fea.documents.versions.preview', [$fea, $document, $primary]) }}">Preview {{ $isPhoto ? 'Current Photo' : 'Draft' }}</a>

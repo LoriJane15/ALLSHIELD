@@ -416,13 +416,15 @@
 }
 
 .status-konsolidado { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
-.status-rekonsilida { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
+.status-rekonsilida,
+.status-rekonsilido { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
 .status-expansion   { background: #fefce8; color: #ca8a04; border: 1px solid #fef9c3; }
 .status-recovery    { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
 .status-unclassified { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 
 .status-konsolidado::before { content: "\f024"; }  /* flag */
-.status-rekonsilida::before { content: "\f071"; }  /* warning */
+.status-rekonsilida::before,
+.status-rekonsilido::before { content: "\f071"; }  /* warning */
 .status-expansion::before   { content: "\f0c8"; }  /* square */
 .status-recovery::before    { content: "\f055"; }  /* plus-circle */
 
@@ -431,4 +433,3 @@
     padding: 3.5rem 2rem;
     color: #64748b;
 }
-

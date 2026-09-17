@@ -65,6 +65,7 @@ class CertificationController extends Controller
             'surfacedFormerRebel.cancellation',
             'surfacedFormerRebel.cdrProcessing.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
             'surfacedFormerRebel.pswdoEnrollment.documents',
@@ -110,6 +111,7 @@ class CertificationController extends Controller
         Gate::authorize('view', $japicCertificationProcessing);
         $japicCertificationProcessing->load([
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
         ]);

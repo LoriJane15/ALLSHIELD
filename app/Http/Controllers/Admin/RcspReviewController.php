@@ -8,7 +8,6 @@ use App\Http\Requests\Rcsp\ReviewRcspPhaseRequest;
 use App\Http\Requests\Rcsp\StoreRcspCommentRequest;
 use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
-use App\Models\RcspFileComment;
 use App\Models\RcspForm;
 use App\Models\RcspPhase;
 use App\Services\RcspWorkflowService;
@@ -26,13 +25,15 @@ class RcspReviewController extends Controller
 {
     public function index(): View
     {
+        Gate::authorize('viewAny', RcspBarangay::class);
         $barangays = RcspBarangay::with(['barangay', 'municipality'])
             ->whereHas('forms')
             ->get();
 
-        // classify each barangay by its form statuses
-        $formStatuses = RcspForm::select('rcsp_barangay_id', 'status')
-            ->get()
+        // Classify using only the latest immutable version of each activity.
+        $formStatuses = RcspForm::select('id', 'rcsp_barangay_id', 'rcsp_activity_id', 'submission_version', 'status')
+            ->orderByDesc('submission_version')->orderByDesc('id')->get()
+            ->unique(fn (RcspForm $form) => $form->rcsp_barangay_id.'|'.$form->rcsp_activity_id)
             ->groupBy('rcsp_barangay_id')
             ->map(fn ($g) => $g->pluck('status')->unique());
 
@@ -55,6 +56,7 @@ class RcspReviewController extends Controller
 
     public function show(Request $request, RcspBarangay $rcspBarangay): View
     {
+        Gate::authorize('view', $rcspBarangay);
         $rcspBarangay->load('barangay', 'municipality');
         $phases = RcspPhase::where('catalog_key', $rcspBarangay->catalog_key)->orderBy('number')->get();
 
@@ -62,21 +64,15 @@ class RcspReviewController extends Controller
         $currentPhase = $phases->firstWhere('number', $phaseNumber) ?? $phases->first();
         abort_unless($currentPhase, 422, 'No phase catalog is available for this RCSP barangay.');
 
-        $activities = RcspActivity::where('rcsp_phase_id', $currentPhase->id)->orderBy('id')->get();
+        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)->orderBy('id')->get();
 
         $forms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
             ->where('rcsp_phase_id', $currentPhase->id)
-            ->get()->groupBy('rcsp_activity_id')
-            ->map(fn ($g) => $g->sortByDesc('id')->first());
-
-        $comments = RcspFileComment::with('user')
-            ->whereIn('rcsp_activity_id', $activities->pluck('id'))
-            ->where('rcsp_phase_id', $currentPhase->id)
-            ->orderBy('id')
-            ->get()->groupBy('rcsp_activity_id');
+            ->orderByDesc('submission_version')->orderByDesc('id')->get()->groupBy('rcsp_activity_id')
+            ->map(fn ($group) => $group->first());
 
         return view('admin.rcsp.show', compact(
-            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'comments'
+            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms'
         ));
     }
 
@@ -95,7 +91,7 @@ class RcspReviewController extends Controller
     public function updateStatus(ReviewRcspPhaseRequest $request, RcspBarangay $rcspBarangay, RcspWorkflowService $workflow): RedirectResponse
     {
         $data = $request->validated();
-        $workflow->reviewPhase($rcspBarangay, RcspPhase::findOrFail($data['phase_id']), $request->user(), $data['statuses'], $data['remarks'] ?? []);
+        $workflow->reviewPhase($rcspBarangay, $request->user(), $data['statuses'], $data['remarks'] ?? []);
 
         return back()->with('success', 'Review saved.');
     }
@@ -117,7 +113,12 @@ class RcspReviewController extends Controller
             'success' => true,
             'comment' => [
                 'text' => $comment->text,
+                'id' => $comment->id,
                 'user' => $request->user()->name,
+                'role' => $request->user()->role,
+                'user_logo' => $request->user()->logo
+                    ? asset('assets/'.$request->user()->logo)
+                    : asset('assets/img/kc-logo.svg'),
                 'at' => $comment->created_at->diffForHumans(),
             ],
         ]);

@@ -35,13 +35,24 @@ class PswdoEnrollment extends Model
 
     public function isCompleted(): bool
     {
-        return collect(PswdoEnrollmentDocumentType::cases())->every(fn (PswdoEnrollmentDocumentType $type): bool => $this->hasDocument($type));
+        $documents = $this->relationLoaded('documents') ? $this->documents : $this->documents()->get();
+
+        return collect(PswdoEnrollmentDocumentType::cases())->every(fn (PswdoEnrollmentDocumentType $type): bool => $documents->contains(fn (PswdoEnrollmentDocument $document): bool => $document->document_type === $type
+                && $this->isConfirmedFinal($document)));
     }
 
     public function completedDocumentCount(): int
     {
         $documents = $this->relationLoaded('documents') ? $this->documents : $this->documents()->get();
 
-        return $documents->pluck('document_type')->unique()->count();
+        return $documents->filter($this->isConfirmedFinal(...))->pluck('document_type')->unique()->count();
+    }
+
+    private function isConfirmedFinal(PswdoEnrollmentDocument $document): bool
+    {
+        return $document->correct_document_type_confirmed
+            && $document->belongs_to_fr_confirmed
+            && $document->final_signed_confirmed
+            && $document->uploaded_at !== null;
     }
 }

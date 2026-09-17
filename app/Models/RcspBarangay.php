@@ -31,6 +31,16 @@ class RcspBarangay extends Model
         return $this->hasMany(RcspForm::class);
     }
 
+    public function activities(): HasMany
+    {
+        return $this->hasMany(RcspActivity::class);
+    }
+
+    public function phaseTransitions(): HasMany
+    {
+        return $this->hasMany(RcspPhaseTransition::class);
+    }
+
     /** Progress percentage across the 6 phases (0..5). */
     public function getProgressAttribute(): int
     {

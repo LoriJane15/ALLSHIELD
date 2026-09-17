@@ -10,12 +10,18 @@ class RcspForm extends Model
 {
     protected $fillable = [
         'lgu_user_id', 'rcsp_barangay_id', 'rcsp_phase_id', 'rcsp_activity_id',
-        'conduct', 'file', 'status', 'remarks', 'reviewed_by_user_id', 'reviewed_at',
+        'submission_version', 'conduct', 'file', 'original_filename', 'detected_mime_type',
+        'file_size_bytes', 'submitted_at', 'status', 'remarks', 'reviewed_by_user_id', 'reviewed_at',
     ];
 
     protected function casts(): array
     {
-        return ['reviewed_at' => 'datetime'];
+        return [
+            'submission_version' => 'integer',
+            'file_size_bytes' => 'integer',
+            'submitted_at' => 'datetime',
+            'reviewed_at' => 'datetime',
+        ];
     }
 
     public function lguUser(): BelongsTo
@@ -46,5 +52,10 @@ class RcspForm extends Model
     public function fileComments(): HasMany
     {
         return $this->hasMany(RcspFileComment::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(RcspFormReview::class);
     }
 }

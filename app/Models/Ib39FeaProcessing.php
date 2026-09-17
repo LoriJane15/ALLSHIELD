@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Contracts\Ib39FeaReadiness;
 use App\Enums\Ib39FeaComplianceStatus;
 use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\Ib39FeaOverallStatus;
@@ -36,7 +37,12 @@ class Ib39FeaProcessing extends Model
             return Ib39FeaOverallStatus::NotApplicable;
         }
 
-        return $this->statusFromDocuments();
+        $status = $this->statusFromDocuments();
+
+        return $status === Ib39FeaOverallStatus::Completed
+            && ! app(Ib39FeaReadiness::class)->isReady($record)
+                ? Ib39FeaOverallStatus::Processing
+                : $status;
     }
 
     public function statusFromDocuments(): Ib39FeaOverallStatus

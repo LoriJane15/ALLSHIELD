@@ -42,6 +42,7 @@ class FeaProcessingController extends Controller
                 'lastUpdater:id,name',
                 'histories' => fn ($history) => $history->with('actor:id,name')->oldest('created_at')->oldest('id'),
                 'currentDraftVersion.uploader:id,name',
+                'currentFinalVersion.uploader:id,name',
                 'currentSupportingPhotoVersion.uploader:id,name',
                 'versions' => fn ($version) => $version->with('uploader:id,name')->latest('version_number'),
                 'uploadHistories' => fn ($history) => $history->with('actor:id,name')->latest('created_at'),

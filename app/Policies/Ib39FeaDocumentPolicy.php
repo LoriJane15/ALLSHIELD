@@ -10,6 +10,7 @@ use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Services\PswdoEligibilityService;
+use Illuminate\Support\Facades\Schema;
 
 class Ib39FeaDocumentPolicy
 {
@@ -46,6 +47,15 @@ class Ib39FeaDocumentPolicy
     public function uploadDraft(User $user, Ib39FeaDocument $document, Ib39FeaProcessing $processing): bool
     {
         return $this->start($user, $document, $processing)
+            && (bool) $processing->surfacedFormerRebel()->value('possessed_firearms');
+    }
+
+    public function uploadFinal(User $user, Ib39FeaDocument $document, Ib39FeaProcessing $processing): bool
+    {
+        return $this->hasAccess($user, $document, $processing)
+            && Schema::hasColumn('ib39_fea_documents', 'current_final_version_id')
+            && $document->status !== Ib39FeaDocumentStatus::Completed
+            && $document->current_final_version_id === null
             && (bool) $processing->surfacedFormerRebel()->value('possessed_firearms');
     }
 

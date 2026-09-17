@@ -184,6 +184,12 @@
 
 @section('content')
 <div class="sa-dashboard-wrapper">
+    @if ($errors->has('agency_deletion'))
+        <div class="alert alert-danger" role="alert">
+            {{ $errors->first('agency_deletion') }}
+        </div>
+    @endif
+
     {{-- Executive Header Banner --}}
     <div class="sa-hero-banner mb-4">
         <div class="sa-hero-content">
@@ -230,9 +236,9 @@
                 </div>
                 <span class="sa-stat-badge sa-badge-amber">Active Focal</span>
             </div>
-            <div class="sa-stat-title">Agency Assigned Users</div>
+            <div class="sa-stat-title">Active Agency Users</div>
             <div class="sa-stat-number" style="color: var(--sa-amber);">{{ $stats['active_users'] ?? 0 }}</div>
-            <div class="sa-stat-subtitle">Focal Person &amp; Operator Accounts</div>
+            <div class="sa-stat-subtitle">Active Focal Person &amp; Operator Accounts</div>
             <i class="mdi mdi-account-group sa-stat-watermark"></i>
         </div>
     </div>
@@ -280,7 +286,7 @@
                             <th style="min-width: 320px;">Agency Profile</th>
                             <th>Acronym</th>
                             <th>Assigned Personnel</th>
-                            <th class="text-end" style="width: 120px;">Actions</th>
+                            <th class="text-end" style="width: 280px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -314,7 +320,7 @@
                                 <td>
                                     <span class="d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill" style="background: #f1f5f9; color: #334155; font-size: 0.8rem; font-weight: 600; border: 1px solid #e2e8f0;">
                                         <i class="mdi mdi-account-multiple text-primary me-1"></i>
-                                        <span>{{ $a->users_count }} {{ Str::plural('User', $a->users_count) }}</span>
+                                        <span>{{ $a->active_users_count }} Active {{ Str::plural('user', $a->active_users_count) }}</span>
                                     </span>
                                 </td>
 
@@ -330,7 +336,7 @@
                                             <i class="mdi mdi-pencil"></i>
                                         </button>
 
-                                        @if (! $a->users_count)
+                                        @if (! $a->users_count && ! $a->responses_count && ! $a->implementation_taggings_count)
                                             <form method="POST" action="{{ route('super_admin.agencies.destroy', $a) }}"
                                                   data-confirm="Are you sure you want to delete agency '{{ $a->acronym }}'?"
                                                   data-confirm-title="Confirm Agency Deletion"
@@ -341,6 +347,10 @@
                                                     <i class="mdi mdi-delete"></i>
                                                 </button>
                                             </form>
+                                        @else
+                                            <span class="small text-muted text-end" style="max-width: 210px; line-height: 1.25;">
+                                                Agency cannot be deleted while linked accounts or implementation records exist.
+                                            </span>
                                         @endif
                                     </div>
                                 </td>
@@ -458,7 +468,7 @@
                 new bootstrap.Modal(document.getElementById('editAgencyModal')).show();
             });
         });
-        @if ($errors->any())
+        @if ($errors->any() && ! $errors->has('agency_deletion'))
             document.addEventListener('DOMContentLoaded', () => new bootstrap.Modal(document.getElementById('addAgencyModal')).show());
         @endif
     </script>

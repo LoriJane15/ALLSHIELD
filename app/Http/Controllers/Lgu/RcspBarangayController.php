@@ -20,7 +20,7 @@ class RcspBarangayController extends Controller
         $muniId = auth()->user()->municipality_id;
 
         $rcspBarangays = RcspBarangay::query()
-            ->with(['barangay', 'phaseStatus'])
+            ->with(['barangay', 'municipality', 'phaseStatus'])
             ->when($muniId, fn ($q) => $q->where('municipality_id', $muniId))
             ->when(request('search'), fn ($q, $s) => $q->whereHas('barangay', fn ($b) => $b->where('name', 'like', "%{$s}%")))
             ->orderByDesc('id')
@@ -38,9 +38,9 @@ class RcspBarangayController extends Controller
 
     public function store(StoreRcspBarangayRequest $request, RcspWorkflowService $workflow): RedirectResponse
     {
-        $workflow->createBarangay($request->integer('barangay_id'), $request->user(), $request->catalogKey());
+        $workflow->createBarangay($request->integer('barangay_id'), $request->user());
 
-        return back()->with('success', 'RCSP barangay added.');
+        return back()->with('success', 'RCSP barangay registered.');
     }
 
     public function destroy(RcspBarangay $rcspBarangay): RedirectResponse

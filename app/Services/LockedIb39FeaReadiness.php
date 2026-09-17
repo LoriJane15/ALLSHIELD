@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Contracts\Ib39FeaReadiness;
-use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Ib39SurfacedFormerRebel;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,9 +21,7 @@ class LockedIb39FeaReadiness implements Ib39FeaReadiness
             return false;
         }
 
-        return $record->pswdoEnrollment()->whereHas('documents', fn ($query) => $query
-            ->selectRaw('1')->groupBy('pswdo_enrollment_id')
-            ->havingRaw('COUNT(DISTINCT document_type) = ?', [count(PswdoEnrollmentDocumentType::cases())]))->exists();
+        return $record->pswdoEnrollment()->first()?->isCompleted() ?? false;
     }
 
     public function assertReady(Ib39SurfacedFormerRebel $record): void

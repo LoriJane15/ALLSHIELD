@@ -83,6 +83,7 @@ class SurfacedFormerRebelController extends Controller
             'creator',
             'cdrProcessing.currentFinalVersion',
             'feaProcessing.documents.currentDraftVersion',
+            'feaProcessing.documents.currentFinalVersion',
             'feaProcessing.documents.currentSupportingPhotoVersion',
             'feaProcessing.documents.currentSurrenderedPhotoVersion',
             'japicCertificationProcessing.currentFinalVersion',
@@ -127,6 +128,7 @@ class SurfacedFormerRebelController extends Controller
         Gate::authorize('view', $ib39SurfacedFormerRebel);
         $ib39SurfacedFormerRebel->load([
             'feaProcessing.documents.currentDraftVersion',
+            'feaProcessing.documents.currentFinalVersion',
             'feaProcessing.documents.currentSupportingPhotoVersion',
             'feaProcessing.documents.currentSurrenderedPhotoVersion',
         ]);

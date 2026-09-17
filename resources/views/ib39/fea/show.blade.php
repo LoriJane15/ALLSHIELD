@@ -588,6 +588,7 @@
             <div>
                 <strong>Action Required:</strong>
                 <div>{{ $readiness->denialMessage() }}</div>
+                <div>Final FEA documents and photos can be uploaded after PSWDO enrollment is completed.</div>
             </div>
         </div>
     @endunless
@@ -743,22 +744,12 @@
                                 </div>
 
                                 @if($document->document_type->hasDraftEditor())
-                                    @php
-                                        $finalUploadLabel = match ($document->document_type) {
-                                            \App\Enums\Ib39FeaDocumentType::Tir => 'Upload Final TIR',
-                                            \App\Enums\Ib39FeaDocumentType::Cvif => 'Upload Final CVIF',
-                                            \App\Enums\Ib39FeaDocumentType::Ptis => 'Upload Final PTIS',
-                                            \App\Enums\Ib39FeaDocumentType::Justification => 'Upload Final Justification Form',
-                                            default => null,
-                                        };
-                                    @endphp
                                     <div class="document-actions">
                                         @if($isReady)
                                             <a class="btn btn-sm btn-action-primary" href="{{ route('ib39.fea.documents.draft.edit', [$fea, $document]) }}">
                                                 <i class="mdi mdi-pencil-box"></i>
                                                 <span>Open Official Form Editor</span>
                                             </a>
-                                            <button class="btn btn-sm btn-secondary" type="button" disabled>{{ $finalUploadLabel }}</button>
                                         @endif
                                         @can('viewDraft', [$document, $fea])
                                             <a class="btn btn-sm btn-action-outline" href="{{ route('ib39.fea.documents.draft.preview', [$fea, $document]) }}">
@@ -866,5 +857,3 @@
 </script>
 @endpush
 @endsection
-
-

@@ -6,13 +6,13 @@
     $totalMapped = max((int) ($stats['mapped'] ?? 0), 1);
     $recoveryCount = (int) ($statusCounts['Recovery'] ?? 0);
     $konsolidadoCount = (int) ($statusCounts['Konsolidado'] ?? 0);
-    $rekonsilidaCount = (int) ($statusCounts['Rekonsilida'] ?? 0);
+    $rekonsilidoCount = (int) ($statusCounts['Rekonsilido'] ?? 0);
     $expansionCount = (int) ($statusCounts['Expansion'] ?? 0);
     $totalFRs = (int) ($stats['total_frs'] ?? 0);
 
     $areaCards = [
         [
-            'title' => 'Konsolidado',
+            'title' => $classifications[0]['status'],
             'count' => $konsolidadoCount,
             'subtitle' => 'Organized NPA Influenced',
             'badge' => 'High Threat',
@@ -21,22 +21,22 @@
             'icon' => 'mdi-flag-variant',
             'color' => '#dc2626',
             'pct' => round(($konsolidadoCount / $totalMapped) * 100),
-            'threshold' => '20+ FRs',
+            'threshold' => $classifications[0]['label'],
         ],
         [
-            'title' => 'Rekonsilida',
-            'count' => $rekonsilidaCount,
+            'title' => $classifications[1]['status'],
+            'count' => $rekonsilidoCount,
             'subtitle' => 'Less Influenced Areas',
             'badge' => 'Monitored',
             'badge_cls' => 'badge-warning-soft',
             'card_cls' => 'card-theme-rekonsilida',
             'icon' => 'mdi-alert-circle',
             'color' => '#ea580c',
-            'pct' => round(($rekonsilidaCount / $totalMapped) * 100),
-            'threshold' => '15–19 FRs',
+            'pct' => round(($rekonsilidoCount / $totalMapped) * 100),
+            'threshold' => $classifications[1]['label'],
         ],
         [
-            'title' => 'Expansion',
+            'title' => $classifications[2]['status'],
             'count' => $expansionCount,
             'subtitle' => 'Potential Threat Areas',
             'badge' => 'Watchlist',
@@ -45,10 +45,10 @@
             'icon' => 'mdi-radar',
             'color' => '#ca8a04',
             'pct' => round(($expansionCount / $totalMapped) * 100),
-            'threshold' => '10–14 FRs',
+            'threshold' => $classifications[2]['label'],
         ],
         [
-            'title' => 'Recovery',
+            'title' => $classifications[3]['status'],
             'count' => $recoveryCount,
             'subtitle' => 'Cleared & Stabilized',
             'badge' => 'Cleared',
@@ -57,7 +57,7 @@
             'icon' => 'mdi-shield-check',
             'color' => '#16a34a',
             'pct' => round(($recoveryCount / $totalMapped) * 100),
-            'threshold' => '<10 FRs',
+            'threshold' => $classifications[3]['label'],
         ],
     ];
 @endphp
@@ -804,7 +804,7 @@
                                     <div class="mt-1 text-truncate text-muted" style="font-size: 0.72rem;">
                                         @if ($statusBarangays->isNotEmpty())
                                             <span class="font-weight-medium text-dark">Monitored:</span>
-                                            {{ $statusBarangays->take(3)->pluck('barangay')->implode(', ') }}
+                                            {{ $statusBarangays->take(3)->map(fn ($area) => $area->barangayRecord?->name ?? $area->barangay)->implode(', ') }}
                                             @if ($statusBarangays->count() > 3)
                                                 <span class="text-primary font-weight-bold">+{{ $statusBarangays->count() - 3 }} more</span>
                                             @endif
@@ -890,28 +890,31 @@
                             <tbody>
                                 @forelse ($priorityAreas as $area)
                                     @php
-                                        $statusBadge = match($area->status) {
+                                        $current = $area->latestColorHistory;
+                                        $canonicalBarangay = $area->barangayRecord;
+                                        $canonicalMunicipality = $canonicalBarangay?->municipality;
+                                        $statusBadge = match($current?->status) {
                                             'Konsolidado' => 'badge-danger-soft',
-                                            'Rekonsilida' => 'badge-warning-soft',
+                                            'Rekonsilido' => 'badge-warning-soft',
                                             'Expansion' => 'badge-amber-soft',
                                             default => 'badge-success-soft',
                                         };
                                     @endphp
                                     <tr>
                                         <td>
-                                            <div class="font-weight-bold text-dark">{{ $area->barangay }}</div>
-                                            <small class="text-muted font-weight-medium">{{ $area->municipality }}</small>
+                                            <div class="font-weight-bold text-dark">{{ $canonicalBarangay?->name ?? $area->barangay }}</div>
+                                            <small class="text-muted font-weight-medium">{{ $canonicalMunicipality?->name ?? $area->municipality }}</small>
                                         </td>
                                         <td>
                                             <span class="badge bg-light text-dark font-weight-bold px-2 py-1 border" style="border-radius: 6px;">
-                                                {{ $area->frs }} FRs
+                                                {{ $current?->frs ?? 0 }} FRs
                                             </span>
                                         </td>
                                         <td>
-                                            <span class="badge-soft {{ $statusBadge }}">{{ $area->status ?: 'Unclassified' }}</span>
+                                            <span class="badge-soft {{ $statusBadge }}">{{ $current?->status ?? 'Unclassified' }}</span>
                                         </td>
                                         <td class="text-end">
-                                            <a href="{{ route('ib39.areas.index', ['search' => $area->barangay]) }}" class="table-action-btn" title="View details">
+                                            <a href="{{ route('ib39.areas.index', ['search' => $canonicalBarangay?->name ?? $area->barangay]) }}" class="table-action-btn" title="View details">
                                                 <i class="mdi mdi-eye"></i>
                                             </a>
                                         </td>
@@ -1075,6 +1078,7 @@
 
 {{-- Data Bridge for Chart.js --}}
 <div id="ib39Data"
+     data-classifications='@json($classifications)'
      data-status='@json($statusCounts)'
      data-muni-labels='@json($perMunicipality->pluck('municipality'))'
      data-muni-values='@json($perMunicipality->pluck('frs'))'
@@ -1095,11 +1099,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!el) return;
 
     const status = JSON.parse(el.dataset.status || '{}');
+    const classifications = JSON.parse(el.dataset.classifications || '[]');
     const muniLabels = JSON.parse(el.dataset.muniLabels || '[]');
     const muniValues = JSON.parse(el.dataset.muniValues || '[]');
-    const statusLabels = ['Konsolidado', 'Rekonsilida', 'Expansion', 'Recovery'];
-    const statusColors = ['#dc2626', '#ea580c', '#ca8a04', '#16a34a'];
-    const statusHoverColors = ['#b91c1c', '#c2410c', '#a16207', '#15803d'];
+    const statusLabels = classifications.map((item) => item.status);
+    const statusColors = classifications.map((item) => item.color);
+    const statusHoverColors = classifications.map((item) => item.color);
 
     const ctx = document.getElementById('ib39AnalyticsChart');
     if (!ctx) return;

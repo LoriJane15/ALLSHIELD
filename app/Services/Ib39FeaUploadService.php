@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Contracts\Ib39FeaReadiness;
+use App\Enums\Ib39FeaComplianceStatus;
+use App\Enums\Ib39FeaDocumentHistoryEvent;
 use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\Ib39FeaDocumentType;
 use App\Enums\Ib39FeaUploadSlot;
@@ -14,9 +16,11 @@ use App\Models\User;
 use App\Support\Ib39FeaUploadedFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -67,6 +71,7 @@ class Ib39FeaUploadService
                     Ib39FeaUploadSlot::Primary => 'current_draft_version_id',
                     Ib39FeaUploadSlot::JustificationSurrendered => 'current_surrendered_photo_version_id',
                     Ib39FeaUploadSlot::JustificationComparison => 'current_supporting_photo_version_id',
+                    Ib39FeaUploadSlot::FinalPrimary => throw new LogicException('Final files require the final upload operation.'),
                 };
                 $currentId = $lockedDocument->{$pointer};
                 if ($currentId !== $expectedCurrentVersionId) {
@@ -131,6 +136,108 @@ class Ib39FeaUploadService
         }
     }
 
+    public function storeFinal(
+        Ib39FeaProcessing $processing,
+        Ib39FeaDocument $document,
+        UploadedFile $file,
+        User $actor,
+        ?string $ipAddress = null,
+        ?string $userAgent = null,
+    ): Ib39FeaDocumentVersion {
+        $this->assertReadyBeforeFinalUpload($processing, $document, $actor);
+        $photo = in_array($document->document_type, [Ib39FeaDocumentType::FirearmPhoto, Ib39FeaDocumentType::FrWithFirearmPhoto], true);
+        $metadata = Ib39FeaUploadedFile::inspect($file, $photo, 'fea-final');
+        $path = sprintf('ib39/fea/%d/finals/%s.%s', $processing->id, Str::uuid(), $metadata['extension']);
+        $stored = false;
+
+        try {
+            return DB::transaction(function () use ($processing, $document, $file, $actor, $ipAddress, $userAgent, $metadata, $path, &$stored): Ib39FeaDocumentVersion {
+                $lockedProcessing = Ib39FeaProcessing::query()->lockForUpdate()->findOrFail($processing->id);
+                $record = $lockedProcessing->surfacedFormerRebel()->whereDoesntHave('cancellation')->lockForUpdate()->first();
+                abort_unless($actor->is_active && $actor->hasRole('39th_ib') && $record && $record->possessed_firearms, 403);
+                $lockedDocument = Ib39FeaDocument::query()->where('fea_processing_id', $lockedProcessing->id)->lockForUpdate()->findOrFail($document->id);
+                abort_unless($this->readiness->isReady($record), 403, 'Final FEA documents and photos can be uploaded after PSWDO enrollment is completed.');
+                if ($lockedDocument->status === Ib39FeaDocumentStatus::Completed || $lockedDocument->current_final_version_id !== null) {
+                    throw ValidationException::withMessages(['file' => 'This document already has a final file. Final replacement is unavailable.']);
+                }
+                if ($lockedDocument->compliance_status !== Ib39FeaComplianceStatus::None) {
+                    throw ValidationException::withMessages(['file' => 'Resolve the document compliance issue before uploading a final file.']);
+                }
+
+                $overallBefore = $lockedProcessing->overallStatus();
+                if (! Storage::disk('local')->putFileAs(dirname($path), $file, basename($path))) {
+                    throw new RuntimeException('The final file could not be stored.');
+                }
+                $stored = true;
+
+                $version = $lockedDocument->versions()->create([
+                    'fea_processing_id' => $lockedProcessing->id,
+                    'slot' => Ib39FeaUploadSlot::FinalPrimary,
+                    'version_number' => 1,
+                    'replaces_version_id' => null,
+                    'replacement_reason' => null,
+                    'storage_path' => $path,
+                    'original_filename' => $metadata['original_filename'],
+                    'mime_type' => $metadata['mime_type'],
+                    'size_bytes' => $metadata['size_bytes'],
+                    'sha256' => $metadata['sha256'],
+                    'uploaded_by' => $actor->id,
+                ]);
+                $previousStatus = $lockedDocument->status;
+                $lockedDocument->update([
+                    'status' => Ib39FeaDocumentStatus::Completed,
+                    'started_at' => $lockedDocument->started_at ?? now(),
+                    'completed_at' => now(),
+                    'current_final_version_id' => $version->id,
+                    'prepared_by' => $lockedDocument->prepared_by ?? $actor->id,
+                    'last_updated_by' => $actor->id,
+                ]);
+                $lockedDocument->histories()->create([
+                    'fea_processing_id' => $lockedProcessing->id,
+                    'user_id' => $actor->id,
+                    'event' => Ib39FeaDocumentHistoryEvent::Completed,
+                    'previous_values' => ['status' => $previousStatus->value],
+                    'new_values' => ['status' => Ib39FeaDocumentStatus::Completed->value, 'final_version_id' => $version->id],
+                ]);
+                $lockedDocument->uploadHistories()->create([
+                    'fea_processing_id' => $lockedProcessing->id,
+                    'fea_document_version_id' => $version->id,
+                    'user_id' => $actor->id,
+                    'event' => 'final_uploaded',
+                    'slot' => Ib39FeaUploadSlot::FinalPrimary,
+                    'version_number' => 1,
+                ]);
+                $overallAfter = $lockedProcessing->fresh()->overallStatus();
+                if ($overallBefore !== $overallAfter) {
+                    $lockedProcessing->histories()->create([
+                        'user_id' => $actor->id,
+                        'from_status' => $overallBefore,
+                        'to_status' => $overallAfter,
+                        'event' => 'overall_status_changed',
+                    ]);
+                }
+                $this->audit($version, $actor, 'ib39_fea_final_file_uploaded', $ipAddress, $userAgent);
+
+                return $version;
+            }, 5);
+        } catch (Throwable $exception) {
+            if ($stored) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $exception;
+        }
+    }
+
+    private function assertReadyBeforeFinalUpload(Ib39FeaProcessing $processing, Ib39FeaDocument $document, User $actor): void
+    {
+        abort_unless(Schema::hasColumn('ib39_fea_documents', 'current_final_version_id'), 503, 'Final FEA uploads are unavailable until the final-version schema is installed.');
+        abort_unless($actor->is_active && $actor->hasRole('39th_ib'), 403);
+        abort_unless($document->fea_processing_id === $processing->id, 404);
+        $record = $processing->surfacedFormerRebel()->whereDoesntHave('cancellation')->first();
+        abort_unless($record && $record->possessed_firearms, 403);
+        abort_unless($this->readiness->isReady($record), 403, 'Final FEA documents and photos can be uploaded after PSWDO enrollment is completed.');
+    }
+
     private function assertReadyBeforeUpload(
         Ib39FeaProcessing $processing,
         Ib39FeaDocument $document,
@@ -160,7 +267,8 @@ class Ib39FeaUploadService
         abort_unless(str_starts_with($version->storage_path, 'ib39/fea/'), 404);
         abort_unless(in_array($version->mime_type, ['application/pdf', 'image/jpeg', 'image/png'], true), 404);
         abort_unless(Storage::disk('local')->exists($version->storage_path), 404);
-        $this->audit($version, $actor, 'ib39_fea_draft_file_'.$access, $ip, $agent);
+        $kind = $version->slot === Ib39FeaUploadSlot::FinalPrimary ? 'final' : 'draft';
+        $this->audit($version, $actor, 'ib39_fea_'.$kind.'_file_'.$access, $ip, $agent);
 
         return Storage::disk('local')->response($version->storage_path, $version->original_filename, [
             'Content-Type' => $version->mime_type,

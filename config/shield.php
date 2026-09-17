@@ -8,6 +8,9 @@
 */
 
 return [
+    'jurisdiction' => [
+        'province' => 'Davao del Sur',
+    ],
     'shared_nav' => [
         ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*'], 'group' => 'Communication'],
     ],

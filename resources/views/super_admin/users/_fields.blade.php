@@ -32,7 +32,21 @@
                 <i class="mdi mdi-eye-outline"></i>
             </button>
         </div>
+        <p class="mt-1 text-muted small mb-0">{{ $isEdit ? 'Confirmation is required when changing the password.' : 'The password must meet the system password rule and match its confirmation.' }}</p>
         @error('password') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
+    </div>
+
+    {{-- Password Confirmation --}}
+    <div class="col-md-6">
+        <label class="form-label text-secondary fw-semibold mb-1" style="font-size: 0.82rem;">
+            Confirm Password
+            @if ($isEdit)
+                <span class="text-muted fw-normal" style="font-size: 0.75rem;">(Required when changing password)</span>
+            @else
+                <span class="text-danger">*</span>
+            @endif
+        </label>
+        <input name="password_confirmation" type="password" {{ $isEdit ? '' : 'required' }} class="form-control modern-input" autocomplete="new-password" placeholder="Confirm password">
     </div>
 
     {{-- Assigned Role --}}
@@ -46,15 +60,29 @@
         @error('role') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
     </div>
 
+    @if ($isEdit)
+        {{-- Account lifecycle --}}
+        <div class="col-12">
+            <label class="form-label text-secondary fw-semibold mb-1" style="font-size: 0.82rem;">Account Status <span class="text-danger">*</span></label>
+            <select name="is_active" required class="form-select modern-input">
+                <option value="1" @selected((string) old('is_active', '1') === '1')>Active</option>
+                <option value="0" @selected((string) old('is_active') === '0')>Inactive</option>
+            </select>
+            <p class="mt-1 text-muted small mb-0">Activate an account to allow sign-in. Deactivate it to block sign-in while preserving its records.</p>
+            @error('is_active') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
+        </div>
+    @endif
+
     {{-- LGU only (Municipality) --}}
     <div data-role-field="lgu" class="col-12 d-none">
         <label class="form-label text-secondary fw-semibold mb-1" style="font-size: 0.82rem;">Assigned Municipality <span class="text-danger">*</span></label>
         <select name="municipality_id" class="form-select modern-input">
             <option value="">Select Municipality...</option>
             @foreach ($municipalities as $m)
-                <option value="{{ $m->id }}">{{ $m->name }} ({{ $m->kind }})</option>
+                <option value="{{ $m->id }}" @selected((string) old('municipality_id') === (string) $m->id)>{{ $m->name }} ({{ $m->kind }})</option>
             @endforeach
         </select>
+        <p class="mt-1 text-muted small mb-0">A valid municipality is required for LGU accounts.</p>
         @error('municipality_id') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
     </div>
 
@@ -64,9 +92,10 @@
         <select name="gov_agency_id" class="form-select modern-input">
             <option value="">Select Government Agency...</option>
             @foreach ($agencies as $a)
-                <option value="{{ $a->id }}">{{ $a->acronym }} — {{ $a->name }}</option>
+                <option value="{{ $a->id }}" @selected((string) old('gov_agency_id') === (string) $a->id)>{{ $a->acronym }} — {{ $a->name }}</option>
             @endforeach
         </select>
+        <p class="mt-1 text-muted small mb-0">A valid government agency is required for Government Agency accounts.</p>
         @error('gov_agency_id') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
     </div>
 

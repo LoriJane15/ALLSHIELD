@@ -96,6 +96,7 @@ class SurfacedFrDocumentsRecordsService
 
         return $this->availableFeaDocuments($record)->map(function ($document) use ($fea, $previewUrl, $downloadUrl): array {
             $versions = collect([
+                $document->currentFinalVersion,
                 $document->currentDraftVersion,
                 $document->currentSupportingPhotoVersion,
                 $document->currentSurrenderedPhotoVersion,
@@ -148,6 +149,7 @@ class SurfacedFrDocumentsRecordsService
     private function availableFeaDocuments(Ib39SurfacedFormerRebel $record): Collection
     {
         return $record->feaProcessing?->documents->filter(fn ($document): bool => $document->currentDraftVersion !== null
+            || $document->currentFinalVersion !== null
             || $document->currentSupportingPhotoVersion !== null
             || $document->currentSurrenderedPhotoVersion !== null)->values() ?? collect();
     }
@@ -176,7 +178,7 @@ class SurfacedFrDocumentsRecordsService
         }
         $this->assertLoaded($record->feaProcessing, 'documents');
         foreach ($record->feaProcessing->documents as $document) {
-            foreach (['currentDraftVersion', 'currentSupportingPhotoVersion', 'currentSurrenderedPhotoVersion'] as $relation) {
+            foreach (['currentFinalVersion', 'currentDraftVersion', 'currentSupportingPhotoVersion', 'currentSurrenderedPhotoVersion'] as $relation) {
                 $this->assertLoaded($document, $relation);
             }
         }

@@ -22,7 +22,7 @@ class SurfacedFrProgressTimelineService
         $japicCompleted = $record->hasCompletedJapicCertificationWithCurrentFinalDocument();
         $pswdoCompleted = $record->pswdoEnrollment?->isCompleted() ?? false;
         $feaCompleted = $record->possessed_firearms
-            && $record->feaProcessing?->statusFromDocuments() === Ib39FeaOverallStatus::Completed;
+            && $record->feaProcessing?->overallStatus() === Ib39FeaOverallStatus::Completed;
         $feaNotApplicable = ! $record->possessed_firearms;
 
         return $this->markCurrentPhase([
@@ -127,7 +127,7 @@ class SurfacedFrProgressTimelineService
             return $this->unavailablePhase('fea', 'FEA Processing', 'No FEA processing workflow is available for this firearms record.');
         }
 
-        return match ($record->feaProcessing->statusFromDocuments()) {
+        return match ($record->feaProcessing->overallStatus()) {
             Ib39FeaOverallStatus::ForCompliance => $this->phase('fea', 'FEA Processing', 'ongoing', 'For Compliance', 'One or more required FEA documents require compliance.'),
             Ib39FeaOverallStatus::Processing => $this->phase('fea', 'FEA Processing', 'ongoing', 'Ongoing', 'FEA document processing is in progress.'),
             Ib39FeaOverallStatus::Pending,

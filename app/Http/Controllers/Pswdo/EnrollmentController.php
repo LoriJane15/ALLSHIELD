@@ -107,6 +107,7 @@ class EnrollmentController extends Controller
         Gate::authorize('view', $pswdoEnrollment);
         $pswdoEnrollment->load([
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
         ]);
@@ -157,6 +158,7 @@ class EnrollmentController extends Controller
             'surfacedFormerRebel.cancellation', 'surfacedFormerRebel.cdrProcessing.currentFinalVersion',
             'surfacedFormerRebel.japicCertificationProcessing.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
+            'surfacedFormerRebel.feaProcessing.documents.currentFinalVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
         ]);

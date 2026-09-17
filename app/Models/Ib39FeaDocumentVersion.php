@@ -29,8 +29,8 @@ class Ib39FeaDocumentVersion extends Model
 
     protected static function booted(): void
     {
-        static::updating(fn () => throw new LogicException('FEA draft versions are immutable.'));
-        static::deleting(fn () => throw new LogicException('FEA draft versions are immutable.'));
+        static::updating(fn () => throw new LogicException('FEA file versions are immutable.'));
+        static::deleting(fn () => throw new LogicException('FEA file versions are immutable.'));
     }
 
     public function document(): BelongsTo

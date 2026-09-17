@@ -2,12 +2,11 @@
 @section('title', 'RCSP Areas')
 @section('heading', 'RCSP Areas')
 
-@php
-    $statusClass = fn ($s) => 'status-'.strtolower($s ?: 'unclassified');
-@endphp
-
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/ib39-areas.css') }}">
+<style>
+    .status-badge { color: #0f172a; border: 1px solid rgba(15,23,42,.12); }
+</style>
 @endpush
 
 @section('content')
@@ -51,8 +50,10 @@
                 <label for="municipalityFilter" class="form-label text-muted small font-weight-bold text-uppercase mb-1">Municipality</label>
                 <select name="municipality" id="municipalityFilter" class="form-select" onchange="this.form.submit()">
                     <option value="">All Municipalities</option>
-                    @foreach ($municipalities as $m)
-                        <option value="{{ $m }}" @selected(request('municipality') === $m)>{{ $m }}</option>
+                    @foreach ($municipalities as $municipality)
+                        <option value="{{ $municipality->name }}" @selected(request('municipality') === $municipality->name)>
+                            {{ $municipality->name }}
+                        </option>
                     @endforeach
                 </select>
             </div>
@@ -60,8 +61,10 @@
                 <label for="statusFilter" class="form-label text-muted small font-weight-bold text-uppercase mb-1">Threat Status</label>
                 <select name="status" id="statusFilter" class="form-select" onchange="this.form.submit()">
                     <option value="">All Status</option>
-                    @foreach (['Konsolidado', 'Rekonsilida', 'Expansion', 'Recovery'] as $s)
-                        <option value="{{ $s }}" @selected(request('status') === $s)>{{ $s }}</option>
+                    @foreach ($classifications as $classification)
+                        <option value="{{ $classification['status'] }}" @selected(request('status') === $classification['status'])>
+                            {{ $classification['status'] }}
+                        </option>
                     @endforeach
                 </select>
             </div>
@@ -91,10 +94,14 @@
                 Showing <strong class="text-dark">{{ $areas->count() }}</strong> of <strong class="text-dark">{{ $areas->total() }}</strong> RCSP barangays
             </span>
             <div class="d-flex align-items-center gap-3 small text-muted flex-wrap">
-                <span><span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">≥20</span> Konsolidado</span>
-                <span><span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-0">15–19</span> Rekonsilida</span>
-                <span><span class="badge bg-amber-subtle text-dark border px-2 py-0">10–14</span> Expansion</span>
-                <span><span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0">&lt;10</span> Recovery</span>
+                @foreach ($classifications as $classification)
+                    <span>
+                        <span class="badge border px-2 py-0" style="background-color: {{ $classification['color'] }}; color: #0f172a;">
+                            {{ $classification['label'] }}
+                        </span>
+                        {{ $classification['status'] }}
+                    </span>
+                @endforeach
             </div>
         </div>
     </div>
@@ -115,28 +122,42 @@
                 </thead>
                 <tbody>
                     @forelse ($areas as $area)
+                        @php
+                            $current = $area->latestColorHistory;
+                            $canonicalBarangay = $area->barangayRecord;
+                            $canonicalMunicipality = $canonicalBarangay?->municipality;
+                        @endphp
                         <tr>
-                            <td><span class="text-muted">Davao del Sur</span></td>
-                            <td><span class="font-weight-medium text-dark">{{ $area->municipality }}</span></td>
-                            <td><span class="font-weight-bold text-dark">{{ $area->barangay }}</span></td>
-                            <td><span class="status-badge {{ $statusClass($area->status) }}">{{ $area->status ?: 'Unclassified' }}</span></td>
+                            <td><span class="text-muted">{{ $area->province }}</span></td>
+                            <td><span class="font-weight-medium text-dark">{{ $canonicalMunicipality?->name ?? $area->municipality }}</span></td>
+                            <td><span class="font-weight-bold text-dark">{{ $canonicalBarangay?->name ?? $area->barangay }}</span></td>
+                            <td>
+                                <span class="status-badge status-{{ strtolower($current?->status ?? 'unclassified') }}"
+                                      style="background-color: {{ $current?->color }}">
+                                    {{ $current?->status ?? 'Unclassified' }}
+                                </span>
+                            </td>
                             <td>
                                 <span class="badge bg-light text-dark font-weight-bold px-2 py-1 border">
-                                    {{ $area->frs }} FR{{ $area->frs === 1 ? '' : 's' }}
+                                    {{ $current?->frs ?? 0 }} FR{{ ($current?->frs ?? 0) === 1 ? '' : 's' }}
                                 </span>
                             </td>
                             <td class="text-end">
                                 <div class="ib39-action-buttons justify-content-end">
-                                    <button type="button" class="ib39-edit-btn js-edit-area"
-                                            title="Edit RCSP Data" aria-label="Edit {{ $area->barangay }}"
-                                            data-bs-toggle="modal" data-bs-target="#editModal"
-                                            data-id="{{ $area->id }}"
-                                            data-municipality="{{ $area->municipality }}"
-                                            data-barangay="{{ $area->barangay }}"
-                                            data-frs="{{ $area->frs }}"
-                                            data-action="{{ route('ib39.areas.update', $area) }}">
-                                        <i class="fa fa-pencil-square-o"></i>
-                                    </button>
+                                    @if ($canonicalBarangay)
+                                        <button type="button" class="ib39-edit-btn js-edit-area"
+                                                title="Edit RCSP Data" aria-label="Edit {{ $area->barangay }}"
+                                                data-bs-toggle="modal" data-bs-target="#editModal"
+                                                data-id="{{ $area->id }}"
+                                                data-barangay-id="{{ $canonicalBarangay->id }}"
+                                                data-municipality="{{ $canonicalMunicipality?->name ?? $area->municipality }}"
+                                                data-barangay="{{ $canonicalBarangay->name }}"
+                                                data-frs="{{ $current?->frs ?? 0 }}"
+                                                data-effective-date="{{ now()->toDateString() }}"
+                                                data-action="{{ route('ib39.areas.update', $area) }}">
+                                            <i class="fa fa-pencil-square-o"></i>
+                                        </button>
+                                    @endif
                                     <form method="POST" action="{{ route('ib39.areas.destroy', $area) }}"
                                           data-confirm="Remove RCSP data for {{ $area->barangay }}? The barangay stays on the map but is reset to unclassified."
                                           data-confirm-title="Confirm remove" data-confirm-action="Remove" class="d-inline">
@@ -185,17 +206,17 @@
                 </div>
                 <div class="ib39-form-group">
                     <label for="municipality-select">Municipality</label>
-                    <select name="municipality" id="municipality-select" required
+                    <select id="municipality-select" required
                             data-barangays="{{ route('ib39.barangays') }}">
                         <option value="">Select Municipality</option>
-                        @foreach ($municipalities as $m)
-                            <option value="{{ $m }}">{{ $m }}</option>
+                        @foreach ($municipalities as $municipality)
+                            <option value="{{ $municipality->id }}">{{ $municipality->name }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="ib39-form-group">
                     <label for="barangay-select">Barangay</label>
-                    <select name="barangay" id="barangay-select" required disabled>
+                    <select name="barangay_id" id="barangay-select" required disabled>
                         <option value="">Select Barangay</option>
                     </select>
                 </div>
@@ -205,15 +226,22 @@
                     <div class="ib39-form-info">
                         This count automatically determines the threat classification:
                         <ul>
-                            <li><strong>20+ FR's</strong>: Red (Konsolidado)</li>
-                            <li><strong>15–19 FR's</strong>: Orange (Rekonsilida)</li>
-                            <li><strong>10–14 FR's</strong>: Yellow (Expansion)</li>
-                            <li><strong>0–9 FR's</strong>: Green (Recovery)</li>
+                            @foreach ($classifications as $classification)
+                                <li>
+                                    <span style="display:inline-block;width:.75rem;height:.75rem;background:{{ $classification['color'] }}"></span>
+                                    {{ $classification['label'] }}: {{ $classification['status'] }}
+                                </li>
+                            @endforeach
                         </ul>
                     </div>
                 </div>
+                <div class="ib39-form-group">
+                    <label for="add-effective-date">Effective Date</label>
+                    <input type="date" name="effective_date" id="add-effective-date"
+                           value="{{ old('effective_date', now()->toDateString()) }}" required>
+                </div>
 
-                <button type="submit" class="ib39-submit-btn">Save RCSP Area</button>
+                <button type="submit" class="ib39-submit-btn">Add Area History</button>
             </form>
         </div>
     </div>
@@ -228,6 +256,7 @@
 
             <form method="POST" id="editForm">
                 @csrf @method('PUT')
+                <input type="hidden" name="barangay_id" id="edit_barangay_id">
                 <div class="ib39-form-group">
                     <label>Municipality</label>
                     <input type="text" id="edit_municipality" disabled>
@@ -243,6 +272,10 @@
                         Threat status and choropleth color are recalculated automatically upon saving.
                     </div>
                 </div>
+                <div class="ib39-form-group">
+                    <label for="edit_effective_date">Effective Date</label>
+                    <input type="date" name="effective_date" id="edit_effective_date" required>
+                </div>
 
                 <button type="submit" class="ib39-submit-btn">Update Area Data</button>
             </form>
@@ -250,4 +283,3 @@
     </div>
 </div>
 @endsection
-

@@ -8,6 +8,7 @@ enum Ib39FeaDocumentHistoryEvent: string
     case ComplianceChanged = 'compliance_changed';
     case RemarksChanged = 'remarks_changed';
     case DelayChanged = 'delay_changed';
+    case Completed = 'completed';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum Ib39FeaDocumentHistoryEvent: string
             self::ComplianceChanged => 'Compliance status changed',
             self::RemarksChanged => 'Remarks changed',
             self::DelayChanged => 'Delay information changed',
+            self::Completed => 'Final document uploaded and completed',
         };
     }
 }

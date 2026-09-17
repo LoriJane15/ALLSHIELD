@@ -2,113 +2,153 @@
 
 namespace Tests\Feature;
 
-use App\Models\{ColorHistory, MapBarangay, User};
+use App\Models\Barangay;
+use App\Models\MapBarangay;
+use App\Models\Municipality;
+use App\Models\User;
+use App\Services\RcspAreaHistoryService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class Ib39MapTest extends TestCase
 {
-    public function test_map_page_reproduces_the_legacy_module(): void
+    use RefreshDatabase;
+
+    private Municipality $municipality;
+
+    private Barangay $barangay;
+
+    private User $ib39;
+
+    protected function setUp(): void
     {
-        $this->skipUnlessLegacyDataPresent();
+        parent::setUp();
+        $this->municipality = Municipality::query()->create(['name' => 'Map Municipality']);
+        $this->barangay = Barangay::query()->create([
+            'municipality_id' => $this->municipality->id,
+            'name' => 'Map Barangay',
+        ]);
+        $this->ib39 = User::factory()->role('39th_ib')->create();
+    }
 
-        $user = User::where('role', '39th_ib')->firstOrFail();
-        $html = $this->actingAs($user)->get('/39th-ib/map')->assertOk()->getContent();
+    public function test_map_page_and_endpoints_require_an_active_39th_ib_account(): void
+    {
+        $this->get(route('ib39.map'))->assertRedirect(route('login'));
+        $this->actingAs(User::factory()->role('mblrc')->create())
+            ->getJson(route('ib39.area.data'))->assertForbidden();
+        $this->actingAs(User::factory()->role('39th_ib')->create(['is_active' => false]))
+            ->get(route('ib39.map'))->assertRedirect(route('login'));
 
-        // Legacy sidebar markup
-        foreach (['ib39FullMap', 'id="barangayDetail"', 'History Barangay Details',
-                  'infestation-color', 'province-value', 'municipality-value',
-                  'barangay-value', 'status-value', 'fr-count-value', 'color-history'] as $needle) {
-            $this->assertStringContainsString($needle, $html, "missing: $needle");
+        $this->actingAs($this->ib39)->get(route('ib39.map'))
+            ->assertOk()
+            ->assertSee('ib39FullMap')
+            ->assertSee('barangays.geojson')
+            ->assertSee('History Barangay Details');
+    }
+
+    public function test_area_data_is_keyed_by_canonical_id_and_contains_only_aggregate_current_state(): void
+    {
+        app(RcspAreaHistoryService::class)->record($this->barangay, '2026-09-13', 15);
+
+        $data = $this->actingAs($this->ib39)->getJson(route('ib39.area.data'))->assertOk()->json();
+        $this->assertSame([
+            'frs' => 15,
+            'status' => 'Rekonsilido',
+            'color' => 'rgba(255,165,0,0.5)',
+        ], $data[(string) $this->barangay->id]);
+        $this->assertSame(['frs', 'status', 'color'], array_keys($data[(string) $this->barangay->id]));
+    }
+
+    public function test_details_use_canonical_id_and_return_complete_deterministically_ordered_history(): void
+    {
+        $service = app(RcspAreaHistoryService::class);
+        $service->record($this->barangay, '2026-09-01', 5);
+        $service->record($this->barangay, '2026-09-03', 10);
+        $service->record($this->barangay, '2026-09-03', 15);
+        $service->record($this->barangay, '2026-09-04', 20);
+        $service->record($this->barangay, '2026-09-05', 9);
+        $service->record($this->barangay, '2026-09-06', 14);
+
+        $data = $this->actingAs($this->ib39)
+            ->getJson(route('ib39.barangay.data', ['barangay_id' => $this->barangay->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(MapBarangay::DEFAULT_PROVINCE, $data['province']);
+        $this->assertSame($this->municipality->name, $data['municipality']);
+        $this->assertSame($this->barangay->name, $data['barangay']);
+        $this->assertSame('Expansion', $data['status']);
+        $this->assertSame(14, $data['frs']);
+        $this->assertCount(6, $data['color_history']);
+        $this->assertSame(
+            ['2026-09-06', '2026-09-05', '2026-09-04', '2026-09-03', '2026-09-03', '2026-09-01'],
+            array_column($data['color_history'], 'effective_date')
+        );
+        $this->assertSame([15, 10], array_column(array_slice($data['color_history'], 3, 2), 'frs'));
+    }
+
+    public function test_canonical_barangay_without_history_is_neutral(): void
+    {
+        $data = $this->actingAs($this->ib39)
+            ->getJson(route('ib39.barangay.data', ['barangay_id' => $this->barangay->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertNull($data['status']);
+        $this->assertSame(0, $data['frs']);
+        $this->assertSame(MapBarangay::NEUTRAL_COLOR, $data['color']);
+        $this->assertSame([], $data['color_history']);
+    }
+
+    public function test_invalid_canonical_barangay_id_is_rejected(): void
+    {
+        $this->actingAs($this->ib39)
+            ->getJson(route('ib39.barangay.data', ['barangay_id' => 999999]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('barangay_id');
+    }
+
+    public function test_private_fr_map_endpoint_is_absent_and_map_payloads_expose_no_private_fields(): void
+    {
+        $this->actingAs($this->ib39)->get('/39th-ib/map-data')->assertNotFound();
+        app(RcspAreaHistoryService::class)->record($this->barangay, '2026-09-13', 5);
+
+        $payload = json_encode([
+            $this->actingAs($this->ib39)->getJson(route('ib39.area.data'))->json(),
+            $this->actingAs($this->ib39)->getJson(route('ib39.barangay.data', [
+                'barangay_id' => $this->barangay->id,
+            ]))->json(),
+        ], JSON_THROW_ON_ERROR);
+
+        foreach (['firstname', 'lastname', 'name', 'address', 'latitude', 'longitude', 'batch', 'storage', 'file'] as $privateKey) {
+            $this->assertStringNotContainsString('"'.$privateKey.'"', $payload);
         }
-
-        $this->assertStringContainsString('ib39-map.css', $html);
-        $this->assertStringContainsString('barangays.geojson', $html);
     }
 
-    public function test_area_data_feeds_the_polygons(): void
+    public function test_geojson_contains_only_verified_canonical_ids_and_reports_four_unresolved_features(): void
     {
-        $this->skipUnlessLegacyDataPresent();
+        $geo = json_decode(file_get_contents(public_path('assets/mapping/barangays.geojson')), true, 512, JSON_THROW_ON_ERROR);
+        $matched = array_filter($geo['features'], fn (array $feature): bool => isset($feature['properties']['barangay_id']));
+        $unresolved = array_values(array_map(
+            fn (array $feature): string => $feature['properties']['municipality'].'|'.$feature['properties']['barangay'],
+            array_filter($geo['features'], fn (array $feature): bool => ! isset($feature['properties']['barangay_id']))
+        ));
 
-        $user = User::where('role', '39th_ib')->firstOrFail();
-        $rows = $this->actingAs($user)->get('/39th-ib/area-data')->assertOk()->json();
-
-        $this->assertCount(232, $rows);
-        $this->assertArrayHasKey('Digos City|Aplaya', $rows);
+        $this->assertCount(228, $matched);
+        $this->assertSame([
+            'Bansalan|Santo Niño',
+            'Kiblawan|Santo Niño',
+            'Padada|N C Ordaneza Distric',
+            'Sulop|Osmeña',
+        ], $unresolved);
     }
 
-    public function test_barangay_detail_returns_row_and_colour_history(): void
+    public function test_map_javascript_uses_server_colors_and_private_updates_instead_of_fixed_green(): void
     {
-        $this->skipUnlessLegacyDataPresent();
-
-        $area = MapBarangay::whereHas('colorHistories')->firstOrFail();
-        $user = User::where('role', '39th_ib')->firstOrFail();
-
-        $data = $this->actingAs($user)
-            ->get('/39th-ib/barangay-data?'.http_build_query([
-                'municipality' => $area->municipality,
-                'barangay' => $area->barangay,
-            ]))
-            ->assertOk()->json();
-
-        $this->assertSame($area->barangay, $data['barangay']);
-        $this->assertSame($area->municipality, $data['municipality']);
-        $this->assertSame('Davao del Sur', $data['province']);
-        $this->assertArrayHasKey('frs', $data);
-        $this->assertArrayHasKey('is_rcsp', $data);
-
-        // At most the five most recent entries, matching the legacy LIMIT 5.
-        $this->assertNotEmpty($data['color_history']);
-        $this->assertLessThanOrEqual(5, count($data['color_history']));
-        $this->assertArrayHasKey('formatted_timestamp', $data['color_history'][0]);
-        $this->assertArrayHasKey('color', $data['color_history'][0]);
-    }
-
-    public function test_unknown_barangay_returns_the_legacy_error_shape(): void
-    {
-        $this->skipUnlessLegacyDataPresent();
-
-        $user = User::where('role', '39th_ib')->firstOrFail();
-
-        $this->actingAs($user)
-            ->get('/39th-ib/barangay-data?municipality=Nowhere&barangay=Nothing')
-            ->assertNotFound()
-            ->assertJson(['error' => 'No data found for this location']);
-    }
-
-    public function test_other_roles_cannot_read_the_map_endpoints(): void
-    {
-        $this->skipUnlessLegacyDataPresent();
-
-        $mblrc = User::where('role', 'mblrc')->firstOrFail();
-        $this->actingAs($mblrc)->get('/39th-ib/barangay-data?municipality=x&barangay=y')->assertForbidden();
-    }
-
-    /** Legacy painted every polygon the same green and never showed a legend. */
-    public function test_map_has_no_invented_legend(): void
-    {
-        $this->skipUnlessLegacyDataPresent();
-
-        $user = User::where('role', '39th_ib')->firstOrFail();
-        $html = $this->actingAs($user)->get('/39th-ib/map')->assertOk()->getContent();
-
-        $this->assertStringNotContainsString('Infestation status', $html);
-        $this->assertStringNotContainsString('ib39-legend', $html);
-    }
-
-    /**
-     * The detail panel must not reuse SkyDash's own `.sidebar` class — that is
-     * the main nav, styled (width 235px, z-index 11) and driven by template.js,
-     * which swallowed the panel and kept it off-screen.
-     */
-    public function test_detail_panel_does_not_collide_with_the_skydash_nav(): void
-    {
-        $this->skipUnlessLegacyDataPresent();
-
-        $user = User::where('role', '39th_ib')->firstOrFail();
-        $html = $this->actingAs($user)->get('/39th-ib/map')->assertOk()->getContent();
-
-        $this->assertStringContainsString('class="ib39-detail"', $html);
-        $this->assertStringNotContainsString('<div class="sidebar" id=', $html);
-        $this->assertStringNotContainsString('class="sidebar-content"', $html);
+        $javascript = file_get_contents(resource_path('js/ib39-map.js'));
+        $this->assertStringContainsString('currentArea(areaData, feature)?.color', $javascript);
+        $this->assertStringContainsString("Echo.private('rcsp-areas')", $javascript);
+        $this->assertStringContainsString(MapBarangay::NEUTRAL_COLOR, $javascript);
+        $this->assertStringNotContainsString('const DEFAULT_FILL', $javascript);
     }
 }

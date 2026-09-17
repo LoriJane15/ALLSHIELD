@@ -114,13 +114,14 @@
                     </h4>
 
                     <form id="commentForm" class="mb-4"
-                          data-post="{{ route('admin.rcsp.comment', $form->id) }}">
+                          data-post="{{ route('admin.rcsp.comment', $form->id) }}"
+                          data-blank-message="Please enter a comment">
                         <div class="d-flex gap-2 mb-3">
                             <div class="user-avatar">
                                 <img src="{{ $myAvatar }}" onerror="this.onerror=null;this.src='{{ $fallbackAvatar }}'" class="rounded-circle" alt="Admin Profile" width="40" height="40" style="object-fit:cover;">
                             </div>
                             <div class="flex-grow-1">
-                                <textarea class="form-control" name="comment_text" rows="2" placeholder="Add admin comment..."></textarea>
+                                <textarea class="form-control" name="comment_text" rows="2" maxlength="5000" placeholder="Add admin comment..."></textarea>
                             </div>
                         </div>
                         <div class="text-end">
@@ -128,7 +129,7 @@
                         </div>
                     </form>
 
-                    <div id="commentsList" data-form-id="{{ $form->id }}">
+                    <div id="commentsList" data-form-id="{{ $form->id }}" data-fallback-avatar="{{ $fallbackAvatar }}">
                         @forelse ($form->fileComments->sortByDesc('id') as $c)
                             @php $isAdmin = ($c->user?->role === 'admin' || $c->user?->role === 'super_admin'); @endphp
                             <div class="comment-card mb-3">
@@ -175,41 +176,4 @@
     .status-disapproved { color: #dc3545; }
     .comment-content { word-break: break-word; }
 </style>
-@endpush
-
-@push('scripts')
-<script>
-    document.getElementById('commentForm').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        const ta = this.querySelector('textarea[name="comment_text"]');
-        if (!ta.value.trim()) { alert('Please enter a comment'); return; }
-        const res = await fetch(this.dataset.post, {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-                'Content-Type': 'application/json', 'Accept': 'application/json',
-            },
-            body: JSON.stringify({ text: ta.value }),
-        }).then((r) => r.json());
-        if (res.success) {
-            document.querySelector('#commentsList [data-empty]')?.remove();
-            const card = document.createElement('div');
-            card.className = 'comment-card mb-3';
-            card.innerHTML = `
-                <div class="d-flex gap-2">
-                    <div class="user-avatar"><img src="{{ $myAvatar }}" onerror="this.onerror=null;this.src='{{ $fallbackAvatar }}'" class="rounded-circle" width="40" height="40" alt="" style="object-fit:cover;"></div>
-                    <div class="flex-grow-0">
-                        <div class="comment-content p-3 bg-light rounded" style="max-width: 80%;">
-                            <p class="mb-1">${res.comment.text}</p>
-                            <small class="text-muted">${res.comment.user ?? ''} · ${res.comment.at}</small>
-                        </div>
-                    </div>
-                </div>`;
-            document.getElementById('commentsList').prepend(card);
-            ta.value = '';
-        } else {
-            alert('Error posting comment');
-        }
-    });
-</script>
 @endpush

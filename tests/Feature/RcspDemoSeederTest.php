@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Barangay;
 use App\Models\Municipality;
+use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
+use App\Models\RcspPhase;
 use App\Models\User;
 use Database\Seeders\RcspDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -77,5 +80,22 @@ class RcspDemoSeederTest extends TestCase
         putenv('RCSP_DEMO_PASSWORD=StrongDemo12345');
         $this->expectException(RuntimeException::class);
         $this->seed(RcspDemoSeeder::class);
+    }
+
+    public function test_new_registration_never_infers_or_copies_a_demo_catalog(): void
+    {
+        $municipality = Municipality::create(['name' => 'DEMO Municipality']);
+        $barangay = Barangay::create(['municipality_id' => $municipality->id, 'name' => 'DEMO New Barangay']);
+        $lgu = User::factory()->lgu($municipality->id)->create();
+
+        $this->actingAs($lgu)->post(route('lgu.rcsp.store'), [
+            'barangay_id' => $barangay->id,
+        ])->assertSessionHasNoErrors();
+
+        $record = RcspBarangay::where('barangay_id', $barangay->id)->firstOrFail();
+        $this->assertSame(RcspPhase::CONFIGURABLE_CATALOG_KEY, $record->catalog_key);
+        $phase = RcspPhase::where('catalog_key', RcspPhase::CONFIGURABLE_CATALOG_KEY)
+            ->where('number', 0)->firstOrFail();
+        $this->assertSame(0, RcspActivity::forBarangayPhase($record, $phase)->count());
     }
 }

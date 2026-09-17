@@ -4,36 +4,39 @@ namespace App\Http\Controllers\Ib39;
 
 use App\Events\RcspAreaUpdated;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Ib39\SaveAreaHistoryRequest;
+use App\Models\Barangay;
 use App\Models\MapBarangay;
-use App\Models\RcspBarangay;
+use App\Models\Municipality;
+use App\Services\RcspAreaHistoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class AreaController extends Controller
 {
-    /** Colour the legacy page reset a barangay to when its RCSP data was removed. */
-    private const CLEARED_COLOR = 'rgba(190,178,151,0.1)';
-
-    /**
-     * Add Area — the port of accounts/39th-IB/add_rcsp.php.
-     *
-     * Like the legacy page, this lists only barangays that have been given an
-     * FR count (`frs > 0`); the other ~200 exist in the map table but are not
-     * yet part of RCSP, and appear in the "Add" dropdown instead.
-     */
+    /** List active RCSP areas, including zero-count Recovery histories. */
     public function index(Request $request): View
     {
         $areas = MapBarangay::query()
-            ->where('frs', '>', 0)
-            ->when($request->municipality, fn ($q, $m) => $q->where('municipality', $m))
-            ->when($request->status, fn ($q, $s) => $q->where('status', $s))
+            ->with(['barangayRecord.municipality', 'latestColorHistory'])
+            ->whereNotNull('status')
+            ->whereHas('colorHistories')
+            ->when($request->municipality, fn ($q, $m) => $q->where(function ($where) use ($m): void {
+                $where->where('municipality', $m)
+                    ->orWhereHas('barangayRecord.municipality', fn ($municipality) => $municipality->where('name', $m));
+            }))
+            ->when($request->status, fn ($q, $s) => $q->whereHas(
+                'latestColorHistory',
+                fn ($history) => $history->where('status', $s)
+            ))
             ->when($request->search, fn ($q, $s) => $q->where(fn ($w) => $w
                 ->where('barangay', 'like', "%{$s}%")
-                ->orWhere('municipality', 'like', "%{$s}%")))
-            // Legacy "FR range" filter: 0-9, 10-14, 15-19, 20+
+                ->orWhere('municipality', 'like', "%{$s}%")
+                ->orWhereHas('barangayRecord', fn ($barangay) => $barangay
+                    ->where('name', 'like', "%{$s}%")
+                    ->orWhereHas('municipality', fn ($municipality) => $municipality->where('name', 'like', "%{$s}%")))))
             ->when($request->fr_range, function ($q, $range) {
                 [$min, $max] = match ($range) {
                     '0-9' => [0, 9],
@@ -43,71 +46,69 @@ class AreaController extends Controller
                     default => [0, PHP_INT_MAX],
                 };
 
-                return $q->where('frs', '>=', $min)->where('frs', '<=', $max);
+                return $q->whereHas('latestColorHistory', fn ($history) => $history
+                    ->where('frs', '>=', $min)
+                    ->where('frs', '<=', $max));
             })
             ->orderBy('municipality')->orderBy('barangay')
             ->paginate(20)->withQueryString();
 
-        $municipalities = MapBarangay::select('municipality')->distinct()
-            ->whereNotNull('municipality')->orderBy('municipality')->pluck('municipality');
+        $municipalities = Municipality::query()->orderBy('name')->get(['id', 'name']);
 
-        return view('ib39.areas.index', compact('areas', 'municipalities'));
+        return view('ib39.areas.index', [
+            'areas' => $areas,
+            'municipalities' => $municipalities,
+            'classifications' => MapBarangay::CLASSIFICATIONS,
+        ]);
     }
 
     /** Barangays in a municipality, for the Add modal's cascading dropdown. */
     public function barangays(Request $request): JsonResponse
     {
-        $data = $request->validate(['municipality' => ['required', 'string']]);
+        $data = $request->validate(['municipality_id' => ['required', 'integer', 'exists:municipalities,id']]);
 
         return response()->json(
-            MapBarangay::where('municipality', $data['municipality'])
-                ->orderBy('barangay')
-                ->pluck('barangay')
+            Barangay::query()
+                ->where('municipality_id', $data['municipality_id'])
+                ->orderBy('name')
+                ->get(['id', 'name'])
         );
     }
 
-    /**
-     * Add an existing barangay to RCSP by giving it an FR count. The legacy page
-     * never inserted rows here — all 232 barangays already exist in the map
-     * table, so "adding" sets the count, status and colour, and logs history.
-     */
-    public function store(Request $request): RedirectResponse
+    /** Append history for a canonically identified barangay. */
+    public function store(SaveAreaHistoryRequest $request, RcspAreaHistoryService $historyService): RedirectResponse
     {
-        $data = $request->validate([
-            'municipality' => ['required', 'string'],
-            'barangay' => ['required', 'string'],
-            'frs' => ['required', 'integer', 'min:0'],
-        ]);
+        $result = $historyService->record(
+            $request->canonicalBarangay(),
+            $request->validated('effective_date'),
+            $request->integer('frs')
+        );
 
-        $area = MapBarangay::where('municipality', $data['municipality'])
-            ->where('barangay', $data['barangay'])
-            ->first();
-
-        if (! $area) {
-            return back()->with(
-                'error',
-                "Barangay '{$data['barangay']}' in municipality '{$data['municipality']}' not found"
-            );
-        }
-
-        $this->applyCount($area, $data['frs']);
+        broadcast(new RcspAreaUpdated($result['area']));
 
         return redirect()->route('ib39.areas.index')->with(
             'success',
-            "RCSP Barangay '{$area->barangay}' in {$area->municipality} added successfully"
+            "Area history for {$result['area']->barangay} was recorded successfully."
         );
     }
 
-    /** Set an area's FR count → recompute status + infestation colour, log history. */
-    public function update(Request $request, MapBarangay $area): RedirectResponse
-    {
-        $data = $request->validate([
-            'frs' => ['required', 'integer', 'min:0'],
-        ]);
+    public function update(
+        SaveAreaHistoryRequest $request,
+        MapBarangay $area,
+        RcspAreaHistoryService $historyService
+    ): RedirectResponse {
+        $result = $historyService->record(
+            $request->canonicalBarangay(),
+            $request->validated('effective_date'),
+            $request->integer('frs')
+        );
 
-        $class = $this->applyCount($area, $data['frs']);
+        broadcast(new RcspAreaUpdated($result['area']));
 
-        return back()->with('success', "{$area->barangay} set to {$class['status']} ({$data['frs']} FRs).");
+        return back()->with(
+            'success',
+            "{$result['area']->barangay} is currently {$result['current']->status} ({$result['current']->frs} FRs)."
+        );
     }
 
     /**
@@ -121,7 +122,7 @@ class AreaController extends Controller
             'status' => null,
             'frs' => 0,
             'rebels' => 0,
-            'infestation_color' => self::CLEARED_COLOR,
+            'infestation_color' => MapBarangay::NEUTRAL_COLOR,
         ]);
 
         broadcast(new RcspAreaUpdated($area));
@@ -129,115 +130,56 @@ class AreaController extends Controller
         return back()->with('success', "Successfully removed RCSP data for barangay {$area->barangay}");
     }
 
-    /** Shared by add + update: classify the count, save it, and log the change. */
-    private function applyCount(MapBarangay $area, int $frs): array
-    {
-        $class = MapBarangay::classify($frs);
-
-        DB::transaction(function () use ($area, $frs, $class) {
-            $area->update([
-                'frs' => $frs,
-                'rebels' => $frs,
-                'status' => $class['status'],
-                'infestation_color' => $class['color'],
-            ]);
-
-            $area->colorHistories()->create([
-                'status' => $class['status'],
-                'color' => $class['color'],
-                'frs' => $frs,
-            ]);
-        });
-
-        // Legacy pushed an SSE event so open maps repainted; broadcast instead.
-        broadcast(new RcspAreaUpdated($area->refresh()));
-
-        return $class;
-    }
-
     public function map(): View
     {
-        return view('ib39.map', ['legend' => MapBarangay::LEGEND]);
+        return view('ib39.map');
     }
 
-    /**
-     * Detail panel for one barangay — the port of the legacy
-     * final_mapping/fetch_barangay_data.php: the frmap_barangays row, the last
-     * five colour-history entries, and whether the barangay is under RCSP.
-     */
+    /** Return aggregate current state and complete history for one canonical barangay. */
     public function barangayData(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'municipality' => ['required', 'string'],
-            'barangay' => ['required', 'string'],
-        ]);
+        $data = $request->validate(['barangay_id' => ['required', 'integer', 'exists:barangays,id']]);
+        $barangay = Barangay::query()->with('municipality')->findOrFail($data['barangay_id']);
+        $area = MapBarangay::query()->where('barangay_id', $barangay->id)->first();
+        $current = $area?->status !== null
+            ? $area->colorHistories()->orderByDesc('effective_date')->orderByDesc('id')->first()
+            : null;
 
-        $area = MapBarangay::where('municipality', $data['municipality'])
-            ->where('barangay', $data['barangay'])
-            ->first();
-
-        if (! $area) {
-            return response()->json(['error' => 'No data found for this location'], 404);
-        }
-
-        $history = $area->colorHistories()
-            ->orderByDesc('created_at')->orderByDesc('id')
-            ->take(5)
+        $history = $area?->colorHistories()
+            ->orderByDesc('effective_date')->orderByDesc('id')
             ->get()
             ->map(fn ($h) => [
                 'status' => $h->status,
                 'color' => $h->color,
                 'frs' => (int) $h->frs,
-                // Matches the legacy DATE_FORMAT('%M %d, %Y - %h:%i %p').
-                'formatted_timestamp' => $h->created_at?->format('F d, Y - h:i A'),
-            ]);
+                'effective_date' => $h->effective_date?->toDateString(),
+            ]) ?? collect();
 
         return response()->json([
-            'province' => $area->province ?: 'Davao del Sur',
-            'municipality' => $area->municipality,
-            'barangay' => $area->barangay,
-            'status' => $area->status,
-            'frs' => (int) $area->frs,
-            'infestation_color' => $area->infestation_color,
-            'is_rcsp' => RcspBarangay::whereHas(
-                'barangay',
-                fn ($q) => $q->whereRaw('UPPER(TRIM(name)) = ?', [mb_strtoupper(trim($data['barangay']))])
-            )->exists(),
+            'province' => MapBarangay::DEFAULT_PROVINCE,
+            'municipality' => $barangay->municipality->name,
+            'barangay' => $barangay->name,
+            'status' => $current?->status,
+            'frs' => (int) ($current?->frs ?? 0),
+            'color' => $current?->color ?? MapBarangay::NEUTRAL_COLOR,
             'color_history' => $history,
         ]);
     }
 
-    /**
-     * Infestation status per barangay, keyed "Municipality|Barangay" to match the
-     * NAME_2/NAME_3 properties in public/assets/mapping/barangays.geojson.
-     */
+    /** Return active current states keyed by canonical barangay ID. */
     public function areaData(): JsonResponse
     {
-        $rows = MapBarangay::get(['id', 'municipality', 'barangay', 'frs', 'status', 'infestation_color'])
+        $rows = MapBarangay::query()
+            ->with('latestColorHistory')
+            ->whereNotNull('barangay_id')
+            ->whereNotNull('status')
+            ->get()
             ->mapWithKeys(fn ($a) => [
-                "{$a->municipality}|{$a->barangay}" => [
-                    'id' => $a->id,
-                    'frs' => (int) $a->frs,
-                    'status' => $a->status,
-                    'color' => $a->infestation_color,
+                (string) $a->barangay_id => [
+                    'frs' => (int) ($a->latestColorHistory?->frs ?? 0),
+                    'status' => $a->latestColorHistory?->status,
+                    'color' => $a->latestColorHistory?->color ?? MapBarangay::NEUTRAL_COLOR,
                 ],
-            ]);
-
-        return response()->json($rows);
-    }
-
-    /** Former-rebel points for the Leaflet operational map. */
-    public function mapData(): JsonResponse
-    {
-        $rows = \App\Models\FormerRebel::whereNotNull('latitude')->whereNotNull('longitude')
-            ->get(['id', 'firstname', 'lastname', 'placement_address', 'latitude', 'longitude', 'status', 'batch_year'])
-            ->map(fn ($fr) => [
-                'name' => trim("{$fr->firstname} {$fr->lastname}"),
-                'address' => $fr->placement_address,
-                'lat' => (float) $fr->latitude,
-                'lng' => (float) $fr->longitude,
-                'status' => $fr->status,
-                'batch' => $fr->batch_year,
             ]);
 
         return response()->json($rows);

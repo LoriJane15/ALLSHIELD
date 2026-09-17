@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ib39;
 use App\Enums\Ib39FeaUploadSlot;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Ib39\UploadFeaDraftFileRequest;
+use App\Http\Requests\Ib39\UploadFeaFinalFileRequest;
 use App\Models\Ib39FeaDocument;
 use App\Models\Ib39FeaDocumentVersion;
 use App\Models\Ib39FeaProcessing;
@@ -18,6 +19,13 @@ class FeaUploadController extends Controller
     public function store(UploadFeaDraftFileRequest $request, Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaUploadService $uploads): RedirectResponse
     {
         return $this->save($request, $fea, $document, Ib39FeaUploadSlot::Primary, $uploads);
+    }
+
+    public function storeFinal(UploadFeaFinalFileRequest $request, Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaUploadService $uploads): RedirectResponse
+    {
+        $uploads->storeFinal($fea, $document, $request->file('file'), $request->user(), $request->ip(), $request->userAgent());
+
+        return redirect()->route('ib39.fea.show', $fea)->with('status', 'Final FEA file uploaded and document completed.');
     }
 
     public function storeComparison(UploadFeaDraftFileRequest $request, Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaUploadService $uploads): RedirectResponse

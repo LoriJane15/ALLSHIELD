@@ -21,7 +21,6 @@ Route::get('/', fn () => response()->file(public_path('landing/index.html')))->n
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/rcsp-form/{form}/evidence', [Lgu\MonitoringController::class, 'evidence'])->name('rcsp.evidence');
 
     Route::get('/chat', [ChatConversationController::class, 'index'])->name('chat.index');
@@ -51,7 +50,6 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::get('/users', [SuperAdmin\UserController::class, 'index'])->name('users.index');
     Route::post('/users', [SuperAdmin\UserController::class, 'store'])->name('users.store');
     Route::put('/users/{user}', [SuperAdmin\UserController::class, 'update'])->name('users.update');
-    Route::delete('/users/{user}', [SuperAdmin\UserController::class, 'destroy'])->name('users.destroy');
 
     Route::get('/agencies', [SuperAdmin\AgencyController::class, 'index'])->name('agencies.index');
     Route::post('/agencies', [SuperAdmin\AgencyController::class, 'store'])->name('agencies.store');
@@ -96,7 +94,10 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
 
     // Monitoring form (per barangay)
     Route::get('/rcsp/{rcspBarangay}/monitoring', [Lgu\MonitoringController::class, 'show'])->name('monitoring.show');
-    Route::post('/rcsp/{rcspBarangay}/monitoring', [Lgu\MonitoringController::class, 'submit'])->name('monitoring.submit');
+    Route::post('/rcsp/{rcspBarangay}/activities', [Lgu\MonitoringController::class, 'storeActivity'])->name('activities.store');
+    Route::patch('/rcsp/{rcspBarangay}/activities/{activity}', [Lgu\MonitoringController::class, 'updateActivity'])->name('activities.update');
+    Route::delete('/rcsp/{rcspBarangay}/activities/{activity}', [Lgu\MonitoringController::class, 'destroyActivity'])->name('activities.destroy');
+    Route::post('/rcsp/{rcspBarangay}/activities/{activity}/submit', [Lgu\MonitoringController::class, 'submit'])->name('monitoring.submit');
     Route::post('/rcsp/{rcspBarangay}/proceed', [Lgu\MonitoringController::class, 'proceed'])->name('monitoring.proceed');
     Route::get('/rcsp-form/{form}/file', [Lgu\MonitoringController::class, 'file'])->name('monitoring.file');
     Route::post('/rcsp-form/{form}/comment', [Lgu\MonitoringController::class, 'storeComment'])->name('monitoring.comment');
@@ -190,6 +191,7 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::get('/fea/{fea}/documents/{document}/draft/preview', [Ib39\FeaDraftController::class, 'preview'])->name('fea.documents.draft.preview');
     Route::get('/fea/{fea}/documents/{document}/draft/print', [Ib39\FeaDraftController::class, 'print'])->name('fea.documents.draft.print');
     Route::post('/fea/{fea}/documents/{document}/draft-versions', [Ib39\FeaUploadController::class, 'store'])->name('fea.documents.versions.store');
+    Route::post('/fea/{fea}/documents/{document}/final-versions', [Ib39\FeaUploadController::class, 'storeFinal'])->name('fea.documents.final-versions.store');
     Route::post('/fea/{fea}/documents/{document}/comparison-photo-versions', [Ib39\FeaUploadController::class, 'storeComparison'])->name('fea.documents.comparison-versions.store');
     Route::post('/fea/{fea}/documents/{document}/surrendered-photo-versions', [Ib39\FeaUploadController::class, 'storeSurrendered'])->name('fea.documents.surrendered-versions.store');
     Route::get('/fea/{fea}/documents/{document}/draft-versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');
@@ -205,7 +207,6 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::delete('/areas/{area}', [Ib39\AreaController::class, 'destroy'])->name('areas.destroy');
     Route::get('/barangays', [Ib39\AreaController::class, 'barangays'])->name('barangays');
     Route::get('/map', [Ib39\AreaController::class, 'map'])->name('map');
-    Route::get('/map-data', [Ib39\AreaController::class, 'mapData'])->name('map.data');
     Route::get('/area-data', [Ib39\AreaController::class, 'areaData'])->name('area.data');
     Route::get('/barangay-data', [Ib39\AreaController::class, 'barangayData'])->name('barangay.data');
 });

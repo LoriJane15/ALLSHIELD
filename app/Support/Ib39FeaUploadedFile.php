@@ -18,7 +18,7 @@ class Ib39FeaUploadedFile
 
     public const MAX_PIXELS = 40_000_000;
 
-    public static function inspect(UploadedFile $file, bool $photo): array
+    public static function inspect(UploadedFile $file, bool $photo, string $fallbackName = 'fea-draft'): array
     {
         $extension = strtolower($file->getClientOriginalExtension());
         $mime = $file->getMimeType();
@@ -45,7 +45,7 @@ class Ib39FeaUploadedFile
         return [
             'mime_type' => $mime,
             'extension' => $storedExtension,
-            'original_filename' => ($safe !== '' ? $safe : 'fea-draft').'.'.$storedExtension,
+            'original_filename' => ($safe !== '' ? $safe : $fallbackName).'.'.$storedExtension,
             'size_bytes' => (int) $file->getSize(),
             'sha256' => hash_file('sha256', $path),
         ];
