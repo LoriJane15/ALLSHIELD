@@ -14,7 +14,7 @@
     <div class="hero-section">
         <div class="map-container">
             <div id="heroMap"
-                 data-geojson="{{ asset('assets/mapping/barangays.geojson') }}"
+                 data-geojson="{{ route('admin.boundaries') }}"
                  data-areas="{{ route('admin.area.data') }}"></div>
         </div>
 

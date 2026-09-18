@@ -9,7 +9,12 @@ class MapBarangay extends Model
 {
     protected $fillable = [
         'fid', 'province', 'municipality', 'barangay',
-        'frs', 'status', 'infestation_color', 'rebels',
+        'geometry', 'frs', 'status', 'infestation_color', 'rebels',
+    ];
+
+    protected $casts = [
+        // The GeoJSON geometry object (a MultiPolygon) for this barangay.
+        'geometry' => 'array',
     ];
 
     public function colorHistories(): HasMany

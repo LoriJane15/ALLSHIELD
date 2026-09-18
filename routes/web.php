@@ -65,6 +65,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('katuparan')->name('admin.')->
 
     // Barangay infestation colours for the dashboard hero map.
     Route::get('/area-data', [Admin\DashboardController::class, 'areaData'])->name('area.data');
+    Route::get('/boundaries', [Admin\DashboardController::class, 'boundaries'])->name('boundaries');
 });
 
 Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(function () {
@@ -144,6 +145,8 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::get('/map-data', [Ib39\AreaController::class, 'mapData'])->name('map.data');
     Route::get('/area-data', [Ib39\AreaController::class, 'areaData'])->name('area.data');
     Route::get('/barangay-data', [Ib39\AreaController::class, 'barangayData'])->name('barangay.data');
+    // Barangay polygon geometry, served from the DB (editable) instead of the file.
+    Route::get('/boundaries', [Ib39\AreaController::class, 'boundaries'])->name('boundaries');
 });
 
 Route::middleware(['auth', 'role:afp'])->prefix('afp')->name('afp.')->group(function () {

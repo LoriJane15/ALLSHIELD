@@ -22,7 +22,7 @@ class Ib39MapTest extends TestCase
         }
 
         $this->assertStringContainsString('ib39-map.css', $html);
-        $this->assertStringContainsString('barangays.geojson', $html);
+        $this->assertStringContainsString('39th-ib/boundaries', $html); // geometry now served from the DB
     }
 
     public function test_area_data_feeds_the_polygons(): void

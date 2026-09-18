@@ -13,7 +13,7 @@
          and a slide-in detail panel with the colour history. --}}
     <div class="ib39-map-wrap">
         <div id="ib39FullMap"
-             data-geojson="{{ asset('assets/mapping/barangays.geojson') }}"
+             data-geojson="{{ route('ib39.boundaries') }}"
              data-areas="{{ route('ib39.area.data') }}"
              data-detail="{{ route('ib39.barangay.data') }}"
              data-update-template="{{ route('ib39.areas.update', ['area' => '__ID__']) }}"></div>

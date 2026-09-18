@@ -226,6 +226,32 @@ class AreaController extends Controller
         return response()->json($rows);
     }
 
+    /**
+     * Barangay boundaries as a GeoJSON FeatureCollection, assembled from the
+     * database rather than the static file — so edits to the geometry show up
+     * everywhere the map is drawn. Falls back to the committed file for any row
+     * whose geometry has not been imported yet.
+     */
+    public function boundaries(): JsonResponse
+    {
+        $features = MapBarangay::whereNotNull('geometry')
+            ->get(['id', 'municipality', 'barangay', 'geometry'])
+            ->map(fn ($a) => [
+                'type' => 'Feature',
+                'geometry' => $a->geometry,
+                'properties' => [
+                    'id' => $a->id,
+                    'municipality' => $a->municipality,
+                    'barangay' => $a->barangay,
+                ],
+            ])->values();
+
+        return response()->json([
+            'type' => 'FeatureCollection',
+            'features' => $features,
+        ]);
+    }
+
     /** Former-rebel points for the Leaflet operational map. */
     public function mapData(): JsonResponse
     {
