@@ -226,6 +226,42 @@ class AreaController extends Controller
         return response()->json(['deleted' => false, 'cleared' => true]);
     }
 
+    /** Download the current boundaries as a GeoJSON file. */
+    public function exportBoundaries(): \Symfony\Component\HttpFoundation\Response
+    {
+        $fc = $this->boundaries()->getData(true);
+
+        return response()->json($fc, 200, [
+            'Content-Disposition' => 'attachment; filename="shield-boundaries-'.now()->format('Y-m-d').'.geojson"',
+        ], JSON_UNESCAPED_SLASHES);
+    }
+
+    /** Replace or merge boundaries from an uploaded GeoJSON file. */
+    public function importBoundaries(Request $request, \App\Services\BoundaryImporter $importer): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'max:20480', 'mimetypes:application/json,application/geo+json,text/plain,text/json'],
+            'mode' => ['nullable', 'in:merge,replace'],
+            'create' => ['nullable', 'boolean'],
+        ]);
+
+        $fc = json_decode(file_get_contents($request->file('file')->getRealPath()), true);
+
+        if (! is_array($fc)) {
+            return back()->with('error', 'That file is not valid JSON.');
+        }
+
+        $result = $importer->import(
+            $fc,
+            create: $request->boolean('create'),
+            replace: $request->input('mode') === 'replace',
+        );
+
+        $msg = "Imported — matched {$result['matched']}, created {$result['created']}, skipped {$result['skipped']}.";
+
+        return back()->with($result['matched'] + $result['created'] > 0 ? 'success' : 'error', $msg);
+    }
+
     /** Store polygons as MultiPolygon for a single consistent geometry type. */
     private function normalizeGeometry(array $geometry): array
     {

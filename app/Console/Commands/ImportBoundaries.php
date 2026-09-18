@@ -2,24 +2,24 @@
 
 namespace App\Console\Commands;
 
-use App\Models\MapBarangay;
+use App\Services\BoundaryImporter;
 use Illuminate\Console\Command;
 
 /**
- * Loads polygon geometry from a GeoJSON FeatureCollection into map_barangays,
- * matching each feature to its row by municipality + barangay. This is how the
- * boundaries move from the file into the (editable) database, and also how an
- * uploaded GeoJSON replaces them later.
+ * Loads polygon geometry from a GeoJSON file into map_barangays (see
+ * App\Services\BoundaryImporter). Also the seed path: run with the committed
+ * public/assets/mapping/barangays.geojson to populate a fresh database.
  */
 class ImportBoundaries extends Command
 {
     protected $signature = 'map:import-boundaries
         {file? : Path to the GeoJSON (default: public/assets/mapping/barangays.geojson)}
-        {--create : Create map_barangays rows for features that have no match}';
+        {--create : Create map_barangays rows for features that have no match}
+        {--replace : Clear all geometry first, so dropped features disappear}';
 
     protected $description = 'Import barangay polygon geometry from a GeoJSON file into the database';
 
-    public function handle(): int
+    public function handle(BoundaryImporter $importer): int
     {
         $path = $this->argument('file') ?: public_path('assets/mapping/barangays.geojson');
 
@@ -31,46 +31,19 @@ class ImportBoundaries extends Command
 
         $fc = json_decode(file_get_contents($path), true);
 
-        if (($fc['type'] ?? null) !== 'FeatureCollection' || ! is_array($fc['features'] ?? null)) {
-            $this->error('Not a GeoJSON FeatureCollection.');
+        if (! is_array($fc)) {
+            $this->error('Could not parse JSON.');
 
             return self::FAILURE;
         }
 
-        $matched = 0;
-        $created = 0;
-        $skipped = 0;
+        $r = $importer->import($fc, $this->option('create'), $this->option('replace'));
 
-        foreach ($fc['features'] as $feature) {
-            $p = $feature['properties'] ?? [];
-            $municipality = trim($p['municipality'] ?? $p['NAME_2'] ?? '');
-            $barangay = trim($p['barangay'] ?? $p['NAME_3'] ?? '');
-            $geometry = $feature['geometry'] ?? null;
-
-            if ($municipality === '' || $barangay === '' || ! $geometry) {
-                $skipped++;
-
-                continue;
-            }
-
-            $row = MapBarangay::where('municipality', $municipality)->where('barangay', $barangay)->first();
-
-            if (! $row && $this->option('create')) {
-                $row = new MapBarangay(['municipality' => $municipality, 'barangay' => $barangay, 'province' => 'Davao del Sur']);
-                $created++;
-            } elseif (! $row) {
-                $skipped++;
-
-                continue;
-            } else {
-                $matched++;
-            }
-
-            $row->geometry = $geometry;
-            $row->save();
+        foreach ($r['errors'] as $e) {
+            $this->warn($e);
         }
 
-        $this->info("Boundaries imported — matched: {$matched}, created: {$created}, skipped: {$skipped}.");
+        $this->info("Boundaries imported — matched: {$r['matched']}, created: {$r['created']}, skipped: {$r['skipped']}.");
 
         return self::SUCCESS;
     }

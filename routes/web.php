@@ -151,6 +151,8 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::post('/boundaries', [Ib39\AreaController::class, 'storeBoundary'])->name('boundaries.store');
     Route::put('/boundaries/{area}', [Ib39\AreaController::class, 'updateBoundary'])->name('boundaries.update');
     Route::delete('/boundaries/{area}', [Ib39\AreaController::class, 'destroyBoundary'])->name('boundaries.destroy');
+    Route::get('/boundaries-export', [Ib39\AreaController::class, 'exportBoundaries'])->name('boundaries.export');
+    Route::post('/boundaries-import', [Ib39\AreaController::class, 'importBoundaries'])->name('boundaries.import');
 });
 
 Route::middleware(['auth', 'role:afp'])->prefix('afp')->name('afp.')->group(function () {
