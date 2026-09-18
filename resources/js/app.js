@@ -4,6 +4,7 @@ import { initFormCascade, initDashboard, initProfile } from './mblrc';
 import { initIb39Dashboard } from './ib39';
 import { initIb39FullMap } from './ib39-map';
 import { initIb39Areas } from './ib39-areas';
+import { initIb39BoundaryEditor } from './ib39-boundary-editor';
 import { initRcspComments } from './rcsp-comments';
 import { initConfirmDialogs } from './confirm-dialog';
 import { initKatuparanDashboard } from './katuparan-dashboard';
@@ -41,6 +42,7 @@ function boot() {
     run('ib39.dashboard', initIb39Dashboard);
     run('ib39.map', initIb39FullMap);
     run('ib39.areas', initIb39Areas);
+    run('ib39.boundaryEditor', initIb39BoundaryEditor);
     run('rcsp.comments', initRcspComments);
     run('confirmDialogs', initConfirmDialogs);
     run('katuparan.dashboard', initKatuparanDashboard);

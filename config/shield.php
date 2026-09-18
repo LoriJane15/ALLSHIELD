@@ -58,6 +58,7 @@ return [
                 ['label' => 'Dashboard', 'route' => 'ib39.dashboard',   'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
                 ['label' => 'Add Area',  'route' => 'ib39.areas.index', 'icon' => 'map-pin',     'skyicon' => 'icon-map'],
                 ['label' => 'Map',       'route' => 'ib39.map',         'icon' => 'map',         'skyicon' => 'icon-location-pin'],
+                ['label' => 'Boundary Editor', 'route' => 'ib39.boundaries.editor', 'icon' => 'pencil-square', 'skyicon' => 'icon-pencil'],
             ],
         ],
         'afp' => [

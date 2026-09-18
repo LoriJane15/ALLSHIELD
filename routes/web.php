@@ -147,6 +147,10 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::get('/barangay-data', [Ib39\AreaController::class, 'barangayData'])->name('barangay.data');
     // Barangay polygon geometry, served from the DB (editable) instead of the file.
     Route::get('/boundaries', [Ib39\AreaController::class, 'boundaries'])->name('boundaries');
+    Route::get('/boundary-editor', [Ib39\AreaController::class, 'editor'])->name('boundaries.editor');
+    Route::post('/boundaries', [Ib39\AreaController::class, 'storeBoundary'])->name('boundaries.store');
+    Route::put('/boundaries/{area}', [Ib39\AreaController::class, 'updateBoundary'])->name('boundaries.update');
+    Route::delete('/boundaries/{area}', [Ib39\AreaController::class, 'destroyBoundary'])->name('boundaries.destroy');
 });
 
 Route::middleware(['auth', 'role:afp'])->prefix('afp')->name('afp.')->group(function () {

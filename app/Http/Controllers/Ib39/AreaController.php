@@ -160,6 +160,82 @@ class AreaController extends Controller
         return view('ib39.map', ['legend' => MapBarangay::LEGEND]);
     }
 
+    /** The interactive boundary editor (draw / reshape / add / delete polygons). */
+    public function editor(): View
+    {
+        $municipalities = MapBarangay::select('municipality')->distinct()
+            ->whereNotNull('municipality')->orderBy('municipality')->pluck('municipality');
+
+        return view('ib39.boundary-editor', compact('municipalities'));
+    }
+
+    /** Reshape an existing barangay's polygon. */
+    public function updateBoundary(Request $request, MapBarangay $area): JsonResponse
+    {
+        $data = $request->validate(['geometry' => ['required', 'array']]);
+
+        $area->geometry = $this->normalizeGeometry($data['geometry']);
+        $area->save();
+
+        return response()->json(['id' => $area->id, 'saved' => true]);
+    }
+
+    /** Add a new area from a freshly drawn polygon. */
+    public function storeBoundary(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'municipality' => ['required', 'string', 'max:255'],
+            'barangay' => ['required', 'string', 'max:255'],
+            'geometry' => ['required', 'array'],
+        ]);
+
+        // Update the matching row if the name pair already exists, else create one.
+        $area = MapBarangay::firstOrNew([
+            'municipality' => trim($data['municipality']),
+            'barangay' => trim($data['barangay']),
+        ]);
+
+        $area->province ??= 'Davao del Sur';
+        $area->geometry = $this->normalizeGeometry($data['geometry']);
+        $area->save();
+
+        return response()->json([
+            'id' => $area->id,
+            'municipality' => $area->municipality,
+            'barangay' => $area->barangay,
+            'created' => $area->wasRecentlyCreated,
+        ], 201);
+    }
+
+    /**
+     * Remove an area's polygon. If the barangay carries no RCSP data the whole
+     * row is deleted; otherwise the geometry is cleared but the record (and its
+     * FR counts / colour history) is kept.
+     */
+    public function destroyBoundary(MapBarangay $area): JsonResponse
+    {
+        if ((int) $area->frs === 0 && $area->colorHistories()->doesntExist()) {
+            $area->delete();
+
+            return response()->json(['deleted' => true]);
+        }
+
+        $area->geometry = null;
+        $area->save();
+
+        return response()->json(['deleted' => false, 'cleared' => true]);
+    }
+
+    /** Store polygons as MultiPolygon for a single consistent geometry type. */
+    private function normalizeGeometry(array $geometry): array
+    {
+        if (($geometry['type'] ?? null) === 'Polygon') {
+            return ['type' => 'MultiPolygon', 'coordinates' => [$geometry['coordinates']]];
+        }
+
+        return $geometry;
+    }
+
     /**
      * Detail panel for one barangay — the port of the legacy
      * final_mapping/fetch_barangay_data.php: the frmap_barangays row, the last
