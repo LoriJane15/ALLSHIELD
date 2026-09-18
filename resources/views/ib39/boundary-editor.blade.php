@@ -27,15 +27,36 @@
 
 @section('content')
     <div class="editor-wrap"
-         data-boundaries="{{ route('ib39.boundaries') }}"
-         data-store="{{ route('ib39.boundaries.store') }}"
-         data-update-template="{{ route('ib39.boundaries.update', ['area' => '__ID__']) }}"
-         data-destroy-template="{{ route('ib39.boundaries.destroy', ['area' => '__ID__']) }}"
+         data-draft="{{ route('ib39.boundaries.draft') }}"
+         data-publish="{{ route('ib39.boundaries.publish') }}"
+         data-snapshots="{{ route('ib39.boundaries.snapshots') }}"
+         data-snapshot-create="{{ route('ib39.boundaries.snapshots.create') }}"
+         data-snapshot-restore="{{ route('ib39.boundaries.snapshots.restore', ['snapshot' => '__ID__']) }}"
+         data-snapshot-destroy="{{ route('ib39.boundaries.snapshots.destroy', ['snapshot' => '__ID__']) }}"
          data-municipalities='@json($municipalities)'>
         <div id="boundaryMap"></div>
         <div class="editor-hint">
-            <strong>Edit boundaries.</strong> Use the toolbar (top-left) to draw a new area, drag
-            vertices to reshape, cut a hole, or delete. Changes save automatically.
+            <strong>Draft mode.</strong> Edits stay in your draft — the live map is untouched
+            until you <strong>Publish</strong>. Use <strong>Checkpoints</strong> to save restore points.
+        </div>
+
+        {{-- Draft status + publish / discard --}}
+        <div class="editor-draft" id="draftBadge" hidden>
+            <span class="draft-dot"></span>
+            <span>Unpublished draft · <span data-when></span></span>
+            <button type="button" class="btn btn-xs btn-primary" id="publishBtn" disabled>Publish</button>
+            <button type="button" class="btn btn-xs btn-light" id="discardBtn" disabled>Discard</button>
+        </div>
+
+        {{-- Snapshots / restore points --}}
+        <div class="editor-snaps">
+            <div class="snaps-head">
+                <strong>Restore points</strong>
+                <button type="button" class="btn btn-xs btn-outline-primary" id="checkpointBtn">
+                    <i class="mdi mdi-content-save"></i> Save checkpoint
+                </button>
+            </div>
+            <ul class="snap-list" id="snapshotList"></ul>
         </div>
 
         {{-- Import / export toolbar --}}
@@ -148,5 +169,35 @@
     }
     .editor-flash-ok  { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
     .editor-flash-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+@endpush
+
+@push('styles')
+<style>
+    .btn-xs { padding: .15rem .5rem; font-size: .72rem; border-radius: 6px; }
+
+    .editor-draft {
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1001;
+        display: flex; align-items: center; gap: .6rem;
+        background: #fff7ed; border: 1px solid #fdba74; color: #9a3412;
+        border-radius: 9999px; padding: .35rem .5rem .35rem .9rem; font-size: .78rem;
+        box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    }
+    .draft-dot { width: 8px; height: 8px; border-radius: 50%; background: #ea580c; }
+
+    .editor-snaps {
+        position: absolute; bottom: 16px; left: 12px; z-index: 1000; width: 17rem;
+        background: rgba(255,255,255,.97); border-radius: 10px; padding: .6rem .75rem;
+        box-shadow: 0 6px 20px rgba(0,0,0,.22); max-height: 45%; display: flex; flex-direction: column;
+    }
+    .snaps-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; font-size: .8rem; }
+    .snap-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+    .snap-item { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+        padding: .35rem .25rem; border-top: 1px solid #f1f5f9; }
+    .snap-item.snap-original { background: #eff6ff; border-radius: 6px; }
+    .snap-meta { display: flex; flex-direction: column; min-width: 0; }
+    .snap-label { font-size: .78rem; font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snap-sub { font-size: .68rem; color: #64748b; }
+    .snap-actions { display: flex; gap: .25rem; flex: 0 0 auto; }
 </style>
 @endpush

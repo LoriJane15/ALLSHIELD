@@ -6,17 +6,28 @@ const FILL = 'rgba(0, 255, 0, 0.5)';
 const STROKE = 'rgba(35,35,35,1.0)';
 
 /**
- * Boundary editor — draw, reshape, add and delete barangay polygons, saving
- * each change straight to the database (Phase 2 of the map-control work).
+ * Boundary editor with a safety net (Phase: draft + snapshots).
  *
- * Leaflet-Geoman provides the drawing/editing toolbar. window.axios carries the
- * CSRF token automatically via the XSRF-TOKEN cookie, so the API calls are plain
- * PUT/POST/DELETE against the boundary endpoints.
+ * Edits do NOT touch the live map. They accumulate in an in-memory
+ * FeatureCollection that is autosaved to a single server-side "draft", so the
+ * map everyone else sees is unchanged until you Publish. You can Discard the
+ * draft, save named Checkpoints, and Restore any checkpoint (including the
+ * protected "Original map"). Leaflet-Geoman provides the drawing tools;
+ * window.axios carries the CSRF token via the XSRF-TOKEN cookie.
  */
 export function initIb39BoundaryEditor() {
     const wrap = document.querySelector('.editor-wrap');
     const el = document.getElementById('boundaryMap');
     if (!wrap || !el || el._leaflet_id) return;
+
+    const routes = {
+        draft: wrap.dataset.draft,
+        publish: wrap.dataset.publish,
+        snapshots: wrap.dataset.snapshots,
+        snapshotCreate: wrap.dataset.snapshotCreate,
+        snapshotRestore: wrap.dataset.snapshotRestore, // has __ID__
+        snapshotDestroy: wrap.dataset.snapshotDestroy, // has __ID__
+    };
 
     const map = L.map(el, { attributionControl: false }).setView(DAVAO_SUR, 10);
     const resize = () => map.invalidateSize();
@@ -27,106 +38,180 @@ export function initIb39BoundaryEditor() {
     L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20 }).addTo(map);
 
     const baseStyle = { fillColor: FILL, fillOpacity: 0.55, color: STROKE, weight: 1 };
-    const layerGroup = L.featureGroup().addTo(map);
+    let layerGroup = L.featureGroup().addTo(map);
 
-    // Populate the municipality datalist for the naming dialog.
+    // municipality datalist for the naming dialog
     try {
         const munis = JSON.parse(wrap.dataset.municipalities || '[]');
         const list = document.getElementById('municipalityList');
         if (list) list.innerHTML = munis.map((m) => `<option value="${escapeAttr(m)}">`).join('');
     } catch { /* empty */ }
 
-    // --- load existing boundaries -------------------------------------------
-    fetch(wrap.dataset.boundaries, { headers: { Accept: 'application/json' } })
-        .then((r) => r.json())
-        .then((fc) => {
-            L.geoJSON(fc, {
-                style: () => baseStyle,
-                onEachFeature: (feature, layer) => {
-                    layer._areaId = feature.properties?.id ?? null;
-                    layer._areaName = `${feature.properties?.barangay ?? ''}, ${feature.properties?.municipality ?? ''}`;
-                    layer.bindTooltip(layer._areaName, { sticky: true });
-                    wireLayer(layer);
-                    layerGroup.addLayer(layer);
-                },
-            });
+    // --- load (draft if present, else live) ---------------------------------
+    function loadFeatures() {
+        layerGroup.clearLayers();
 
-            if (layerGroup.getLayers().length) map.fitBounds(layerGroup.getBounds(), { padding: [16, 16] });
+        return fetch(routes.draft, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((res) => {
+                renderFC(res.featureCollection);
+                setDraft(res.hasDraft, res.updatedAt);
+                if (layerGroup.getLayers().length) {
+                    map.fitBounds(layerGroup.getBounds(), { padding: [16, 16] });
+                }
+            });
+    }
+
+    function renderFC(fc) {
+        L.geoJSON(fc, {
+            style: () => baseStyle,
+            onEachFeature: (feature, layer) => {
+                layer._props = {
+                    id: feature.properties?.id ?? null,
+                    municipality: feature.properties?.municipality ?? '',
+                    barangay: feature.properties?.barangay ?? '',
+                };
+                layer.bindTooltip(`${layer._props.barangay}, ${layer._props.municipality}`, { sticky: true });
+                wireLayer(layer);
+                layerGroup.addLayer(layer);
+            },
         });
+    }
 
     // --- Geoman toolbar ------------------------------------------------------
     map.pm.addControls({
         position: 'topleft',
-        drawMarker: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        drawPolyline: false,
-        drawRectangle: false,
-        drawText: false,
-        cutPolygon: true,
-        rotateMode: false,
+        drawMarker: false, drawCircle: false, drawCircleMarker: false,
+        drawPolyline: false, drawRectangle: false, drawText: false,
+        cutPolygon: true, rotateMode: false,
     });
     map.pm.setGlobalOptions({ snappable: true, snapDistance: 15 });
 
-    // --- a brand-new polygon was drawn --------------------------------------
-    let pendingNewLayer = null;
-
+    // a brand-new polygon was drawn -> name it, keep it in the draft only
     map.on('pm:create', (e) => {
         const layer = e.layer;
         layer.setStyle?.(baseStyle);
-        pendingNewLayer = layer;
 
-        // Ask for municipality + barangay, then POST.
         openNameModal((municipality, barangay) => {
-            const geometry = layer.toGeoJSON().geometry;
-
-            window.axios.post(wrap.dataset.store, { municipality, barangay, geometry })
-                .then(({ data }) => {
-                    layer._areaId = data.id;
-                    layer._areaName = `${barangay}, ${municipality}`;
-                    layer.bindTooltip(layer._areaName, { sticky: true });
-                    wireLayer(layer);
-                    layerGroup.addLayer(layer);
-                    flash(`Added ${layer._areaName}`);
-                })
-                .catch(() => { map.removeLayer(layer); flash('Could not save the new area', true); });
-            pendingNewLayer = null;
-        }, () => {
-            // cancelled → discard the drawn shape
-            if (pendingNewLayer) { map.removeLayer(pendingNewLayer); pendingNewLayer = null; }
-        });
+            layer._props = { id: null, municipality, barangay };
+            layer.bindTooltip(`${barangay}, ${municipality}`, { sticky: true });
+            wireLayer(layer);
+            layerGroup.addLayer(layer);
+            queueSave(`Added ${barangay}, ${municipality}`);
+        }, () => map.removeLayer(layer));
     });
 
-    // --- per-layer edit + remove handlers -----------------------------------
     function wireLayer(layer) {
-        layer.on('pm:update', () => saveGeometry(layer));
+        layer.on('pm:update', () => queueSave('Reshaped area'));
         layer.on('pm:cut', (e) => {
-            // Cut replaces the layer with a new one; keep the id and re-save.
-            if (e.layer && layer._areaId) {
-                e.layer._areaId = layer._areaId;
-                e.layer._areaName = layer._areaName;
-                wireLayer(e.layer);
-                saveGeometry(e.layer);
-            }
+            if (e.layer) { e.layer._props = layer._props; wireLayer(e.layer); }
+            queueSave('Cut area');
         });
-        layer.on('pm:remove', () => removeArea(layer));
+        layer.on('pm:remove', () => queueSave('Removed area'));
     }
 
-    function saveGeometry(layer) {
-        if (!layer._areaId) return;
-        const url = wrap.dataset.updateTemplate.replace('__ID__', layer._areaId);
-        window.axios.put(url, { geometry: layer.toGeoJSON().geometry })
-            .then(() => flash(`Saved ${layer._areaName || 'area'}`))
-            .catch(() => flash('Save failed', true));
+    // --- serialize every layer to a FeatureCollection ------------------------
+    function serialize() {
+        const features = [];
+        layerGroup.eachLayer((layer) => {
+            if (!layer.toGeoJSON) return;
+            const gj = layer.toGeoJSON();
+            const geometry = gj.type === 'FeatureCollection' ? gj.features[0]?.geometry : gj.geometry;
+            if (!geometry) return;
+            features.push({ type: 'Feature', geometry, properties: layer._props || {} });
+        });
+        return { type: 'FeatureCollection', features };
     }
 
-    function removeArea(layer) {
-        if (!layer._areaId) return;
-        const url = wrap.dataset.destroyTemplate.replace('__ID__', layer._areaId);
-        window.axios.delete(url)
-            .then(({ data }) => flash(data.deleted ? `Deleted ${layer._areaName}` : `Cleared ${layer._areaName}`))
-            .catch(() => flash('Delete failed', true));
+    // --- debounced autosave to the draft (never the live map) ----------------
+    let saveTimer;
+    function queueSave(note) {
+        setDraft(true, 'saving…');
+        flash(note);
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            window.axios.put(routes.draft, { featureCollection: serialize() })
+                .then(({ data }) => setDraft(true, data.updatedAt))
+                .catch(() => flash('Autosave failed', true));
+        }, 700);
     }
+
+    // --- draft badge + publish / discard ------------------------------------
+    const badge = document.getElementById('draftBadge');
+    const publishBtn = document.getElementById('publishBtn');
+    const discardBtn = document.getElementById('discardBtn');
+
+    function setDraft(has, when) {
+        if (!badge) return;
+        badge.hidden = !has;
+        if (has && when) badge.querySelector('[data-when]').textContent = when;
+        if (publishBtn) publishBtn.disabled = !has;
+        if (discardBtn) discardBtn.disabled = !has;
+    }
+
+    publishBtn?.addEventListener('click', () => {
+        if (!confirm('Publish these changes to the live map? The current map is saved as a checkpoint first.')) return;
+        window.axios.post(routes.publish)
+            .then(() => { flash('Published to the live map'); return loadFeatures(); })
+            .then(loadSnapshots)
+            .catch(() => flash('Publish failed', true));
+    });
+
+    discardBtn?.addEventListener('click', () => {
+        if (!confirm('Discard your draft and reload the live map? Unpublished changes are lost.')) return;
+        window.axios.delete(routes.draft)
+            .then(() => { flash('Draft discarded'); return loadFeatures(); })
+            .catch(() => flash('Discard failed', true));
+    });
+
+    // --- snapshots (checkpoints + original) ---------------------------------
+    const snapList = document.getElementById('snapshotList');
+
+    function loadSnapshots() {
+        if (!snapList) return Promise.resolve();
+        return fetch(routes.snapshots, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((rows) => {
+                snapList.innerHTML = rows.map((s) => `
+                    <li class="snap-item ${s.kind === 'original' ? 'snap-original' : ''}">
+                        <div class="snap-meta">
+                            <span class="snap-label">${escapeHtml(s.label)}</span>
+                            <span class="snap-sub">${s.features} areas · ${escapeHtml(s.at)}</span>
+                        </div>
+                        <div class="snap-actions">
+                            <button type="button" class="btn btn-xs btn-outline-primary" data-restore="${s.id}">Restore</button>
+                            ${s.kind === 'checkpoint' ? `<button type="button" class="btn btn-xs btn-outline-danger" data-del="${s.id}">&times;</button>` : ''}
+                        </div>
+                    </li>`).join('');
+            });
+    }
+
+    document.getElementById('checkpointBtn')?.addEventListener('click', () => {
+        const label = prompt('Name this checkpoint (optional):', '');
+        window.axios.post(routes.snapshotCreate, { label })
+            .then(() => { flash('Checkpoint saved'); return loadSnapshots(); })
+            .catch(() => flash('Could not save checkpoint', true));
+    });
+
+    snapList?.addEventListener('click', (e) => {
+        const restore = e.target.closest('[data-restore]');
+        const del = e.target.closest('[data-del]');
+
+        if (restore) {
+            if (!confirm('Restore the map to this snapshot? The current map is checkpointed first.')) return;
+            window.axios.post(routes.snapshotRestore.replace('__ID__', restore.dataset.restore))
+                .then(() => { flash('Map restored'); return loadFeatures(); })
+                .then(loadSnapshots)
+                .catch(() => flash('Restore failed', true));
+        } else if (del) {
+            window.axios.delete(routes.snapshotDestroy.replace('__ID__', del.dataset.del))
+                .then(loadSnapshots)
+                .catch(() => flash('Delete failed', true));
+        }
+    });
+
+    // --- go ------------------------------------------------------------------
+    loadFeatures().then(loadSnapshots);
 }
 
 // --- naming dialog ----------------------------------------------------------
@@ -148,7 +233,6 @@ function openNameModal(onSave, onCancel) {
         modal.hide();
         onSave(m, b);
     };
-
     const onHidden = () => {
         form.removeEventListener('submit', submit);
         modalEl.removeEventListener('hidden.bs.modal', onHidden);
@@ -172,4 +256,6 @@ function flash(message, isError = false) {
     flashTimer = setTimeout(() => box.classList.remove('show'), 2200);
 }
 
-const escapeAttr = (s) => String(s ?? '').replace(/"/g, '&quot;');
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const escapeAttr = (s) => escapeHtml(s);

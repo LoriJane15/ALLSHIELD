@@ -155,6 +155,16 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::post('/boundaries-import', [Ib39\AreaController::class, 'importBoundaries'])->name('boundaries.import');
     Route::get('/rules', [Ib39\InfestationRuleController::class, 'index'])->name('rules.index');
     Route::put('/rules', [Ib39\InfestationRuleController::class, 'update'])->name('rules.update');
+
+    // Boundary editor safety net: draft workspace + restorable snapshots.
+    Route::get('/boundaries-draft', [Ib39\BoundaryDraftController::class, 'draft'])->name('boundaries.draft');
+    Route::put('/boundaries-draft', [Ib39\BoundaryDraftController::class, 'saveDraft'])->name('boundaries.draft.save');
+    Route::delete('/boundaries-draft', [Ib39\BoundaryDraftController::class, 'discardDraft'])->name('boundaries.draft.discard');
+    Route::post('/boundaries-publish', [Ib39\BoundaryDraftController::class, 'publish'])->name('boundaries.publish');
+    Route::get('/boundaries-snapshots', [Ib39\BoundaryDraftController::class, 'snapshots'])->name('boundaries.snapshots');
+    Route::post('/boundaries-snapshots', [Ib39\BoundaryDraftController::class, 'createSnapshot'])->name('boundaries.snapshots.create');
+    Route::post('/boundaries-snapshots/{snapshot}/restore', [Ib39\BoundaryDraftController::class, 'restoreSnapshot'])->name('boundaries.snapshots.restore');
+    Route::delete('/boundaries-snapshots/{snapshot}', [Ib39\BoundaryDraftController::class, 'destroySnapshot'])->name('boundaries.snapshots.destroy');
 });
 
 Route::middleware(['auth', 'role:afp'])->prefix('afp')->name('afp.')->group(function () {

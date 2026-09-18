@@ -30,8 +30,12 @@ class BoundaryEditorTest extends TestCase
         $html = $this->actingAs($this->ib39())->get('/39th-ib/boundary-editor')->assertOk()->getContent();
 
         $this->assertStringContainsString('id="boundaryMap"', $html);
-        $this->assertStringContainsString('data-boundaries', $html);
-        $this->assertStringContainsString('data-store', $html);
+        // Draft-based safety net wiring (edits go to a draft, not the live map).
+        $this->assertStringContainsString('data-draft', $html);
+        $this->assertStringContainsString('data-publish', $html);
+        $this->assertStringContainsString('data-snapshots', $html);
+        $this->assertStringContainsString('id="draftBadge"', $html);
+        $this->assertStringContainsString('id="snapshotList"', $html);
         $this->assertStringContainsString('newAreaModal', $html);
         $this->assertStringContainsString('leaflet-geoman.css', $html);
     }
