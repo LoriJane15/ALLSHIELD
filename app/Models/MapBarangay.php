@@ -34,16 +34,60 @@ class MapBarangay extends Model
     ];
 
     /**
-     * RCSP infestation classification by former-rebel count.
-     * Thresholds and colors preserved from the legacy 39th-IB module.
+     * RCSP infestation classification by former-rebel count, driven by the
+     * admin-editable infestation_rules table (highest matching threshold wins).
+     * Falls back to the legacy LEGEND if the table is empty or unavailable.
      */
     public static function classify(int $frs): array
     {
-        return match (true) {
-            $frs >= 20 => ['status' => 'Konsolidado', 'color' => 'rgba(255,0,0,0.5)'],
-            $frs >= 15 => ['status' => 'Rekonsilida', 'color' => 'rgba(255,165,0,0.5)'],
-            $frs >= 10 => ['status' => 'Expansion',   'color' => 'rgba(255,255,0,0.5)'],
-            default    => ['status' => 'Recovery',    'color' => 'rgba(0,255,0,0.5)'],
-        };
+        foreach (self::rules() as $rule) {
+            if ($frs >= $rule['min_frs']) {
+                return ['status' => $rule['status'], 'color' => $rule['color']];
+            }
+        }
+
+        // No rule matched (every threshold is above this count) — lowest band.
+        $bands = self::legend();
+        $last = end($bands) ?: ['status' => 'Recovery', 'color' => 'rgba(0,255,0,0.5)'];
+
+        return ['status' => $last['status'], 'color' => $last['color']];
+    }
+
+    /** The classification bands for the legend, ordered highest threshold first. */
+    public static function legend(): array
+    {
+        $rules = self::rules();
+
+        return $rules ?: self::LEGEND;
+    }
+
+    /**
+     * Cached rules, highest min_frs first. Cached per-request so a hot path like
+     * a bulk re-classify does not hit the table for every row.
+     */
+    private static ?array $ruleCache = null;
+
+    private static function rules(): array
+    {
+        if (self::$ruleCache !== null) {
+            return self::$ruleCache;
+        }
+
+        try {
+            self::$ruleCache = InfestationRule::orderByDesc('min_frs')->orderBy('sort_order')
+                ->get(['min_frs', 'status', 'color', 'label'])
+                ->map(fn ($r) => $r->toArray())
+                ->all();
+        } catch (\Throwable) {
+            self::$ruleCache = [];
+        }
+
+        return self::$ruleCache;
+    }
+
+    /** Drop the per-request rule cache after the rules are edited. */
+    public static function forgetRuleCache(): void
+    {
+        self::$ruleCache = null;
     }
 }

@@ -157,7 +157,7 @@ class AreaController extends Controller
 
     public function map(): View
     {
-        return view('ib39.map', ['legend' => MapBarangay::LEGEND]);
+        return view('ib39.map', ['legend' => MapBarangay::legend()]);
     }
 
     /** The interactive boundary editor (draw / reshape / add / delete polygons). */

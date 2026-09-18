@@ -153,6 +153,16 @@ INSERT INTO `implementations` (`id`, `lgu_user_id`, `uploaded_at`, `issues`, `pr
 UNLOCK TABLES;
 
 --
+-- Dumping data for table `infestation_rules`
+--
+
+LOCK TABLES `infestation_rules` WRITE;
+/*!40000 ALTER TABLE `infestation_rules` DISABLE KEYS */;
+INSERT INTO `infestation_rules` (`id`, `min_frs`, `status`, `color`, `label`, `sort_order`, `created_at`, `updated_at`) VALUES (1,20,'Konsolidado','rgba(255,0,0,0.5)','20 or more FRs',1,'2026-09-18 04:30:31','2026-09-18 04:30:31'),(2,15,'Rekonsilida','rgba(255,165,0,0.5)','15–19 FRs',2,'2026-09-18 04:30:31','2026-09-18 04:30:31'),(3,10,'Expansion','rgba(255,255,0,0.5)','10–14 FRs',3,'2026-09-18 04:30:31','2026-09-18 04:30:31'),(4,0,'Recovery','rgba(0,255,0,0.5)','Fewer than 10 FRs',4,'2026-09-18 04:30:31','2026-09-18 04:30:31');
+/*!40000 ALTER TABLE `infestation_rules` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Dumping data for table `map_barangays`
 --
 
@@ -198,7 +208,7 @@ UNLOCK TABLES;
 
 LOCK TABLES `rcsp_file_comments` WRITE;
 /*!40000 ALTER TABLE `rcsp_file_comments` DISABLE KEYS */;
-INSERT INTO `rcsp_file_comments` (`id`, `rcsp_form_id`, `rcsp_phase_id`, `rcsp_activity_id`, `user_id`, `text`, `created_at`, `updated_at`) VALUES (132,1770,0,1,91,'no esign','2025-02-05 06:44:12','2025-02-05 06:44:12'),(133,1770,0,1,64,'with e sign','2025-02-05 06:45:30','2025-02-05 06:45:30'),(134,1775,0,1,91,'no esign','2025-02-21 03:03:35','2025-02-21 03:03:35'),(135,1775,0,1,64,'with esign','2025-02-21 03:04:25','2025-02-21 03:04:25'),(136,1776,0,2,91,'hiiiii','2026-09-16 06:20:45','2026-09-16 06:20:45'),(137,1776,0,2,64,'hellooo','2026-09-16 06:21:00','2026-09-16 06:21:00');
+INSERT INTO `rcsp_file_comments` (`id`, `rcsp_form_id`, `rcsp_phase_id`, `rcsp_activity_id`, `user_id`, `text`, `created_at`, `updated_at`) VALUES (132,1770,0,1,91,'no esign','2025-02-05 06:44:12','2025-02-05 06:44:12'),(133,1770,0,1,64,'with e sign','2025-02-05 06:45:30','2025-02-05 06:45:30'),(134,1775,0,1,91,'no esign','2025-02-21 03:03:35','2025-02-21 03:03:35'),(135,1775,0,1,64,'with esign','2025-02-21 03:04:25','2025-02-21 03:04:25'),(136,1776,0,2,91,'hiiiii','2026-09-16 06:20:45','2026-09-16 06:20:45'),(137,1776,0,2,64,'hellooo','2026-09-16 06:21:00','2026-09-16 06:21:00'),(138,1664,0,1,75,'Please re-upload page 2.','2026-09-18 03:12:57','2026-09-18 03:12:57'),(139,1664,0,1,75,'Please re-upload page 2.','2026-09-18 04:03:22','2026-09-18 04:03:22'),(140,1664,0,1,75,'Please re-upload page 2.','2026-09-18 04:28:44','2026-09-18 04:28:44');
 /*!40000 ALTER TABLE `rcsp_file_comments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -259,4 +269,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-18 19:12:07
+-- Dump completed on 2026-09-18 20:33:16

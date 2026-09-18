@@ -206,3 +206,16 @@
 .ib39-popup-table { width: 100%; font-size: .82rem; }
 .ib39-popup-table th { text-align: left; font-weight: 600; color: #475569; padding: .15rem .75rem .15rem 0; white-space: nowrap; }
 .ib39-popup-table td { color: #0f172a; padding: .15rem 0; }
+
+/* ---- Colour mode toggle ----------------------------------------------- */
+.ib39-color-toggle button {
+    background: rgba(255, 255, 255, 0.95);
+    border: none;
+    border-radius: 8px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+    color: #334155;
+    cursor: pointer;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
+}
+.ib39-color-toggle button strong { color: #35127d; }

@@ -34,6 +34,7 @@ class LegacyDataSeeder extends Seeder
         'fr_government_assistances', 'fr_skills', 'fr_location_histories',
         'fr_education_works', 'fr_program_statuses', 'former_rebels',
         'gov_agencies', 'barangays', 'municipalities', 'users',
+        'infestation_rules',
     ];
 
     public function run(): void

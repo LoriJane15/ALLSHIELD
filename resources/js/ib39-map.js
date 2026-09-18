@@ -56,15 +56,19 @@ export function initIb39FullMap() {
     let areaData = {};
     const municipalityLayers = {};
 
-    // Legacy `scanAndUpdateBarangayColors()` painted EVERY polygon the same
-    // green, unconditionally — the stored infestation_color is only ever shown
-    // in the detail panel's swatch, never on the map. Keep that behaviour.
-    const styleFor = () => ({
-        fillColor: DEFAULT_FILL,
-        fillOpacity: 1,
-        color: STROKE,
-        weight: 0.988,
-    });
+    // Two colouring modes. Legacy painted EVERY polygon flat green (the default
+    // here); "status" colours each barangay by its infestation rule colour.
+    let colorMode = 'flat';
+
+    const styleFor = (feature) => {
+        let fill = DEFAULT_FILL;
+        if (colorMode === 'status' && feature) {
+            const area = areaData[keyFor(feature)];
+            if (area?.color) fill = area.color;
+        }
+
+        return { fillColor: fill, fillOpacity: 1, color: STROKE, weight: 0.988 };
+    };
 
     Promise.all([
         fetch(el.dataset.geojson).then((r) => r.json()),
@@ -117,10 +121,35 @@ export function initIb39FullMap() {
         map.fitBounds(bounds.reduce((acc, b) => acc.extend(b), L.latLngBounds(bounds[0])), { padding: [12, 12] });
 
         addSearch(map, el, sidebar, index);
+        addColorToggle(map, () => {
+            colorMode = colorMode === 'flat' ? 'status' : 'flat';
+            Object.values(municipalityLayers).forEach((lg) => lg.setStyle(styleFor));
+            return colorMode;
+        });
         listenForUpdates(el, municipalityLayers, styleFor, (fresh) => {
             areaData = fresh;
         });
     });
+}
+
+/** A small control that flips the map between flat green and colour-by-status. */
+function addColorToggle(map, toggle) {
+    const control = L.control({ position: 'bottomright' });
+
+    control.onAdd = () => {
+        const wrap = L.DomUtil.create('div', 'ib39-color-toggle');
+        wrap.innerHTML = '<button type="button">Colour: <strong>Flat</strong></button>';
+        L.DomEvent.disableClickPropagation(wrap);
+
+        wrap.querySelector('button').addEventListener('click', (e) => {
+            const mode = toggle();
+            e.currentTarget.querySelector('strong').textContent = mode === 'status' ? 'By status' : 'Flat';
+        });
+
+        return wrap;
+    };
+
+    control.addTo(map);
 }
 
 const fetchAreas = (el) =>
