@@ -175,6 +175,14 @@ return new class extends Migration
 
     private function ensureTriggers(): void
     {
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE '.self::PROCESSINGS.' ADD CONSTRAINT japic_current_photo_owner_foreign FOREIGN KEY (current_photo_version_id, id) REFERENCES '.self::PHOTOS.' (id, processing_id)');
+            DB::unprepared("CREATE FUNCTION japic_photo_immutable_guard() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN RAISE EXCEPTION 'JAPIC photo versions are immutable'; END; \$\$");
+            DB::statement('CREATE TRIGGER japic_photo_version_update_guard BEFORE UPDATE ON '.self::PHOTOS.' FOR EACH ROW EXECUTE FUNCTION japic_photo_immutable_guard()');
+            DB::statement('CREATE TRIGGER japic_photo_version_delete_guard BEFORE DELETE ON '.self::PHOTOS.' FOR EACH ROW EXECUTE FUNCTION japic_photo_immutable_guard()');
+
+            return;
+        }
         if (DB::getDriverName() === 'sqlite') {
             DB::unprepared('CREATE TRIGGER IF NOT EXISTS japic_photo_version_update_guard BEFORE UPDATE ON '.self::PHOTOS." BEGIN SELECT RAISE(ABORT, 'JAPIC photo versions are immutable'); END");
             DB::unprepared('CREATE TRIGGER IF NOT EXISTS japic_photo_version_delete_guard BEFORE DELETE ON '.self::PHOTOS." BEGIN SELECT RAISE(ABORT, 'JAPIC photo versions are immutable'); END");
@@ -206,6 +214,14 @@ return new class extends Migration
 
     private function dropTriggers(): void
     {
+        if (DB::getDriverName() === 'pgsql') {
+            foreach (['japic_photo_version_update_guard', 'japic_photo_version_delete_guard'] as $trigger) {
+                DB::statement('DROP TRIGGER IF EXISTS '.$trigger.' ON '.self::PHOTOS);
+            }
+            DB::statement('DROP FUNCTION IF EXISTS japic_photo_immutable_guard()');
+
+            return;
+        }
         foreach (self::TRIGGERS as $trigger) {
             DB::unprepared('DROP TRIGGER IF EXISTS '.$trigger);
         }
@@ -213,8 +229,8 @@ return new class extends Migration
 
     private function assertSupportedDriver(): void
     {
-        if (! in_array(DB::getDriverName(), ['sqlite', 'mysql'], true)) {
-            throw new RuntimeException('JAPIC certification photo migration supports only SQLite and MySQL/MariaDB.');
+        if (! in_array(DB::getDriverName(), ['sqlite', 'mysql', 'pgsql'], true)) {
+            throw new RuntimeException('JAPIC certification photo migration does not support the configured database driver.');
         }
     }
 };

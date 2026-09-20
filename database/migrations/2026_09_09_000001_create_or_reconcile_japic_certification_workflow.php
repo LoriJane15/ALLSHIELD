@@ -96,6 +96,12 @@ return new class extends Migration
     private function changeRole(bool $add): void
     {
         $roles = $add ? self::ROLES : array_slice(self::ROLES, 0, -1);
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check');
+            DB::statement("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('".implode("','", $roles)."'))");
+
+            return;
+        }
         if (DB::getDriverName() === 'sqlite') {
             $definition = DB::table('sqlite_master')->where('type', 'table')->where('name', 'users')->value('sql');
             $replacement = 'check ("role" in (\''.implode("', '", $roles).'\'))';
@@ -145,7 +151,9 @@ return new class extends Migration
                 $t->string('control_number_hash', 64)->nullable();
                 $t->unsignedInteger('lock_version')->default(0);
                 $t->unsignedBigInteger('current_final_version_id')->nullable();
-                $t->foreign('current_final_version_id')->references('id')->on(self::TABLES[4])->restrictOnDelete();
+                if (DB::getDriverName() !== 'pgsql') {
+                    $t->foreign('current_final_version_id')->references('id')->on(self::TABLES[4])->restrictOnDelete();
+                }
                 $t->timestamps();
             });
         } else {
@@ -204,7 +212,9 @@ return new class extends Migration
             $t->text('remarks')->nullable();
             $t->text('delay_reason')->nullable();
             $t->unsignedBigInteger('document_version_id')->nullable();
-            $t->foreign('document_version_id')->references('id')->on(self::TABLES[4])->nullOnDelete();
+            if (DB::getDriverName() !== 'pgsql') {
+                $t->foreign('document_version_id')->references('id')->on(self::TABLES[4])->nullOnDelete();
+            }
             $t->json('metadata')->nullable();
             $t->timestamp('occurred_at');
         }, ['actor_id' => fn ($t) => $t->unsignedBigInteger('actor_id')->nullable(),
@@ -360,13 +370,16 @@ return new class extends Migration
             return;
         }
         foreach ([
-            [self::TABLES[0], 'current_final_version_id', self::TABLES[4], 'japic_processing_current_final_fk'],
-            [self::TABLES[3], 'document_version_id', self::TABLES[4], 'japic_history_document_fk'],
-        ] as [$table, $column, $target, $name]) {
+            [self::TABLES[0], 'current_final_version_id', self::TABLES[4], 'japic_processing_current_final_fk', false],
+            [self::TABLES[3], 'document_version_id', self::TABLES[4], 'japic_history_document_fk', true],
+        ] as [$table, $column, $target, $name, $nullOnDelete]) {
             $exists = collect(Schema::getForeignKeys($table))
                 ->contains(fn (array $key): bool => ($key['columns'] ?? []) === [$column]);
             if (! $exists) {
-                Schema::table($table, fn (Blueprint $t) => $t->foreign($column, $name)->references('id')->on($target)->restrictOnDelete());
+                Schema::table($table, function (Blueprint $blueprint) use ($column, $name, $target, $nullOnDelete): void {
+                    $foreign = $blueprint->foreign($column, $name)->references('id')->on($target);
+                    $nullOnDelete ? $foreign->nullOnDelete() : $foreign->restrictOnDelete();
+                });
             }
         }
     }
@@ -398,6 +411,15 @@ return new class extends Migration
 
     private function guards(): void
     {
+        if (DB::getDriverName() === 'pgsql') {
+            $statuses = "'".implode("','", array_column(JapicCertificationStatus::cases(), 'value'))."'";
+            DB::statement("ALTER TABLE ".self::TABLES[0]." ADD CONSTRAINT japic_processing_status_check CHECK (status IN ({$statuses}))");
+            DB::statement('ALTER TABLE '.self::TABLES[0]." ADD CONSTRAINT japic_processing_deadline_check CHECK (due_at = received_at + INTERVAL '14 days')");
+            DB::statement('ALTER TABLE '.self::TABLES[4].' ADD CONSTRAINT japic_document_owner_unique UNIQUE (id, processing_id)');
+            DB::statement('ALTER TABLE '.self::TABLES[0].' ADD CONSTRAINT japic_current_document_owner_foreign FOREIGN KEY (current_final_version_id, id) REFERENCES '.self::TABLES[4].' (id, processing_id)');
+
+            return;
+        }
         if (DB::getDriverName() !== 'sqlite') {
             return;
         }

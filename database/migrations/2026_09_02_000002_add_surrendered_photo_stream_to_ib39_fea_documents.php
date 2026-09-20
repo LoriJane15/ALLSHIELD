@@ -14,6 +14,8 @@ return new class extends Migration
         if ($driver === 'mysql') {
             DB::statement("ALTER TABLE ib39_fea_document_versions MODIFY slot ENUM('primary', 'justification_surrendered', 'justification_comparison') NOT NULL");
             DB::statement("ALTER TABLE ib39_fea_upload_histories MODIFY slot ENUM('primary', 'justification_surrendered', 'justification_comparison') NOT NULL");
+        } elseif ($driver === 'pgsql') {
+            $this->alterPostgresSlotChecks(['primary', 'justification_surrendered', 'justification_comparison']);
         }
 
         if ($driver === 'sqlite') {
@@ -52,6 +54,18 @@ return new class extends Migration
             DB::statement("ALTER TABLE ib39_fea_upload_histories MODIFY slot ENUM('primary', 'justification_comparison') NOT NULL");
         } elseif ($driver === 'sqlite') {
             $this->rebuildSqliteSlotTables(['primary', 'justification_comparison']);
+        } elseif ($driver === 'pgsql') {
+            $this->alterPostgresSlotChecks(['primary', 'justification_comparison']);
+        }
+    }
+
+    private function alterPostgresSlotChecks(array $slots): void
+    {
+        $values = implode(', ', array_map(fn (string $slot): string => DB::getPdo()->quote($slot), $slots));
+
+        foreach (['ib39_fea_document_versions', 'ib39_fea_upload_histories'] as $table) {
+            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$table}_slot_check");
+            DB::statement("ALTER TABLE {$table} ADD CONSTRAINT {$table}_slot_check CHECK (slot IN ({$values}))");
         }
     }
 

@@ -29,7 +29,7 @@ return new class extends Migration
     {
         $driver = DB::connection()->getDriverName();
 
-        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) {
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb', 'pgsql'], true)) {
             throw new RuntimeException(
                 "Government-agency integrity migration does not support the configured '{$driver}' database driver. No schema or data was changed."
             );
@@ -40,6 +40,12 @@ return new class extends Migration
 
         if ($driver === 'sqlite') {
             $this->upSqlite();
+
+            return;
+        }
+
+        if ($driver === 'pgsql') {
+            DB::transaction(fn () => $this->upPostgres());
 
             return;
         }
@@ -277,6 +283,28 @@ return new class extends Migration
             .'ADD UNIQUE INDEX `'.self::NAME_UNIQUE.'` (`'.self::NAME_COLUMN.'`), '
             .'ADD UNIQUE INDEX `'.self::ACRONYM_UNIQUE.'` (`'.self::ACRONYM_COLUMN.'`)'
         );
+    }
+
+    private function upPostgres(): void
+    {
+        DB::statement('ALTER TABLE users ADD CONSTRAINT '.self::USER_FOREIGN.' FOREIGN KEY (gov_agency_id) REFERENCES gov_agencies (id) ON DELETE RESTRICT');
+
+        foreach (['agency_implan_responses', 'implementation_taggings'] as $table) {
+            $foreign = collect(Schema::getForeignKeys($table))->first(
+                fn (array $key): bool => $key['columns'] === ['gov_agency_id'] && $key['foreign_table'] === 'gov_agencies'
+            );
+            $name = $foreign['name'] ?? null;
+            if (! is_string($name) || ! preg_match('/\A[A-Za-z0-9_]+\z/', $name)) {
+                throw new RuntimeException("Table '{$table}' has no safely addressable government-agency foreign key.");
+            }
+            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT {$name}");
+            DB::statement("ALTER TABLE {$table} ADD CONSTRAINT {$name} FOREIGN KEY (gov_agency_id) REFERENCES gov_agencies (id) ON DELETE RESTRICT");
+        }
+
+        DB::statement('ALTER TABLE gov_agencies ADD COLUMN '.self::NAME_COLUMN.' TEXT GENERATED ALWAYS AS (LOWER(TRIM(name))) STORED');
+        DB::statement('ALTER TABLE gov_agencies ADD COLUMN '.self::ACRONYM_COLUMN.' TEXT GENERATED ALWAYS AS (LOWER(TRIM(acronym))) STORED');
+        DB::statement('CREATE UNIQUE INDEX '.self::NAME_UNIQUE.' ON gov_agencies ('.self::NAME_COLUMN.')');
+        DB::statement('CREATE UNIQUE INDEX '.self::ACRONYM_UNIQUE.' ON gov_agencies ('.self::ACRONYM_COLUMN.')');
     }
 
     private function mysqlAgencyForeignName(string $table): string

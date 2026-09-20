@@ -37,6 +37,19 @@ return new class extends Migration
     private function reconcile(array $from, array $to, bool $rollback): void
     {
         $connection = DB::connection();
+        if ($connection->getDriverName() === 'pgsql') {
+            if ($rollback && $connection->table(self::TABLE)
+                ->where('previous_overall_status', Ib39SurfacedFormerRebel::OVERALL_CASE_STATUS_JAPIC_CERTIFIED)->exists()) {
+                throw new RuntimeException('Rollback refused because a cancellation records JAPIC Certified as its previous status.');
+            }
+            $values = "'".implode("','", array_map(fn (string $value): string => str_replace("'", "''", $value), $to))."'";
+            $connection->transaction(function () use ($connection, $values): void {
+                $connection->statement('ALTER TABLE '.self::TABLE.' DROP CONSTRAINT IF EXISTS ib39_fr_cancellations_previous_overall_status_check');
+                $connection->statement('ALTER TABLE '.self::TABLE." ADD CONSTRAINT ib39_fr_cancellations_previous_overall_status_check CHECK (previous_overall_status IN ({$values}))");
+            });
+
+            return;
+        }
         if ($connection->getDriverName() !== 'sqlite') {
             throw new RuntimeException('This migration has been verified only for SQLite and refuses to run on other database drivers.');
         }

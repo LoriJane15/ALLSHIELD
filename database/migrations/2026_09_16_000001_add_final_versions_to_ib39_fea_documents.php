@@ -22,6 +22,8 @@ return new class extends Migration
             $this->alterMysqlEnums(self::FINAL_SLOTS, self::FINAL_EVENTS);
         } elseif ($driver === 'sqlite') {
             $this->rebuildSqliteEnumTables(self::FINAL_SLOTS, self::FINAL_EVENTS);
+        } elseif ($driver === 'pgsql') {
+            $this->alterPostgresChecks(self::FINAL_SLOTS, self::FINAL_EVENTS);
         } else {
             throw new RuntimeException('Unsupported database driver for FEA final-version migration.');
         }
@@ -46,7 +48,7 @@ return new class extends Migration
         }
 
         $driver = DB::getDriverName();
-        if (! in_array($driver, ['mysql', 'sqlite'], true)) {
+        if (! in_array($driver, ['mysql', 'sqlite', 'pgsql'], true)) {
             throw new RuntimeException('Unsupported database driver for FEA final-version migration.');
         }
         if ($driver === 'sqlite') {
@@ -67,6 +69,8 @@ return new class extends Migration
             $this->alterMysqlEnums(self::DRAFT_SLOTS, self::PRELIMINARY_EVENTS);
         } elseif ($driver === 'sqlite') {
             $this->rebuildSqliteEnumTables(self::DRAFT_SLOTS, self::PRELIMINARY_EVENTS);
+        } elseif ($driver === 'pgsql') {
+            $this->alterPostgresChecks(self::DRAFT_SLOTS, self::PRELIMINARY_EVENTS);
         } else {
             throw new RuntimeException('Unsupported database driver for FEA final-version migration.');
         }
@@ -79,6 +83,18 @@ return new class extends Migration
         DB::statement("ALTER TABLE ib39_fea_document_versions MODIFY slot ENUM({$slotValues}) NOT NULL");
         DB::statement("ALTER TABLE ib39_fea_upload_histories MODIFY slot ENUM({$slotValues}) NOT NULL");
         DB::statement("ALTER TABLE ib39_fea_document_histories MODIFY event ENUM({$eventValues}) NOT NULL");
+    }
+
+    private function alterPostgresChecks(array $slots, array $events): void
+    {
+        foreach (['ib39_fea_document_versions', 'ib39_fea_upload_histories'] as $table) {
+            $values = implode(', ', array_map(fn (string $value): string => "'{$value}'", $slots));
+            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$table}_slot_check");
+            DB::statement("ALTER TABLE {$table} ADD CONSTRAINT {$table}_slot_check CHECK (slot IN ({$values}))");
+        }
+        $values = implode(', ', array_map(fn (string $value): string => "'{$value}'", $events));
+        DB::statement('ALTER TABLE ib39_fea_document_histories DROP CONSTRAINT IF EXISTS ib39_fea_document_histories_event_check');
+        DB::statement("ALTER TABLE ib39_fea_document_histories ADD CONSTRAINT ib39_fea_document_histories_event_check CHECK (event IN ({$values}))");
     }
 
     private function rebuildSqliteEnumTables(array $slots, array $events): void

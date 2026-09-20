@@ -55,7 +55,15 @@ return new class extends Migration
                 $table->timestamp('created_at');
             });
 
-            DB::statement(<<<'SQL'
+            DB::statement(DB::getDriverName() === 'pgsql' ? <<<'SQL'
+                ALTER TABLE chat_message_document_references
+                ADD CONSTRAINT chat_reference_one_document_check CHECK (
+                    num_nonnulls(ib39_cdr_document_version_id,
+                        japic_certification_document_version_id,
+                        pswdo_enrollment_document_id,
+                        ib39_fea_document_version_id) = 1
+                )
+            SQL : <<<'SQL'
                 ALTER TABLE chat_message_document_references
                 ADD CONSTRAINT chat_reference_one_document_check CHECK (
                     (ib39_cdr_document_version_id IS NOT NULL)

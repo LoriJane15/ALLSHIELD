@@ -145,6 +145,21 @@ return new class extends Migration
         $sources = "'".implode("','", array_column(Ib39CdrDocumentSource::cases(), 'value'))."'";
         $photoTypes = "'".implode("','", array_column(Ib39CdrPhotoType::cases(), 'value'))."'";
 
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE ib39_cdr_processings ADD CONSTRAINT ib39_cdr_processing_status_check CHECK (status IN ({$statuses}))");
+            DB::statement("ALTER TABLE ib39_cdr_status_histories ADD CONSTRAINT ib39_cdr_history_status_check CHECK (to_status IN ({$statuses}) AND (from_status IS NULL OR from_status IN ({$statuses})))");
+            DB::statement("ALTER TABLE ib39_cdr_document_versions ADD CONSTRAINT ib39_cdr_document_source_check CHECK (source_type IN ({$sources}))");
+            DB::statement("ALTER TABLE ib39_cdr_photos ADD CONSTRAINT ib39_cdr_photo_type_check CHECK (photo_type IN ({$photoTypes}))");
+            DB::statement("ALTER TABLE ib39_cdr_document_versions ADD CONSTRAINT ib39_cdr_replacement_reason_check CHECK (replaces_version_id IS NULL OR NULLIF(TRIM(replacement_reason), '') IS NOT NULL)");
+            DB::statement('ALTER TABLE ib39_cdr_document_versions ADD CONSTRAINT ib39_cdr_document_owner_unique UNIQUE (id, cdr_processing_id)');
+            DB::statement('ALTER TABLE ib39_cdr_photo_versions ADD CONSTRAINT ib39_cdr_photo_owner_unique UNIQUE (id, cdr_photo_id)');
+            DB::statement('ALTER TABLE ib39_cdr_document_versions ADD CONSTRAINT ib39_cdr_replacement_owner_foreign FOREIGN KEY (replaces_version_id, cdr_processing_id) REFERENCES ib39_cdr_document_versions (id, cdr_processing_id)');
+            DB::statement('ALTER TABLE ib39_cdr_processings ADD CONSTRAINT ib39_cdr_current_document_owner_foreign FOREIGN KEY (current_final_version_id, id) REFERENCES ib39_cdr_document_versions (id, cdr_processing_id)');
+            DB::statement('ALTER TABLE ib39_cdr_photos ADD CONSTRAINT ib39_cdr_current_photo_owner_foreign FOREIGN KEY (current_photo_version_id, id) REFERENCES ib39_cdr_photo_versions (id, cdr_photo_id)');
+
+            return;
+        }
+
         foreach (['INSERT' => 'NEW.status', 'UPDATE OF status' => 'NEW.status'] as $operation => $value) {
             $suffix = str_starts_with($operation, 'INSERT') ? 'insert' : 'update';
             DB::unprepared("CREATE TRIGGER ib39_cdr_processing_status_{$suffix}

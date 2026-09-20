@@ -18,10 +18,34 @@ class RcspDemoSeederTest extends TestCase
 {
     use RefreshDatabase;
 
+    private string|false $originalProcessPassword;
+
+    private bool $hadEnvPassword;
+
+    private bool $hadServerPassword;
+
+    private ?string $originalEnvPassword = null;
+
+    private ?string $originalServerPassword = null;
+
+    protected function setUp(): void
+    {
+        $this->originalProcessPassword = getenv('RCSP_DEMO_PASSWORD');
+        $this->hadEnvPassword = array_key_exists('RCSP_DEMO_PASSWORD', $_ENV);
+        $this->hadServerPassword = array_key_exists('RCSP_DEMO_PASSWORD', $_SERVER);
+        $this->originalEnvPassword = $this->hadEnvPassword ? (string) $_ENV['RCSP_DEMO_PASSWORD'] : null;
+        $this->originalServerPassword = $this->hadServerPassword ? (string) $_SERVER['RCSP_DEMO_PASSWORD'] : null;
+
+        parent::setUp();
+    }
+
     protected function tearDown(): void
     {
-        putenv('RCSP_DEMO_PASSWORD');
-        parent::tearDown();
+        try {
+            parent::tearDown();
+        } finally {
+            $this->restoreDemoPassword();
+        }
     }
 
     public function test_seeder_refuses_production_before_transaction(): void
@@ -33,21 +57,21 @@ class RcspDemoSeederTest extends TestCase
 
     public function test_seeder_requires_a_strong_password(): void
     {
-        putenv('RCSP_DEMO_PASSWORD');
+        $this->setDemoPassword(null);
         try {
             $this->app->make(RcspDemoSeeder::class)->run();
             $this->fail('Seeder accepted a missing password.');
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('RCSP_DEMO_PASSWORD', $exception->getMessage());
         }
-        putenv('RCSP_DEMO_PASSWORD=weak');
+        $this->setDemoPassword('weak');
         $this->expectException(RuntimeException::class);
         $this->seed(RcspDemoSeeder::class);
     }
 
     public function test_seeder_is_idempotent_preserves_unrelated_data_and_builds_consistent_states(): void
     {
-        putenv('RCSP_DEMO_PASSWORD=StrongDemo12345');
+        $this->setDemoPassword('StrongDemo12345');
         $unrelated = Municipality::create(['name' => 'Unrelated Municipality']);
         $this->seed(RcspDemoSeeder::class);
         $counts = [Municipality::count(), User::count(), RcspBarangay::count(), RcspForm::count()];
@@ -77,7 +101,7 @@ class RcspDemoSeederTest extends TestCase
     public function test_seeder_refuses_conflicting_demo_username(): void
     {
         User::factory()->role('afp')->create(['username' => 'katuparan_demo', 'name' => 'Not Demo Reviewer']);
-        putenv('RCSP_DEMO_PASSWORD=StrongDemo12345');
+        $this->setDemoPassword('StrongDemo12345');
         $this->expectException(RuntimeException::class);
         $this->seed(RcspDemoSeeder::class);
     }
@@ -97,5 +121,38 @@ class RcspDemoSeederTest extends TestCase
         $phase = RcspPhase::where('catalog_key', RcspPhase::CONFIGURABLE_CATALOG_KEY)
             ->where('number', 0)->firstOrFail();
         $this->assertSame(0, RcspActivity::forBarangayPhase($record, $phase)->count());
+    }
+
+    private function setDemoPassword(?string $password): void
+    {
+        if ($password === null) {
+            putenv('RCSP_DEMO_PASSWORD');
+            unset($_ENV['RCSP_DEMO_PASSWORD'], $_SERVER['RCSP_DEMO_PASSWORD']);
+
+            return;
+        }
+
+        putenv("RCSP_DEMO_PASSWORD={$password}");
+        $_ENV['RCSP_DEMO_PASSWORD'] = $password;
+        $_SERVER['RCSP_DEMO_PASSWORD'] = $password;
+    }
+
+    private function restoreDemoPassword(): void
+    {
+        $this->originalProcessPassword === false
+            ? putenv('RCSP_DEMO_PASSWORD')
+            : putenv("RCSP_DEMO_PASSWORD={$this->originalProcessPassword}");
+
+        if ($this->hadEnvPassword) {
+            $_ENV['RCSP_DEMO_PASSWORD'] = $this->originalEnvPassword;
+        } else {
+            unset($_ENV['RCSP_DEMO_PASSWORD']);
+        }
+
+        if ($this->hadServerPassword) {
+            $_SERVER['RCSP_DEMO_PASSWORD'] = $this->originalServerPassword;
+        } else {
+            unset($_SERVER['RCSP_DEMO_PASSWORD']);
+        }
     }
 }

@@ -16,6 +16,12 @@ return new class extends Migration
 
     public function up(): void
     {
+        // The preceding migration builds the canonical PostgreSQL schema. Its
+        // legacy repair comparison uses SQLite/MySQL column and index metadata.
+        if (DB::getDriverName() === 'pgsql') {
+            return;
+        }
+
         DB::transaction(function (): void {
             $foundation = require database_path('migrations/2026_09_09_000001_create_or_reconcile_japic_certification_workflow.php');
             $foundation->repairEmptyJapicTables();
