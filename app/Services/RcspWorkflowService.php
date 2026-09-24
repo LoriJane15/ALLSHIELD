@@ -10,8 +10,10 @@ use App\Models\RcspFormReview;
 use App\Models\RcspPhase;
 use App\Models\RcspPhaseTransition;
 use App\Models\User;
+use App\Support\RcspActivityCatalog;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -33,7 +35,7 @@ class RcspWorkflowService
                 }
 
                 $phases = RcspPhase::where('catalog_key', RcspPhase::CONFIGURABLE_CATALOG_KEY)
-                    ->orderBy('number')->get(['number', 'name']);
+                    ->orderBy('number')->get(['id', 'number', 'name']);
                 if ($phases->mapWithKeys(fn (RcspPhase $phase): array => [(int) $phase->number => $phase->name])->all()
                     !== RcspPhase::STRUCTURAL_NAMES) {
                     throw ValidationException::withMessages([
@@ -55,6 +57,7 @@ class RcspWorkflowService
                     'catalog_key' => RcspPhase::CONFIGURABLE_CATALOG_KEY,
                 ]);
                 $record->phaseStatus()->create([]);
+                $this->provisionCatalogActivities($record, $phases);
 
                 return $record;
             });
@@ -67,6 +70,28 @@ class RcspWorkflowService
 
             throw $exception;
         }
+    }
+
+    private function provisionCatalogActivities(RcspBarangay $barangay, Collection $phases): void
+    {
+        $now = now();
+        $rows = [];
+
+        foreach ($phases as $phase) {
+            foreach (RcspActivityCatalog::ACTIVITIES[(int) $phase->number] ?? [] as $description) {
+                $rows[] = [
+                    'rcsp_phase_id' => $phase->id,
+                    'rcsp_barangay_id' => $barangay->id,
+                    'created_by_user_id' => null,
+                    'description' => $description,
+                    'normalized_title' => RcspActivity::normalizeTitle($description),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+        }
+
+        DB::table('rcsp_activities')->insert($rows);
     }
 
     public function createActivity(

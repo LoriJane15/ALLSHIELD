@@ -120,7 +120,9 @@ class RcspDemoSeederTest extends TestCase
         $this->assertSame(RcspPhase::CONFIGURABLE_CATALOG_KEY, $record->catalog_key);
         $phase = RcspPhase::where('catalog_key', RcspPhase::CONFIGURABLE_CATALOG_KEY)
             ->where('number', 0)->firstOrFail();
-        $this->assertSame(0, RcspActivity::forBarangayPhase($record, $phase)->count());
+        $activities = RcspActivity::forBarangayPhase($record, $phase)->get();
+        $this->assertCount(5, $activities);
+        $this->assertTrue($activities->every(fn (RcspActivity $activity) => ! str_contains(strtolower($activity->description), 'demo')));
     }
 
     private function setDemoPassword(?string $password): void
