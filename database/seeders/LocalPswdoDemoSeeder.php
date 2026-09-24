@@ -8,7 +8,6 @@ use App\Enums\Ib39FrCategory;
 use App\Enums\JapicCertificationStatus;
 use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Barangay;
-use App\Models\Ib39CdrProcessing;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationProcessing;
 use App\Models\Municipality;
@@ -18,11 +17,16 @@ use App\Services\PswdoEnrollmentIntakeService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class LocalPswdoDemoSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment('testing')) {
+            throw new RuntimeException('PSWDO fixture seeding is permitted only in the automated test environment.');
+        }
+
         $municipality = Municipality::firstOrCreate(['name' => 'DEMO Municipality']);
         $ib39 = User::where('username', 'ib39_officer')->firstOrFail();
         $japic = User::where('username', 'japic_officer')->firstOrFail();

@@ -11,10 +11,10 @@ class LocalUserAccountsSeeder extends Seeder
 {
     public function run(): void
     {
-        $municipality = Municipality::firstOrCreate(['name' => 'Demo Municipality']);
+        $municipality = Municipality::firstOrCreate(['name' => 'Digos City']);
         $agency = GovAgency::firstOrCreate(
-            ['acronym' => 'DGA'],
-            ['name' => 'Demo Government Agency'],
+            ['acronym' => 'DOH'],
+            ['name' => 'Department of Health'],
         );
 
         $password = 'Shield-Local-2026-Test!';

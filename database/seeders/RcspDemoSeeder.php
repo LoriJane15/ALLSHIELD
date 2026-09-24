@@ -30,8 +30,8 @@ class RcspDemoSeeder extends Seeder
 
     public function run(): void
     {
-        if (! app()->environment(['local', 'testing'])) {
-            throw new RuntimeException('RCSP demo seeding is permitted only in local or testing environments.');
+        if (! app()->environment('testing')) {
+            throw new RuntimeException('RCSP fixture seeding is permitted only in the automated test environment.');
         }
         $password = (string) env('RCSP_DEMO_PASSWORD', '');
         if (strlen($password) < 12 || ! preg_match('/[a-z]/', $password) || ! preg_match('/[A-Z]/', $password) || ! preg_match('/\d/', $password)) {

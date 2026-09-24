@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\AgencyImplanResponse;
 use App\Models\Barangay;
 use App\Models\ChatConversation;
-use App\Models\ChatConversationRead;
 use App\Models\ChatMessage;
 use App\Models\ColorHistory;
 use App\Models\FormerRebel;
@@ -15,20 +15,28 @@ use App\Models\FrLocationHistory;
 use App\Models\FrProgramStatus;
 use App\Models\FrSkill;
 use App\Models\GovAgency;
+use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Implementation;
 use App\Models\ImplementationTagging;
+use App\Models\JapicCertificationProcessing;
 use App\Models\MapBarangay;
 use App\Models\Municipality;
 use App\Models\RcspFileComment;
 use App\Models\RcspForm;
 use App\Models\User;
+use App\Services\Ib39SurfacedFormerRebelService;
+use App\Services\PswdoEnrollmentIntakeService;
 use Illuminate\Database\Seeder;
+use RuntimeException;
 
 class LocalInterconnectedDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        // This local-only catalog supplies connected RCSP barangays, phases, forms, and reviewers.
+        if (! app()->environment('testing')) {
+            throw new RuntimeException('Interconnected fixture seeding is permitted only in the automated test environment.');
+        }
+
         $demoPassword = 'Shield-Local-2026-Test!';
         putenv("RCSP_DEMO_PASSWORD={$demoPassword}");
         $_ENV['RCSP_DEMO_PASSWORD'] = $demoPassword;
@@ -209,15 +217,15 @@ class LocalInterconnectedDemoSeeder extends Seeder
                 ['Pedro', 'Penduko', 'UGMOs/Underground Mass Organization', 'DEMO Submitted Barangay', true, 'Voluntarily yielded service weapon.'],
             ];
 
-            $frService = app(\App\Services\Ib39SurfacedFormerRebelService::class);
+            $frService = app(Ib39SurfacedFormerRebelService::class);
 
             foreach ($surfacedSamples as $index => [$firstName, $lastName, $category, $bName, $hasFirearms, $remarks]) {
                 $targetBarangay = $barangays->first(fn (Barangay $record) => $record->name === $bName);
-                $surfacedFr = \App\Models\Ib39SurfacedFormerRebel::where('first_name', $firstName)
+                $surfacedFr = Ib39SurfacedFormerRebel::where('first_name', $firstName)
                     ->where('last_name', $lastName)
                     ->first();
 
-                if (!$surfacedFr) {
+                if (! $surfacedFr) {
                     $surfacedFr = $frService->create([
                         'first_name' => $firstName,
                         'last_name' => $lastName,
@@ -239,7 +247,7 @@ class LocalInterconnectedDemoSeeder extends Seeder
                     'completed_by' => $ib39Officer->id,
                 ]);
 
-                if (!$cdr->current_final_version_id) {
+                if (! $cdr->current_final_version_id) {
                     $cdrVersion = $cdr->documentVersions()->create([
                         'version_number' => 1,
                         'source_type' => 'uploaded',
@@ -255,7 +263,7 @@ class LocalInterconnectedDemoSeeder extends Seeder
                 }
 
                 // Create Completed JAPIC Certification
-                $japic = $surfacedFr->japicCertificationProcessing ?: \App\Models\JapicCertificationProcessing::firstOrCreate(
+                $japic = $surfacedFr->japicCertificationProcessing ?: JapicCertificationProcessing::firstOrCreate(
                     ['ib39_surfaced_former_rebel_id' => $surfacedFr->id],
                     [
                         'triggering_cdr_document_version_id' => $cdr->current_final_version_id,
@@ -268,7 +276,7 @@ class LocalInterconnectedDemoSeeder extends Seeder
                     ]
                 );
 
-                if (!$japic->current_final_version_id) {
+                if (! $japic->current_final_version_id) {
                     $japicVersion = $japic->documentVersions()->create([
                         'version_number' => 1,
                         'storage_path' => "japic/certifications/{$japic->id}/final-documents/final.pdf",
@@ -285,12 +293,12 @@ class LocalInterconnectedDemoSeeder extends Seeder
                 }
 
                 // Automatically Receive into PSWDO
-                $enrollment = app(\App\Services\PswdoEnrollmentIntakeService::class)->receiveEligible($surfacedFr->id);
+                $enrollment = app(PswdoEnrollmentIntakeService::class)->receiveEligible($surfacedFr->id);
 
                 // If it's the first sample, add sample documents to make it partially or fully completed
                 if ($enrollment && $index === 0 && $pswdoOfficer) {
-                    foreach ([\App\Enums\PswdoEnrollmentDocumentType::EclipEnrollmentForm, \App\Enums\PswdoEnrollmentDocumentType::InitialInterviewForm] as $docType) {
-                        if (!$enrollment->hasDocument($docType)) {
+                    foreach ([PswdoEnrollmentDocumentType::EclipEnrollmentForm, PswdoEnrollmentDocumentType::InitialInterviewForm] as $docType) {
+                        if (! $enrollment->hasDocument($docType)) {
                             $enrollment->documents()->create([
                                 'document_type' => $docType,
                                 'storage_path' => "pswdo/enrollments/{$enrollment->id}/{$docType->value}.pdf",
