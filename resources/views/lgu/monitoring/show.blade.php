@@ -3,7 +3,6 @@
 @section('heading', 'RCSP Implementation Monitoring Form')
 
 @php
-    $phaseDesc = [0 => 'Pre-Shaping', 1 => 'Shape', 2 => 'Access', 3 => 'Transform', 4 => 'Sustain', 5 => 'Monitor'];
     $statusBadge = fn ($s) => match ($s) {
         'submitted', 'updated' => 'bg-primary',
         'approved' => 'bg-success',
@@ -13,7 +12,12 @@
         default => 'bg-secondary',
     };
     $cur = $rcspBarangay->current_phase;
-    $allApproved = $activities->isNotEmpty() && $activities->every(fn ($a) => optional($forms->get($a->id))->status === 'approved');
+    $returnedStatuses = ['disapproved', 'to be complied', 'to be conducted'];
+    $allApproved = $activities->isNotEmpty() && $activities->every(function ($activity) use ($forms) {
+        $form = $forms->get($activity->id);
+
+        return $form?->status === 'approved' && filled($form->file);
+    });
 @endphp
 
 @push('styles')
@@ -60,6 +64,12 @@
 @endpush
 
 @section('content')
+    @if ($rcspBarangay->catalog_key === 'rcsp-demo-v1')
+        @include('rcsp._demo_notice')
+    @endif
+    @if ($errors->any())
+        <div class="alert alert-danger"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
+    @endif
     <div class="row mb-3">
         <div class="col-9 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">
@@ -93,7 +103,7 @@
                                 <span class="number">{{ str_pad($p->number, 2, '0', STR_PAD_LEFT) }}</span>
                                 <div class="label-container">
                                     <span class="phase-label">Phase {{ $p->number }}</span>
-                                    <span class="phase-desc">{{ $phaseDesc[$p->number] ?? '' }}</span>
+                                    <span class="phase-desc">{{ $p->display_name }}</span>
                                 </div>
                             </div>
                         </div>
@@ -106,7 +116,7 @@
 
     <div class="row mb-3">
         <div class="col-12">
-            <h4 class="font-weight-bold" style="color: #403e92;">Phase {{ $cur }}: {{ $currentPhase->name }}</h4>
+            <h4 class="font-weight-bold" style="color: #403e92;">Phase {{ $cur }}: {{ $currentPhase->display_name }}</h4>
         </div>
     </div>
 
@@ -116,55 +126,101 @@
             <p class="mt-2 font-weight-bold mb-0">RCSP monitoring completed for this barangay.</p>
         </div></div>
     @else
-        <form method="POST" action="{{ route('lgu.monitoring.submit', $rcspBarangay) }}" enctype="multipart/form-data">
-            @csrf
-            <input type="hidden" name="phase_id" value="{{ $currentPhase->id }}">
-            <div class="card">
-                <div class="card-body pb-2">
-                    <div class="table-responsive">
-                        <table class="table table-fixed">
+        @can('createActivity', $rcspBarangay)
+            <div class="card mb-3">
+                <div class="card-body">
+                    <form method="POST" action="{{ route('lgu.activities.store', $rcspBarangay) }}" class="row g-2 align-items-end">
+                        @csrf
+                        <div class="col-md-10">
+                            <label for="activity-title" class="form-label">New activity title</label>
+                            <input id="activity-title" type="text" name="title" value="{{ old('title') }}"
+                                   maxlength="255" required class="form-control" autocomplete="off">
+                        </div>
+                        <div class="col-md-2 d-grid">
+                            <button type="submit" class="btn btn-primary">Add Activity</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endcan
+
+        <div class="card">
+            <div class="card-body pb-2">
+                <div class="table-responsive">
+                    <table class="table table-fixed">
                             <thead>
                                 <tr>
-                                    <th style="width:30%">Activities</th>
+                                    <th style="width:26%">Activities</th>
                                     <th style="width:18%">Conduct of the Activity</th>
-                                    <th style="width:24%">Mode of Verification</th>
+                                    <th style="width:22%">Mode of Verification</th>
                                     <th style="width:14%">Status</th>
-                                    <th style="width:14%">Remarks</th>
+                                    <th style="width:12%">Remarks</th>
+                                    <th style="width:8%">Submit</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse ($activities as $activity)
-                                    @php $form = $forms->get($activity->id); $locked = $form && $form->status === 'approved'; @endphp
-                                    <tr class="{{ $locked ? 'bg-light' : '' }}">
-                                        <td class="text-wrap">{{ $activity->description }}</td>
+                                    @php
+                                        $form = $forms->get($activity->id);
+                                        $canSubmit = ! $form || in_array($form->status, $returnedStatuses, true);
+                                        $submissionFormId = 'activity-submission-'.$activity->id;
+                                    @endphp
+                                    <tr class="{{ $form?->status === 'approved' ? 'bg-light' : '' }}">
+                                        <td class="text-wrap">
+                                            <form id="{{ $submissionFormId }}" method="POST"
+                                                  action="{{ route('lgu.monitoring.submit', [$rcspBarangay, $activity]) }}"
+                                                  enctype="multipart/form-data">@csrf</form>
+                                            <div>{{ $activity->description }}</div>
+                                            @can('updateActivity', [$rcspBarangay, $activity])
+                                                <form method="POST" action="{{ route('lgu.activities.update', [$rcspBarangay, $activity]) }}"
+                                                      class="d-flex gap-1 mt-2">
+                                                    @csrf @method('PATCH')
+                                                    <input type="text" name="title" value="{{ $activity->description }}"
+                                                           maxlength="255" required class="form-control form-control-sm">
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Correct</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('lgu.activities.destroy', [$rcspBarangay, $activity]) }}"
+                                                      class="mt-1" data-confirm="Delete this activity?"
+                                                      data-confirm-title="Confirm delete" data-confirm-action="Delete">
+                                                    @csrf @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                                </form>
+                                            @endcan
+                                        </td>
                                         <td>
                                             <div class="conduct-options">
                                                 @foreach (['yes' => '<i class="ti-check text-success"></i>', 'no' => '<i class="ti-close text-danger"></i>', 'n/a' => '<span class="text-dark small">N/A</span>'] as $val => $icon)
                                                     <label class="conduct-opt">
-                                                        <input type="radio" name="conduct_{{ $activity->id }}" value="{{ $val }}"
-                                                               class="form-check-input" @checked($form?->conduct === $val) @disabled($locked)>
+                                                        <input type="radio" name="conduct" value="{{ $val }}" form="{{ $submissionFormId }}"
+                                                               class="form-check-input" @checked(old('conduct', $form?->conduct) === $val)
+                                                               @disabled(! $canSubmit) @required($canSubmit)>
                                                         {!! $icon !!}
                                                     </label>
                                                 @endforeach
                                             </div>
                                         </td>
                                         <td>
-                                            @unless ($locked)
+                                            @if ($canSubmit)
                                                 <label class="file-drop">
-                                                    <input type="file" name="file_{{ $activity->id }}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                           class="file-input" hidden>
+                                                     <input type="file" name="evidence" form="{{ $submissionFormId }}"
+                                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="file-input" hidden
+                                                            @required(! $form)>
                                                     <i class="mdi mdi-cloud-upload-outline file-drop-icon"></i>
-                                                    <span class="file-drop-text">Click to upload evidence</span>
+                                                    <span class="file-drop-text">{{ $form ? 'Replace evidence (optional)' : 'Click to upload evidence' }}</span>
                                                     <span class="file-name"></span>
                                                 </label>
-                                                <small class="text-muted d-block mt-1">PDF, image or Word · max 25MB</small>
+                                                <small class="text-muted d-block mt-1">PDF, JPG, PNG, DOC or DOCX · max {{ $maxEvidenceMegabytes }} MB. Evidence is required for every conduct choice, including N/A.</small>
                                             @else
-                                                <span class="badge bg-success"><i class="ti-check me-1"></i>Approved — locked</span>
-                                            @endunless
+                                                <span class="badge bg-secondary">Submission locked</span>
+                                            @endif
+                                            @if ($form?->file)
+                                                <a href="{{ route('lgu.monitoring.file', $form) }}" class="small d-block mt-1">View version {{ $form->submission_version }} evidence</a>
+                                            @endif
                                         </td>
                                         <td>
                                             @if ($form)
                                                 <span class="badge {{ $statusBadge($form->status) }}">{{ ucfirst($form->status) }}</span>
+                                                <span class="d-block small text-muted mt-1">Version {{ $form->submission_version }}</span>
                                             @else
                                                 <span class="badge bg-secondary">Pending</span>
                                             @endif
@@ -182,22 +238,25 @@
                                                 <span class="text-muted small">—</span>
                                             @endif
                                         </td>
+                                        <td>
+                                            @if ($canSubmit)
+                                                <button type="submit" form="{{ $submissionFormId }}" class="btn btn-sm btn-primary">
+                                                    {{ $form ? 'Resubmit' : 'Submit' }}
+                                                </button>
+                                            @else
+                                                <span class="text-muted small">—</span>
+                                            @endif
+                                        </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="5" class="text-center text-muted py-4">No activities in this phase.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No activities in this phase. Add an activity before submitting or advancing.</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
 
-                    @unless ($allApproved)
-                        <div class="d-flex justify-content-end mt-3">
-                            <button type="submit" class="btn btn-primary">Submit</button>
-                        </div>
-                    @endunless
                 </div>
             </div>
-        </form>
 
         @if ($allApproved)
             <div class="d-flex justify-content-end mt-2 mb-3">
@@ -213,7 +272,7 @@
 
     {{-- View Phases modal (approved compliance report) --}}
     <div class="modal fade" id="phasesModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h3 class="modal-title"><i class="mdi mdi-format-list-checks me-2"></i>RCSP Compliance Report</h3>

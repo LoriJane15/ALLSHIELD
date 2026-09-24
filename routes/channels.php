@@ -20,11 +20,7 @@ Broadcast::channel('rcsp-form.{formId}', function (User $user, int $formId) {
         return false;
     }
 
-    return match ($user->role) {
-        // Katuparan Center reviews every submission; AFP observes.
-        'admin', 'super_admin', 'afp' => true,
-        // An LGU only sees threads for its own municipality.
-        'lgu' => $user->municipality_id === $form->rcspBarangay?->municipality_id,
-        default => false,
-    };
+    return $user->can('comment', $form);
 });
+
+Broadcast::channel('rcsp-areas', fn (User $user): bool => $user->is_active && $user->role === '39th_ib');

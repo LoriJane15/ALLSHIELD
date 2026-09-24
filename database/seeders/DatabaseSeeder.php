@@ -2,17 +2,24 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
+    use WithoutModelEvents;
+
     /**
-     * Seed the application's database with the full SHIELD dataset carried over
-     * from the legacy system. Runs on `php artisan migrate --seed` or
-     * `php artisan db:seed`, so a fresh clone has every record.
+     * Seed the application's database.
      */
     public function run(): void
     {
-        $this->call(LegacyDataSeeder::class);
+        // User::factory(10)->create();
+
+        User::factory()->create([
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+        ]);
     }
 }

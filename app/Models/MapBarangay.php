@@ -3,69 +3,85 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MapBarangay extends Model
 {
+    public const DEFAULT_PROVINCE = 'Davao del Sur';
+
+    public const NEUTRAL_COLOR = 'rgba(190,178,151,0.1)';
+
+    /**
+     * The single authoritative RCSP classification definition.
+     * Keep the bands ordered from highest to lowest minimum count.
+     */
+    public const CLASSIFICATIONS = [
+        ['minimum' => 20, 'status' => 'Konsolidado', 'color' => 'rgba(255,0,0,0.5)', 'label' => '20 or more FRs'],
+        ['minimum' => 15, 'status' => 'Rekonsilido', 'color' => 'rgba(255,165,0,0.5)', 'label' => '15–19 FRs'],
+        ['minimum' => 10, 'status' => 'Expansion', 'color' => 'rgba(255,255,0,0.5)', 'label' => '10–14 FRs'],
+        ['minimum' => 0, 'status' => 'Recovery', 'color' => 'rgba(0,255,0,0.5)', 'label' => '0–9 FRs'],
+    ];
+
     protected $fillable = [
-        'fid', 'province', 'municipality', 'barangay',
+        'fid', 'barangay_id', 'province', 'municipality', 'barangay',
         'geometry', 'frs', 'status', 'infestation_color', 'rebels',
     ];
 
     protected $casts = [
-        // The GeoJSON geometry object (a MultiPolygon) for this barangay.
         'geometry' => 'array',
     ];
+
+    private static ?array $ruleCache = null;
+
+    public function barangayRecord(): BelongsTo
+    {
+        return $this->belongsTo(Barangay::class, 'barangay_id');
+    }
 
     public function colorHistories(): HasMany
     {
         return $this->hasMany(ColorHistory::class);
     }
 
-    /**
-     * Legend for the choropleth, in the same order the legacy map showed it.
-     * Keep in sync with classify().
-     */
-    public const LEGEND = [
-        ['status' => 'Konsolidado', 'color' => 'rgba(255,0,0,0.5)',   'label' => '20 or more FRs'],
-        ['status' => 'Rekonsilida', 'color' => 'rgba(255,165,0,0.5)', 'label' => '15–19 FRs'],
-        ['status' => 'Expansion',   'color' => 'rgba(255,255,0,0.5)', 'label' => '10–14 FRs'],
-        ['status' => 'Recovery',    'color' => 'rgba(0,255,0,0.5)',   'label' => 'Fewer than 10 FRs'],
-    ];
+    public function latestColorHistory(): HasOne
+    {
+        return $this->hasOne(ColorHistory::class)
+            ->ofMany(['effective_date' => 'max', 'id' => 'max']);
+    }
 
     /**
-     * RCSP infestation classification by former-rebel count, driven by the
-     * admin-editable infestation_rules table (highest matching threshold wins).
-     * Falls back to the legacy LEGEND if the table is empty or unavailable.
+     * RCSP infestation classification by former-rebel count.
+     * Thresholds and colors preserved from the legacy 39th-IB module.
      */
     public static function classify(int $frs): array
     {
-        foreach (self::rules() as $rule) {
-            if ($frs >= $rule['min_frs']) {
-                return ['status' => $rule['status'], 'color' => $rule['color']];
+        if ($frs < 0) {
+            throw new \InvalidArgumentException('Former-rebel count cannot be negative.');
+        }
+
+        foreach (self::rules() as $classification) {
+            if ($frs >= $classification['minimum']) {
+                return [
+                    'status' => $classification['status'],
+                    'color' => $classification['color'],
+                ];
             }
         }
 
-        // No rule matched (every threshold is above this count) — lowest band.
-        $bands = self::legend();
-        $last = end($bands) ?: ['status' => 'Recovery', 'color' => 'rgba(0,255,0,0.5)'];
-
-        return ['status' => $last['status'], 'color' => $last['color']];
+        return ['status' => 'Recovery', 'color' => 'rgba(0,255,0,0.5)'];
     }
 
-    /** The classification bands for the legend, ordered highest threshold first. */
     public static function legend(): array
     {
-        $rules = self::rules();
-
-        return $rules ?: self::LEGEND;
+        return self::rules();
     }
 
-    /**
-     * Cached rules, highest min_frs first. Cached per-request so a hot path like
-     * a bulk re-classify does not hit the table for every row.
-     */
-    private static ?array $ruleCache = null;
+    public static function forgetRuleCache(): void
+    {
+        self::$ruleCache = null;
+    }
 
     private static function rules(): array
     {
@@ -74,20 +90,21 @@ class MapBarangay extends Model
         }
 
         try {
-            self::$ruleCache = InfestationRule::orderByDesc('min_frs')->orderBy('sort_order')
+            $rules = InfestationRule::query()
+                ->orderByDesc('min_frs')
+                ->orderBy('sort_order')
                 ->get(['min_frs', 'status', 'color', 'label'])
-                ->map(fn ($r) => $r->toArray())
+                ->map(fn (InfestationRule $rule) => [
+                    'minimum' => $rule->min_frs,
+                    'status' => $rule->status,
+                    'color' => $rule->color,
+                    'label' => $rule->label,
+                ])
                 ->all();
+
+            return self::$ruleCache = $rules ?: self::CLASSIFICATIONS;
         } catch (\Throwable) {
-            self::$ruleCache = [];
+            return self::$ruleCache = self::CLASSIFICATIONS;
         }
-
-        return self::$ruleCache;
-    }
-
-    /** Drop the per-request rule cache after the rules are edited. */
-    public static function forgetRuleCache(): void
-    {
-        self::$ruleCache = null;
     }
 }

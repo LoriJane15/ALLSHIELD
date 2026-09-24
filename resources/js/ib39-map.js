@@ -6,10 +6,8 @@ import L from 'leaflet';
  *
  * Same behaviour as the original:
  *   - Google Satellite basemap (identical XYZ endpoint).
- *   - Every barangay polygon filled rgba(0,255,0,0.5) with a rgba(35,35,35,1)
- *     hairline, which is what the legacy `scanAndUpdateBarangayColors()` painted.
- *   - Clicking a barangay opens the right-hand panel and loads its details plus
- *     the last five colour-history entries.
+ *   - Barangay polygons use the current server-classified RCSP color.
+ *   - Clicking a canonically matched barangay loads its complete history.
  *   - Layer switcher and a barangay/municipality search box.
  *
  * Rebuilt on Leaflet (already bundled) rather than shipping the 6.6MB
@@ -18,8 +16,8 @@ import L from 'leaflet';
 
 const DAVAO_SUR = [6.7497, 125.3572];
 
-// Legacy default fill: the "Recovery" green every barangay is painted on load.
-const DEFAULT_FILL = 'rgba(0, 255, 0, 0.5)';
+// Recovery arrives from the server as rgba(0, 255, 0, 0.5); unmatched polygons stay neutral.
+const NEUTRAL_FILL = 'rgba(190,178,151,0.1)';
 const STROKE = 'rgba(35,35,35,1.0)';
 
 export function initIb39FullMap() {
@@ -56,19 +54,12 @@ export function initIb39FullMap() {
     let areaData = {};
     const municipalityLayers = {};
 
-    // Two colouring modes. Legacy painted EVERY polygon flat green (the default
-    // here); "status" colours each barangay by its infestation rule colour.
-    let colorMode = 'flat';
-
-    const styleFor = (feature) => {
-        let fill = DEFAULT_FILL;
-        if (colorMode === 'status' && feature) {
-            const area = areaData[keyFor(feature)];
-            if (area?.color) fill = area.color;
-        }
-
-        return { fillColor: fill, fillOpacity: 1, color: STROKE, weight: 0.988 };
-    };
+    const styleFor = (feature) => ({
+        fillColor: currentArea(areaData, feature)?.color || NEUTRAL_FILL,
+        fillOpacity: 1,
+        color: STROKE,
+        weight: 0.988,
+    });
 
     Promise.all([
         fetch(el.dataset.geojson).then((r) => r.json()),
@@ -100,7 +91,7 @@ export function initIb39FullMap() {
                             // and the history panel on the right.
                             lyr.bindPopup(() => popupHtml(p), { minWidth: 240 });
                             lyr.on('click', () => {
-                                openDetail(el, sidebar, p.municipality, p.barangay);
+                                openDetail(el, sidebar, p);
                                 fillPopup(el, lyr, p);
                             });
                             lyr.on('mouseover', () => lyr.setStyle({ weight: 2.5 }));
@@ -121,35 +112,10 @@ export function initIb39FullMap() {
         map.fitBounds(bounds.reduce((acc, b) => acc.extend(b), L.latLngBounds(bounds[0])), { padding: [12, 12] });
 
         addSearch(map, el, sidebar, index);
-        addColorToggle(map, () => {
-            colorMode = colorMode === 'flat' ? 'status' : 'flat';
-            Object.values(municipalityLayers).forEach((lg) => lg.setStyle(styleFor));
-            return colorMode;
-        });
         listenForUpdates(el, municipalityLayers, styleFor, (fresh) => {
             areaData = fresh;
         });
     });
-}
-
-/** A small control that flips the map between flat green and colour-by-status. */
-function addColorToggle(map, toggle) {
-    const control = L.control({ position: 'bottomright' });
-
-    control.onAdd = () => {
-        const wrap = L.DomUtil.create('div', 'ib39-color-toggle');
-        wrap.innerHTML = '<button type="button">Colour: <strong>Flat</strong></button>';
-        L.DomEvent.disableClickPropagation(wrap);
-
-        wrap.querySelector('button').addEventListener('click', (e) => {
-            const mode = toggle();
-            e.currentTarget.querySelector('strong').textContent = mode === 'status' ? 'By status' : 'Flat';
-        });
-
-        return wrap;
-    };
-
-    control.addTo(map);
 }
 
 const fetchAreas = (el) =>
@@ -165,7 +131,7 @@ const fetchAreas = (el) =>
 function listenForUpdates(el, municipalityLayers, styleFor, onData) {
     if (!window.Echo) return;
 
-    window.Echo.channel('rcsp-areas').listen('.area.updated', () => {
+    window.Echo.private('rcsp-areas').listen('.area.updated', () => {
         fetchAreas(el).then((fresh) => {
             onData(fresh);
             Object.values(municipalityLayers).forEach((lg) => lg.setStyle(styleFor));
@@ -173,11 +139,17 @@ function listenForUpdates(el, municipalityLayers, styleFor, onData) {
     });
 }
 
-const keyFor = (f) => `${f.properties.municipality}|${f.properties.barangay}`;
+const currentArea = (areas, feature) => {
+    const barangayId = feature?.properties?.barangay_id;
+
+    return barangayId ? areas[String(barangayId)] : null;
+};
 
 /** Legacy showSidebar(): fetch the row + colour history, then slide the panel in. */
-function openDetail(el, sidebar, municipality, barangay) {
+function openDetail(el, sidebar, properties) {
     if (!sidebar) return;
+
+    const { barangay_id: barangayId, municipality, barangay } = properties;
 
     sidebar.classList.add('active');
     setText('province-value', '…');
@@ -186,26 +158,31 @@ function openDetail(el, sidebar, municipality, barangay) {
     setText('status-value', '…');
     setText('fr-count-value', '…');
 
-    const url = `${el.dataset.detail}?municipality=${encodeURIComponent(municipality)}&barangay=${encodeURIComponent(barangay)}`;
+    if (!barangayId) {
+        const swatch = document.getElementById('infestation-color');
+        if (swatch) swatch.style.backgroundColor = NEUTRAL_FILL;
+        setText('province-value', 'Davao del Sur');
+        setText('status-value', 'Not yet assessed');
+        setText('fr-count-value', '0');
+        renderHistory([]);
+
+        return;
+    }
+
+    const url = `${el.dataset.detail}?barangay_id=${encodeURIComponent(barangayId)}`;
 
     fetch(url, { headers: { Accept: 'application/json' } })
         .then((r) => r.json())
         .then((data) => {
-            if (data.error) {
-                setText('status-value', 'No record for this location');
-                renderHistory([]);
-                return;
-            }
-
             const swatch = document.getElementById('infestation-color');
-            if (swatch) swatch.style.backgroundColor = data.infestation_color || DEFAULT_FILL;
+            if (swatch) swatch.style.backgroundColor = data.color || NEUTRAL_FILL;
 
             setText('province-value', data.province ?? '—');
             setText('municipality-value', data.municipality ?? municipality);
             setText('barangay-value', data.barangay ?? barangay);
             setText(
                 'status-value',
-                (data.status || 'Not yet assessed') + (data.is_rcsp ? ' · RCSP barangay' : ''),
+                data.status || 'Not yet assessed',
             );
             setText('fr-count-value', String(data.frs ?? 0));
 
@@ -234,7 +211,7 @@ function renderHistory(items) {
                 <div class="history-content">
                     <div class="history-status">${escapeHtml(item.status)}</div>
                     <div class="history-fr">FR's: ${escapeHtml(item.frs ?? '0')}</div>
-                    <div class="history-timestamp">${escapeHtml(item.formatted_timestamp ?? '')}</div>
+                    <div class="history-timestamp">Effective ${escapeHtml(item.effective_date ?? '')}</div>
                 </div>
             </div>`,
         )
@@ -271,7 +248,7 @@ function addSearch(map, el, sidebar, index) {
                     li.textContent = e.name;
                     li.addEventListener('click', () => {
                         map.fitBounds(e.layer.getBounds(), { maxZoom: 14 });
-                        openDetail(el, sidebar, e.props.municipality, e.props.barangay);
+                        openDetail(el, sidebar, e.props);
                         list.hidden = true;
                         input.value = e.name;
                     });
@@ -293,7 +270,6 @@ function popupHtml(p, data = null) {
         `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value ?? '—')}</td></tr>`;
 
     return (
-        `${data?.is_rcsp ? '<span class="rcsp-badge">RCSP</span>' : ''}` +
         '<table class="ib39-popup-table">' +
         cell('Barangay', p.barangay) +
         cell('Municipality', p.municipality) +
@@ -306,12 +282,22 @@ function popupHtml(p, data = null) {
 
 /** Fill the popup with the live figures once the detail request returns. */
 function fillPopup(el, lyr, p) {
-    const url = `${el.dataset.detail}?municipality=${encodeURIComponent(p.municipality)}&barangay=${encodeURIComponent(p.barangay)}`;
+    if (!p.barangay_id) {
+        lyr.setPopupContent(popupHtml(p, {
+            province: 'Davao del Sur',
+            frs: 0,
+            status: null,
+        }));
+
+        return;
+    }
+
+    const url = `${el.dataset.detail}?barangay_id=${encodeURIComponent(p.barangay_id)}`;
 
     fetch(url, { headers: { Accept: 'application/json' } })
         .then((r) => r.json())
         .then((data) => {
-            if (!data.error) lyr.setPopupContent(popupHtml(p, data));
+            lyr.setPopupContent(popupHtml(p, data));
         })
         .catch(() => {});
 }

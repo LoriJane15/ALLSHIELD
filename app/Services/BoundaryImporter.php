@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Barangay;
 use App\Models\MapBarangay;
 use Illuminate\Support\Facades\DB;
 
@@ -14,9 +15,9 @@ class BoundaryImporter
 {
     /**
      * @param  array  $featureCollection  decoded GeoJSON
-     * @param  bool   $create   create rows for features with no name match
-     * @param  bool   $replace  clear ALL geometry first, so features dropped from
-     *                          the file disappear from the map
+     * @param  bool  $create  create rows for features with no name match
+     * @param  bool  $replace  clear ALL geometry first, so features dropped from
+     *                         the file disappear from the map
      * @return array{matched:int,created:int,skipped:int,errors:list<string>}
      */
     public function import(array $featureCollection, bool $create = false, bool $replace = false): array
@@ -35,6 +36,10 @@ class BoundaryImporter
 
             foreach ($featureCollection['features'] as $i => $feature) {
                 $p = $feature['properties'] ?? [];
+                $barangayId = isset($p['barangay_id']) ? (int) $p['barangay_id'] : null;
+                if ($barangayId && ! Barangay::whereKey($barangayId)->exists()) {
+                    $barangayId = null;
+                }
                 $municipality = trim($p['municipality'] ?? $p['NAME_2'] ?? '');
                 $barangay = trim($p['barangay'] ?? $p['NAME_3'] ?? '');
                 $geometry = $feature['geometry'] ?? null;
@@ -48,7 +53,11 @@ class BoundaryImporter
                     continue;
                 }
 
-                $row = MapBarangay::where('municipality', $municipality)->where('barangay', $barangay)->first();
+                $row = $barangayId
+                    ? MapBarangay::where('barangay_id', $barangayId)->first()
+                    : null;
+
+                $row ??= MapBarangay::where('municipality', $municipality)->where('barangay', $barangay)->first();
 
                 if (! $row) {
                     if (! $create) {
@@ -57,6 +66,7 @@ class BoundaryImporter
                         continue;
                     }
                     $row = new MapBarangay([
+                        'barangay_id' => $barangayId,
                         'municipality' => $municipality,
                         'barangay' => $barangay,
                         'province' => 'Davao del Sur',

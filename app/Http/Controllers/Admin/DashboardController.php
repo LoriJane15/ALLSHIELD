@@ -88,16 +88,26 @@ class DashboardController extends Controller
         return response()->json($rows);
     }
 
-    /** Barangay boundaries from the DB for the dashboard hero map (see Ib39\AreaController::boundaries). */
     public function boundaries(): JsonResponse
     {
-        $features = MapBarangay::whereNotNull('geometry')
-            ->get(['id', 'municipality', 'barangay', 'geometry'])
-            ->map(fn ($a) => [
-                'type' => 'Feature',
-                'geometry' => $a->geometry,
-                'properties' => ['id' => $a->id, 'municipality' => $a->municipality, 'barangay' => $a->barangay],
-            ])->values();
+        $features = MapBarangay::query()
+            ->with('barangayRecord.municipality')
+            ->whereNotNull('geometry')
+            ->get(['id', 'barangay_id', 'municipality', 'barangay', 'geometry'])
+            ->map(function (MapBarangay $area): array {
+                $barangay = $area->barangayRecord;
+
+                return [
+                    'type' => 'Feature',
+                    'geometry' => $area->geometry,
+                    'properties' => [
+                        'id' => $area->id,
+                        'barangay_id' => $area->barangay_id,
+                        'municipality' => $barangay?->municipality?->name ?? $area->municipality,
+                        'barangay' => $barangay?->name ?? $area->barangay,
+                    ],
+                ];
+            })->values();
 
         return response()->json(['type' => 'FeatureCollection', 'features' => $features]);
     }

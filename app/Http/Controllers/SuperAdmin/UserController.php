@@ -10,7 +10,9 @@ use App\Models\Municipality;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class UserController extends Controller
@@ -19,16 +21,31 @@ class UserController extends Controller
     {
         $users = User::query()
             ->with(['municipality', 'govAgency'])
-            ->when($request->search, fn ($q, $s) => $q->where('name', 'like', "%{$s}%")->orWhere('username', 'like', "%{$s}%"))
+            ->when($request->search, fn ($q, $s) => $q->where(fn ($search) => $search
+                ->where('name', 'like', "%{$s}%")
+                ->orWhere('username', 'like', "%{$s}%")))
             ->when($request->role, fn ($q, $r) => $q->where('role', $r))
             ->orderBy('role')->orderBy('name')
             ->paginate(15)->withQueryString();
+
+        $editingUserId = $request->session()->get('super_admin_edit_user_id');
+        $editingUser = $editingUserId ? User::query()->find($editingUserId) : null;
+
+        $stats = [
+            'total' => User::count(),
+            'roles_count' => count(config('shield.roles')),
+            'lgu_count' => User::where('role', 'lgu')->count(),
+            'agency_count' => User::where('role', 'gov_agency')->count(),
+            'core_admin_count' => User::whereIn('role', ['super_admin', 'admin'])->count(),
+        ];
 
         return view('super_admin.users.index', [
             'users' => $users,
             'roles' => config('shield.roles'),
             'municipalities' => Municipality::orderBy('name')->get(),
             'agencies' => GovAgency::orderBy('acronym')->get(),
+            'stats' => $stats,
+            'editingUser' => $editingUser,
         ]);
     }
 
@@ -50,30 +67,44 @@ class UserController extends Controller
     {
         $data = $request->validated();
         $data = $this->scopeRoleFields($data);
+        $data['is_active'] = $request->boolean('is_active');
 
         if (empty($data['password'])) {
             unset($data['password']);   // keep existing
         }
-        if ($request->hasFile('logo')) {
-            if ($user->logo) {
-                Storage::disk('public')->delete($user->logo);
-            }
-            $data['logo'] = $request->file('logo')->store('logos', 'public');
-        } else {
-            unset($data['logo']);
-        }
 
-        $user->update($data);
+        DB::transaction(function () use ($data, $request, $user): void {
+            $activeSuperAdministrators = User::query()
+                ->where('role', 'super_admin')
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+
+            $lockedUser = User::query()->lockForUpdate()->findOrFail($user->getKey());
+            $removesActiveSuperAdministrator = $lockedUser->role === 'super_admin'
+                && $lockedUser->is_active
+                && ($data['role'] !== 'super_admin' || ! $data['is_active']);
+
+            if ($removesActiveSuperAdministrator && $activeSuperAdministrators->count() <= 1) {
+                throw ValidationException::withMessages([
+                    'account_lifecycle' => 'At least one active Super Administrator account must remain.',
+                ]);
+            }
+
+            if ($request->hasFile('logo')) {
+                if ($lockedUser->logo) {
+                    Storage::disk('public')->delete($lockedUser->logo);
+                }
+                $data['logo'] = $request->file('logo')->store('logos', 'public');
+            } else {
+                unset($data['logo']);
+            }
+
+            $lockedUser->update($data);
+        });
 
         return back()->with('success', 'User updated.');
-    }
-
-    public function destroy(User $user): RedirectResponse
-    {
-        abort_if($user->id === auth()->id(), 403, 'You cannot delete your own account.');
-        $user->delete();
-
-        return back()->with('success', 'User deleted.');
     }
 
     /** Null out role-scoped FKs that don't apply to the chosen role. */

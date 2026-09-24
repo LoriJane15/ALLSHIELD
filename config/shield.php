@@ -8,6 +8,12 @@
 */
 
 return [
+    'jurisdiction' => [
+        'province' => 'Davao del Sur',
+    ],
+    'shared_nav' => [
+        ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*'], 'group' => 'Communication'],
+    ],
     'roles' => [
         'super_admin' => [
             'label' => 'Super Admin',
@@ -48,18 +54,20 @@ return [
         'mblrc' => [
             'label' => 'MBLRC',
             'nav' => [
-                ['label' => 'Dashboard',     'route' => 'mblrc.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
-                ['label' => 'Former Rebels', 'route' => 'mblrc.fr.index',  'icon' => 'user-group',  'skyicon' => 'icon-people'],
+                ['label' => 'Dashboard',     'route' => 'mblrc.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid',   'group' => 'Overview'],
+                ['label' => 'Former Rebels', 'route' => 'mblrc.fr.index',  'icon' => 'user-group',  'skyicon' => 'icon-people', 'group' => 'Reintegration'],
             ],
         ],
         '39th_ib' => [
             'label' => '39th IB',
             'nav' => [
-                ['label' => 'Dashboard', 'route' => 'ib39.dashboard',   'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
-                ['label' => 'Add Area',  'route' => 'ib39.areas.index', 'icon' => 'map-pin',     'skyicon' => 'icon-map'],
-                ['label' => 'Map',       'route' => 'ib39.map',         'icon' => 'map',         'skyicon' => 'icon-location-pin'],
-                ['label' => 'Boundary Editor', 'route' => 'ib39.boundaries.editor', 'icon' => 'pencil-square', 'skyicon' => 'icon-pencil'],
-                ['label' => 'Map Legend', 'route' => 'ib39.rules.index', 'icon' => 'swatch', 'skyicon' => 'icon-layers'],
+                ['label' => 'Dashboard',       'route' => 'ib39.dashboard',          'icon' => 'squares-2x2',    'skyicon' => 'icon-grid',         'group' => 'Overview'],
+                ['label' => 'FR Profiles',     'route' => 'ib39.fr-profiles.index',  'icon' => 'users',          'skyicon' => 'icon-people',       'group' => 'Former Rebels'],
+                ['label' => 'FEA Processing',  'route' => 'ib39.fea.index',          'icon' => 'document-text',  'skyicon' => 'icon-docs',         'group' => 'Former Rebels'],
+                ['label' => 'Area Management', 'route' => 'ib39.areas.index',        'icon' => 'map-pin',        'skyicon' => 'icon-map',          'group' => 'Area Monitoring'],
+                ['label' => 'Area Map',        'route' => 'ib39.map',                'icon' => 'map',            'skyicon' => 'icon-location-pin', 'group' => 'Area Monitoring'],
+                ['label' => 'Boundary Editor', 'route' => 'ib39.boundaries.editor',  'icon' => 'pencil-square',  'skyicon' => 'icon-pencil',       'group' => 'Area Monitoring'],
+                ['label' => 'Map Legend',      'route' => 'ib39.rules.index',         'icon' => 'swatch',         'skyicon' => 'icon-layers',       'group' => 'Area Monitoring'],
             ],
         ],
         'afp' => [
@@ -67,6 +75,20 @@ return [
             'nav' => [
                 ['label' => 'Dashboard',      'route' => 'afp.dashboard',   'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
                 ['label' => 'RCSP Barangays', 'route' => 'afp.rcsp.index',  'icon' => 'map',         'skyicon' => 'icon-map'],
+            ],
+        ],
+        'japic' => [
+            'label' => 'JAPIC',
+            'nav' => [
+                ['label' => 'Dashboard', 'route' => 'japic.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid'],
+                ['label' => 'FRs for Certification', 'route' => 'japic.certifications.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs'],
+            ],
+        ],
+        'pswdo' => [
+            'label' => 'PSWDO',
+            'nav' => [
+                ['label' => 'Dashboard', 'route' => 'pswdo.dashboard', 'icon' => 'squares-2x2', 'skyicon' => 'icon-grid', 'group' => 'Overview'],
+                ['label' => 'FRs for Enrollment', 'route' => 'pswdo.enrollments.index', 'icon' => 'document-check', 'skyicon' => 'icon-docs', 'group' => 'Enrollment'],
             ],
         ],
     ],

@@ -4,15 +4,23 @@ namespace App\Http\Controllers\Lgu;
 
 use App\Events\RcspCommentPosted;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Rcsp\AdvanceRcspPhaseRequest;
+use App\Http\Requests\Rcsp\StoreRcspActivityRequest;
+use App\Http\Requests\Rcsp\StoreRcspCommentRequest;
+use App\Http\Requests\Rcsp\SubmitRcspPhaseRequest;
+use App\Http\Requests\Rcsp\UpdateRcspActivityRequest;
 use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
 use App\Models\RcspPhase;
+use App\Services\RcspWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
  * RCSP phased monitoring form. A barangay progresses through 6 phases (0-5);
@@ -23,144 +31,121 @@ class MonitoringController extends Controller
 {
     public function show(RcspBarangay $rcspBarangay): View
     {
-        $this->authorizeMunicipality($rcspBarangay);
+        Gate::authorize('view', $rcspBarangay);
         $rcspBarangay->load('barangay', 'municipality');
 
-        $phases = RcspPhase::orderBy('number')->get();
+        $phases = RcspPhase::where('catalog_key', $rcspBarangay->catalog_key)->orderBy('number')->get();
         $currentPhase = $phases->firstWhere('number', $rcspBarangay->current_phase) ?? $phases->first();
+        abort_unless($currentPhase, 422, 'No phase catalog is available for this RCSP barangay.');
 
-        $activities = RcspActivity::where('rcsp_phase_id', $currentPhase->id)
-            ->orderBy('id')->get();
+        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)
+            ->withCount('forms')->orderBy('id')->get();
 
         // latest form row per activity for this barangay + phase (+ its comment thread)
         $forms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
             ->where('rcsp_phase_id', $currentPhase->id)
             ->with('fileComments.user')
-            ->get()
+            ->orderByDesc('submission_version')->orderByDesc('id')->get()
             ->groupBy('rcsp_activity_id')
-            ->map(fn ($g) => $g->sortByDesc('id')->first());
+            ->map(fn ($group) => $group->first());
 
         // approved phases (all activities approved) for the "View Phases" summary
         $approvedForms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
-            ->where('status', 'approved')
             ->with('activity', 'phase')
-            ->get()
+            ->orderByDesc('submission_version')->orderByDesc('id')->get()
+            ->unique(fn (RcspForm $form) => $form->rcsp_phase_id.'|'.$form->rcsp_activity_id)
+            ->where('status', 'approved')
             ->groupBy('rcsp_phase_id');
 
+        $maxEvidenceMegabytes = SubmitRcspPhaseRequest::maxEvidenceMegabytes();
+
         return view('lgu.monitoring.show', compact(
-            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'approvedForms'
+            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'approvedForms',
+            'maxEvidenceMegabytes'
         ));
     }
 
-    public function submit(Request $request, RcspBarangay $rcspBarangay): RedirectResponse
-    {
-        $this->authorizeMunicipality($rcspBarangay);
-
-        $phaseId = (int) $request->input('phase_id');
-        $activities = RcspActivity::where('rcsp_phase_id', $phaseId)->pluck('id');
-
-        abort_if($activities->isEmpty(), 422, 'No activities for this phase.');
-
-        // One file input per activity; the legacy app checked MIME + size via
-        // security_helpers::validateFileUpload(), so keep an equivalent rule here.
-        $request->validate(
-            $activities->mapWithKeys(fn ($id) => [
-                "file_{$id}" => ['nullable', 'file', 'mimes:pdf,doc,docx,jpg,jpeg,png', 'max:25600'],
-            ])->all()
+    public function storeActivity(
+        StoreRcspActivityRequest $request,
+        RcspBarangay $rcspBarangay,
+        RcspWorkflowService $workflow
+    ): RedirectResponse {
+        $workflow->createActivity(
+            $rcspBarangay,
+            $request->user(),
+            $request->title(),
+            $request->normalizedTitle()
         );
 
-        DB::transaction(function () use ($request, $rcspBarangay, $phaseId, $activities) {
-            foreach ($activities as $activityId) {
-                $existing = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
-                    ->where('rcsp_phase_id', $phaseId)
-                    ->where('rcsp_activity_id', $activityId)
-                    ->orderByDesc('id')->first();
-
-                // Don't overwrite an already-approved activity.
-                if ($existing && $existing->status === 'approved') {
-                    continue;
-                }
-
-                $conduct = $request->input("conduct_{$activityId}");
-                $filePath = $existing?->file;
-
-                if ($request->hasFile("file_{$activityId}")) {
-                    $filePath = $request->file("file_{$activityId}")
-                        ->store("rcsp/{$rcspBarangay->id}", 'public');
-                }
-
-                $payload = [
-                    'lgu_user_id' => $request->user()->id,
-                    'conduct' => $conduct,
-                    'file' => $filePath,
-                    'status' => 'submitted',
-                ];
-
-                if ($existing) {
-                    $existing->update($payload);
-                } else {
-                    RcspForm::create(array_merge($payload, [
-                        'rcsp_barangay_id' => $rcspBarangay->id,
-                        'rcsp_phase_id' => $phaseId,
-                        'rcsp_activity_id' => $activityId,
-                    ]));
-                }
-            }
-
-            if ($rcspBarangay->status === 'Pending') {
-                $rcspBarangay->update(['status' => 'Ongoing']);
-            }
-        });
-
-        return redirect()->route('lgu.monitoring.show', $rcspBarangay)
-            ->with('success', 'Phase submitted for review.');
+        return back()->with('success', 'RCSP activity created.');
     }
 
-    public function proceed(Request $request, RcspBarangay $rcspBarangay): RedirectResponse
+    public function updateActivity(
+        UpdateRcspActivityRequest $request,
+        RcspBarangay $rcspBarangay,
+        RcspActivity $activity,
+        RcspWorkflowService $workflow
+    ): RedirectResponse {
+        $workflow->updateActivity(
+            $rcspBarangay,
+            $activity,
+            $request->user(),
+            $request->title(),
+            $request->normalizedTitle()
+        );
+
+        return back()->with('success', 'RCSP activity title updated.');
+    }
+
+    public function destroyActivity(
+        RcspBarangay $rcspBarangay,
+        RcspActivity $activity,
+        RcspWorkflowService $workflow
+    ): RedirectResponse {
+        $workflow->deleteActivity($rcspBarangay, $activity, request()->user());
+
+        return back()->with('success', 'RCSP activity deleted.');
+    }
+
+    public function submit(
+        SubmitRcspPhaseRequest $request,
+        RcspBarangay $rcspBarangay,
+        RcspActivity $activity,
+        RcspWorkflowService $workflow
+    ): RedirectResponse {
+        $workflow->submitActivity(
+            $rcspBarangay,
+            $activity,
+            $request->user(),
+            $request->validated('conduct'),
+            $request->file('evidence')
+        );
+
+        return redirect()->route('lgu.monitoring.show', $rcspBarangay)
+            ->with('success', 'Activity submitted for review.');
+    }
+
+    public function proceed(AdvanceRcspPhaseRequest $request, RcspBarangay $rcspBarangay, RcspWorkflowService $workflow): RedirectResponse
     {
-        $this->authorizeMunicipality($rcspBarangay);
-
         $phase = $rcspBarangay->current_phase;
-        $activityCount = RcspActivity::whereHas('phase', fn ($q) => $q->where('number', $phase))->count();
-        $phaseId = RcspPhase::where('number', $phase)->value('id');
+        $workflow->advance($rcspBarangay, $request->user());
 
-        $approvedCount = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
-            ->where('rcsp_phase_id', $phaseId)
-            ->where('status', 'approved')
-            ->distinct('rcsp_activity_id')->count('rcsp_activity_id');
-
-        if ($approvedCount < $activityCount) {
-            return back()->with('error', 'All activities must be approved before proceeding.');
-        }
-
-        // mark this phase complete
-        $rcspBarangay->phaseStatus()->updateOrCreate([], ["phase{$phase}_completed" => true]);
-
-        if ($phase >= 5) {
-            $rcspBarangay->update(['status' => 'Completed']);
-            return back()->with('success', 'RCSP monitoring completed for this barangay.');
-        }
-
-        $rcspBarangay->update(['current_phase' => $phase + 1]);
-
-        return back()->with('success', "Advanced to phase ".($phase + 1).".");
+        return back()->with('success', $phase >= 5 ? 'RCSP monitoring completed for this barangay.' : 'Advanced to phase '.($phase + 1).'.');
     }
 
     /** Full-page file viewer with side-by-side comment thread. */
     public function file(RcspForm $form): View
     {
         $form->load(['rcspBarangay.barangay', 'rcspBarangay.municipality', 'phase', 'activity', 'lguUser', 'fileComments.user']);
-        $this->authorizeMunicipality($form->rcspBarangay);
+        Gate::authorize('view', $form);
 
         return view('lgu.monitoring.file', compact('form'));
     }
 
     /** LGU posts a comment on a submitted form (two-way thread with the reviewer). */
-    public function storeComment(Request $request, RcspForm $form): JsonResponse
+    public function storeComment(StoreRcspCommentRequest $request, RcspForm $form): JsonResponse
     {
-        $this->authorizeMunicipality($form->rcspBarangay);
-
-        $data = $request->validate(['text' => ['required', 'string']]);
+        $data = $request->validated();
 
         $comment = $form->fileComments()->create([
             'rcsp_phase_id' => $form->rcsp_phase_id,
@@ -175,19 +160,39 @@ class MonitoringController extends Controller
             'success' => true,
             'comment' => [
                 'text' => $comment->text,
+                'id' => $comment->id,
                 'user' => $request->user()->name,
                 'role' => $request->user()->role,
+                'user_logo' => $request->user()->logo
+                    ? asset('assets/'.$request->user()->logo)
+                    : asset('assets/img/kc-logo.svg'),
                 'at' => $comment->created_at->diffForHumans(),
             ],
         ]);
     }
 
-    private function authorizeMunicipality(RcspBarangay $rcspBarangay): void
+    public function evidence(RcspForm $form): BinaryFileResponse
     {
-        abort_unless(
-            $rcspBarangay->municipality_id === auth()->user()->municipality_id,
-            403,
-            'This barangay is outside your municipality.'
-        );
+        Gate::authorize('viewEvidence', $form);
+        abort_if(! $form->file || str_contains($form->file, '..') || str_contains($form->file, '\\')
+            || str_starts_with($form->file, '/') || preg_match('/^[A-Za-z]:/', $form->file), 404);
+        $private = str_starts_with($form->file, 'private:');
+        $path = $private ? substr($form->file, 8) : $form->file;
+        abort_unless(str_starts_with($path, "rcsp/{$form->rcsp_barangay_id}/"), 404);
+        $disk = Storage::disk($private ? 'local' : 'public');
+        abort_unless($path && $disk->exists($path), 404);
+        $filename = preg_replace('/[\x00-\x1F\x7F]/u', '', basename(str_replace('\\', '/',
+            $form->original_filename ?: $path))) ?: 'evidence';
+        $mime = $form->detected_mime_type ?: $disk->mimeType($path) ?: 'application/octet-stream';
+        $disposition = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png'], true)
+            ? ResponseHeaderBag::DISPOSITION_INLINE
+            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
+        $response = response()->file($disk->path($path), ['Content-Type' => $mime]);
+        $response->setContentDisposition($disposition, $filename);
+        $response->headers->set('Cache-Control', 'private, no-store, no-cache, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 }

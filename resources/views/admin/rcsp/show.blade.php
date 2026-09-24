@@ -2,7 +2,18 @@
 @section('title', 'RCSP Monitoring Form')
 @section('heading', 'RCSP Implementation Monitoring Form')
 
+@php
+    $reviewableForms = $forms->where('status', 'submitted');
+    $isCurrentPhase = (int) $currentPhase->number === (int) $rcspBarangay->current_phase;
+@endphp
+
 @section('content')
+    @if ($rcspBarangay->catalog_key === 'rcsp-demo-v1')
+        @include('rcsp._demo_notice')
+    @endif
+    @if ($errors->any())
+        <div class="alert alert-danger"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
+    @endif
     <div class="d-flex justify-content-end mb-2">
         <a href="{{ route('admin.rcsp.index') }}" class="btn btn-sm btn-light bg-white">
             <i class="mdi mdi-arrow-left"></i> Back to list
@@ -17,13 +28,13 @@
                 <img src="{{ asset('assets/img/LGRC.GIF') }}" alt="KC Logo" style="width: 100px;">
             </div>
             <h6 class="fw-bold mt-3">Local Government Provincial</h6>
-            <h6 class="fw-bold">Local Resource Center Province of Davao del Sur</h6>
+            <h6 class="fw-bold">Local Resource Center Province of {{ config('shield.jurisdiction.province') }}</h6>
             <h6 class="fw-bold">Region XI</h6>
             <h5 class="mt-5" style="color: #f88c01;">RETOOLED COMMUNITY SUPPORT PROGRAM IMPLEMENTATION <br> MONITORING FORM</h5>
             <p class="small mt-4">(This Report is pursuant to Unnumbered Memoranda dated September 10, 2019 and September 30, 2019: Memorandum <br> Circular No. 2019-169 dated October 11, 2019)</p>
             <div class="row text-center mt-3 mb-3">
                 <div class="col-md-3">
-                    <p><strong>Province:</strong> <span class="fw-bold" style="color: #f88c01;">Davao del Sur</span></p>
+                    <p><strong>Province:</strong> <span class="fw-bold" style="color: #f88c01;">{{ config('shield.jurisdiction.province') }}</span></p>
                 </div>
                 <div class="col-md-3">
                     <p><strong>City/Municipality:</strong> <span class="fw-bold" style="color: #f88c01;">{{ $rcspBarangay->municipality?->name }}</span></p>
@@ -36,15 +47,14 @@
                 </div>
             </div>
             <p class="text-start">
-                <strong style="color: #f88c01;">Phase {{ $currentPhase->number }} - {{ $currentPhase->name }}</strong><br>
-                <em>{{ $currentPhase->name }}</em>
+                <strong style="color: #f88c01;">Phase {{ $currentPhase->number }} - {{ $currentPhase->display_name }}</strong><br>
+                <em>{{ $currentPhase->display_name }}</em>
             </p>
         </div>
 
         <!-- Content Section -->
         <form action="{{ route('admin.rcsp.review', $rcspBarangay) }}" method="POST">
             @csrf
-            <input type="hidden" name="phase_id" value="{{ $currentPhase->id }}">
             <table class="table table-fixed">
                 <thead>
                     <tr>
@@ -76,13 +86,13 @@
                             </td>
 
                             <td>
-                                @if ($form)
-                                    <select name="statuses[{{ $form->id }}]" class="form-select status-dropdown" required>
-                                        <option value="approved" @selected($form->status === 'approved')>Approved</option>
-                                        <option value="disapproved" @selected($form->status === 'disapproved')>Disapproved</option>
-                                        <option value="to be complied" @selected($form->status === 'to be complied')>To be Complied</option>
-                                        <option value="to be conducted" @selected(! in_array($form->status, ['approved', 'disapproved', 'to be complied']))>To be Conducted</option>
-                                    </select>
+                                @if ($form?->status === 'submitted' && $isCurrentPhase)
+                                    @include('admin.rcsp._review_fields', ['form' => $form])
+                                @elseif ($form)
+                                    <span class="badge bg-secondary">{{ ucfirst($form->status) }}</span>
+                                    @if ($form->remarks)
+                                        <p class="small text-muted mt-2 mb-0">{{ $form->remarks }}</p>
+                                    @endif
                                 @else
                                     <span class="badge bg-secondary">Not submitted</span>
                                 @endif
@@ -105,7 +115,7 @@
                 </tbody>
             </table>
 
-            @if ($forms->isNotEmpty())
+            @if ($isCurrentPhase && $reviewableForms->isNotEmpty())
                 <div class="text-end mt-3">
                     <button type="submit" class="btn btn-primary">Submit</button>
                 </div>

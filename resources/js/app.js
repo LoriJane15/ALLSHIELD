@@ -8,6 +8,7 @@ import { initIb39BoundaryEditor } from './ib39-boundary-editor';
 import { initRcspComments } from './rcsp-comments';
 import { initConfirmDialogs } from './confirm-dialog';
 import { initKatuparanDashboard } from './katuparan-dashboard';
+import { initChat } from './chat';
 
 window.gsap = gsap;
 
@@ -46,6 +47,7 @@ function boot() {
     run('rcsp.comments', initRcspComments);
     run('confirmDialogs', initConfirmDialogs);
     run('katuparan.dashboard', initKatuparanDashboard);
+    run('chat', initChat);
 }
 
 /*

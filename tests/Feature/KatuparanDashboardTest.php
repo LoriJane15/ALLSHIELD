@@ -83,16 +83,10 @@ class KatuparanDashboardTest extends TestCase
         $hero = file_get_contents(resource_path('js/katuparan-dashboard.js'));
         $ib39 = file_get_contents(resource_path('js/ib39-map.js'));
 
-        // Both share the legacy flat-green + stroke defaults.
         foreach ([$hero, $ib39] as $src) {
             $this->assertStringContainsString("rgba(0, 255, 0, 0.5)", $src);
             $this->assertStringContainsString("rgba(35,35,35,1.0)", $src);
+            $this->assertStringNotContainsString('area?.color', $src, 'polygons must not be coloured from the database');
         }
-
-        // The hero is always flat (no DB colouring at all).
-        $this->assertStringNotContainsString('area?.color', $hero, 'hero must stay flat green');
-
-        // The operational map defaults to flat; DB colour is opt-in via a toggle.
-        $this->assertStringContainsString("let colorMode = 'flat'", $ib39, 'ib39 map defaults to flat');
     }
 }

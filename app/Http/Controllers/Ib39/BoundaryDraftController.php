@@ -141,11 +141,16 @@ class BoundaryDraftController extends Controller
     private function liveFeatureCollection(): array
     {
         $features = MapBarangay::whereNotNull('geometry')
-            ->get(['id', 'municipality', 'barangay', 'geometry'])
+            ->get(['id', 'barangay_id', 'municipality', 'barangay', 'geometry'])
             ->map(fn ($a) => [
                 'type' => 'Feature',
                 'geometry' => $a->geometry,
-                'properties' => ['id' => $a->id, 'municipality' => $a->municipality, 'barangay' => $a->barangay],
+                'properties' => [
+                    'id' => $a->id,
+                    'barangay_id' => $a->barangay_id,
+                    'municipality' => $a->municipality,
+                    'barangay' => $a->barangay,
+                ],
             ])->values()->all();
 
         return ['type' => 'FeatureCollection', 'features' => $features];

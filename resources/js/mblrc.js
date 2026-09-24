@@ -8,13 +8,56 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 Chart.register(...registerables);
 
 // Fix Leaflet's default marker asset paths under Vite bundling.
+delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-    iconUrl: markerIcon,
     iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
     shadowUrl: markerShadow,
 });
 
 const DAVAO_SUR = [6.7497, 125.3572];
+
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (ch) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+}
+
+function escapeAttr(s) {
+    return escapeHtml(s).replace(/`/g, '&#96;');
+}
+
+function createShieldPinIcon(status = '') {
+    let pinBg = '#312e81'; // Default SHIELD Deep Navy
+    if (status === 'Completed') pinBg = '#2563eb'; // Blue
+    else if (status === 'On-going') pinBg = '#d97706'; // Amber
+    else if (status === 'Not-Started') pinBg = '#e11d48'; // Rose/Red
+
+    return L.divIcon({
+        className: 'mblrc-pin-wrapper',
+        html: `
+            <div style="
+                position: relative;
+                width: 32px;
+                height: 32px;
+                background: ${pinBg};
+                border: 2.5px solid #ffffff;
+                border-radius: 50% 50% 50% 0;
+                transform: rotate(-45deg);
+                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <svg style="transform: rotate(45deg); width: 15px; height: 15px; fill: #ffffff;" viewBox="0 0 24 24">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+            </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32],
+    });
+}
 
 function token() {
     return document.querySelector('meta[name="csrf-token"]')?.content;
@@ -100,7 +143,10 @@ function initFrMap() {
         attribution: '&copy; OpenStreetMap', maxZoom: 19,
     }).addTo(map);
 
-    const cluster = L.markerClusterGroup();
+    const cluster = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 40,
+    });
     map.addLayer(cluster);
     let all = [];
 
@@ -111,10 +157,36 @@ function initFrMap() {
     function render(rows) {
         cluster.clearLayers();
         rows.forEach((fr) => {
-            L.marker([fr.lat, fr.lng]).bindPopup(
-                `<strong>${fr.name}</strong><br>${fr.status} · ${fr.batch ?? ''}<br>`
-                + `${fr.address ?? ''}<br><a href="${fr.url}" class="text-blue-600">View profile</a>`
-            ).addTo(cluster);
+            const pinIcon = createShieldPinIcon(fr.status);
+            const marker = L.marker([fr.lat, fr.lng], { icon: pinIcon });
+
+            let badgeStyle = 'background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe;';
+            if (fr.status === 'Completed') {
+                badgeStyle = 'background: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe;';
+            } else if (fr.status === 'On-going') {
+                badgeStyle = 'background: #fffbeb; color: #78350f; border: 1px solid #fde68a;';
+            } else if (fr.status === 'Not-Started') {
+                badgeStyle = 'background: #fff1f2; color: #881337; border: 1px solid #fecdd3;';
+            }
+
+            marker.bindPopup(`
+                <div style="font-family: inherit; padding: 4px; min-width: 190px;">
+                    <div style="font-weight: 800; color: #0f172a; font-size: 0.95rem; line-height: 1.3; margin-bottom: 4px;">
+                        ${escapeHtml(fr.name)}
+                    </div>
+                    <div style="display: inline-block; font-size: 0.725rem; font-weight: 750; padding: 2px 8px; border-radius: 9999px; margin-bottom: 6px; ${badgeStyle}">
+                        ${escapeHtml(fr.status || 'Active')} ${fr.batch ? '· ' + escapeHtml(fr.batch) : ''}
+                    </div>
+                    <div style="font-size: 0.8125rem; color: #64748b; margin-bottom: 10px; line-height: 1.4;">
+                        <span style="color: #4338ca; font-weight: bold;">📍</span> ${escapeHtml(fr.address || 'No address registered')}
+                    </div>
+                    <div>
+                        <a href="${escapeAttr(fr.url)}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.775rem; font-weight: 750; color: #ffffff; background: #312e81; padding: 5px 12px; border-radius: 6px; text-decoration: none !important; box-shadow: 0 2px 6px rgba(49, 46, 129, 0.25);">
+                            View Profile &rarr;
+                        </a>
+                    </div>
+                </div>
+            `).addTo(cluster);
         });
         if (rows.length) map.fitBounds(cluster.getBounds().pad(0.2));
     }
@@ -175,12 +247,13 @@ function initLocationMap(root) {
     }).addTo(map);
 
     const form = root.querySelector('[data-location-form]');
-    let marker = root.dataset.lat ? L.marker([lat, lng]).addTo(map) : null;
+    const pinIcon = createShieldPinIcon('#312e81');
+    let marker = root.dataset.lat ? L.marker([lat, lng], { icon: pinIcon }).addTo(map) : null;
 
     map.on('click', (e) => {
         const { lat, lng } = e.latlng;
         if (marker) marker.setLatLng(e.latlng);
-        else marker = L.marker(e.latlng).addTo(map);
+        else marker = L.marker(e.latlng, { icon: pinIcon }).addTo(map);
         form.latitude.value = lat.toFixed(8);
         form.longitude.value = lng.toFixed(8);
     });

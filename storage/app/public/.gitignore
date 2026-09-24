@@ -1,11 +1,2 @@
-# Ignore transient uploads by default...
 *
 !.gitignore
-
-# ...but keep the legacy dataset's files, so a clone has what the DB references.
-!rcsp/
-!rcsp/**
-!implan/
-!implan/**
-!fr/
-!fr/**

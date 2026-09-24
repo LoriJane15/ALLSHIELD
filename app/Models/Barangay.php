@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Barangay extends Model
 {
@@ -12,5 +13,10 @@ class Barangay extends Model
     public function municipality(): BelongsTo
     {
         return $this->belongsTo(Municipality::class);
+    }
+
+    public function ib39SurfacedFormerRebels(): HasMany
+    {
+        return $this->hasMany(Ib39SurfacedFormerRebel::class);
     }
 }

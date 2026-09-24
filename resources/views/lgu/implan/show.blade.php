@@ -165,7 +165,7 @@
 
     {{-- Edit modal --}}
     <div class="modal fade" id="editImplanModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
@@ -220,7 +220,7 @@
 
     {{-- Add File modal --}}
     <div class="modal fade" id="addFileModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">

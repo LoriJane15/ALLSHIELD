@@ -12,6 +12,9 @@
 @endphp
 
 @section('content')
+    @if ($rcspBarangays->contains(fn ($record) => $record->catalog_key === 'rcsp-demo-v1'))
+        @include('rcsp._demo_notice')
+    @endif
     <div class="row mb-3">
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">RCSP Evaluation <span class="fs-4" style="color: #280274; font-weight: bold;">- {{ $municipalName }}</span></h3>
@@ -22,7 +25,7 @@
         <div class="col-4 col-xl-4">
             <div class="justify-content-end d-flex">
                 <a href="#" class="btn btn-primary" style="border-radius: 5px;" data-bs-toggle="modal" data-bs-target="#addRcspModal">
-                    <i class="ti-plus"></i> Add RCSP Barangay
+                    <i class="ti-plus"></i> Register RCSP Barangay
                 </a>
             </div>
         </div>
@@ -52,7 +55,7 @@
                             <tbody>
                                 @forelse ($rcspBarangays as $rb)
                                     <tr>
-                                        <td>Davao del Sur</td>
+                                        <td>{{ config('shield.jurisdiction.province') }}</td>
                                         <td>{{ $rb->municipality?->name ?? $municipalName }}</td>
                                         <td class="font-weight-medium">{{ $rb->barangay?->name ?? 'Barangay #'.$rb->barangay_id }}</td>
                                         <td>
@@ -95,12 +98,12 @@
 
     {{-- Add RCSP Barangay modal --}}
     <div class="modal fade" id="addRcspModal" tabindex="-1">
-        <div class="modal-dialog modal-md">
+        <div class="modal-dialog modal-dialog-centered modal-md">
             <div class="modal-content">
                 <div class="modal-header d-flex justify-content-between align-items-start">
                     <div>
-                        <h5 class="modal-title text-primary" style="font-weight:900;">Add RCSP Barangay</h5>
-                        <p class="text-muted fw-light mb-0">Add identified RCSP Barangay information</p>
+                        <h5 class="modal-title text-primary" style="font-weight:900;">Register RCSP Barangay</h5>
+                        <p class="text-muted fw-light mb-0">Register an identified barangay for RCSP monitoring.</p>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -109,7 +112,7 @@
                         @csrf
                         <div class="mb-3">
                             <label class="form-label">Province</label>
-                            <input type="text" value="Davao del Sur" readonly class="form-control">
+                            <input type="text" value="{{ config('shield.jurisdiction.province') }}" readonly class="form-control">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Municipal</label>
@@ -129,8 +132,7 @@
                             @endif
                         </div>
                         <div class="modal-footer px-0 pb-0">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Draft</button>
-                            <button type="submit" class="btn btn-primary">Submit</button>
+                            <button type="submit" class="btn btn-primary" @disabled($available->isEmpty())>Register RCSP Barangay</button>
                         </div>
                     </form>
                 </div>

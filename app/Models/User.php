@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -17,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_active',
         'logo',
         'municipality_id',
         'gov_agency_id',
@@ -32,6 +34,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -46,13 +49,15 @@ class User extends Authenticatable
     {
         return match ($this->role) {
             'super_admin' => 'super_admin.dashboard',
-            'admin'       => 'admin.dashboard',
-            '39th_ib'     => 'ib39.dashboard',
-            'gov_agency'  => 'gov_agency.dashboard',
-            'lgu'         => 'lgu.dashboard',
-            'mblrc'       => 'mblrc.dashboard',
-            'afp'         => 'afp.dashboard',
-            default       => 'login',
+            'admin' => 'admin.dashboard',
+            '39th_ib' => 'ib39.dashboard',
+            'gov_agency' => 'gov_agency.dashboard',
+            'lgu' => 'lgu.dashboard',
+            'mblrc' => 'mblrc.dashboard',
+            'afp' => 'afp.dashboard',
+            'japic' => 'japic.dashboard',
+            'pswdo' => 'pswdo.dashboard',
+            default => 'login',
         };
     }
 
@@ -65,5 +70,25 @@ class User extends Authenticatable
     public function govAgency(): BelongsTo
     {
         return $this->belongsTo(GovAgency::class);
+    }
+
+    public function createdIb39SurfacedFormerRebels(): HasMany
+    {
+        return $this->hasMany(Ib39SurfacedFormerRebel::class, 'created_by');
+    }
+
+    public function completedIb39CdrProcessings(): HasMany
+    {
+        return $this->hasMany(Ib39CdrProcessing::class, 'completed_by');
+    }
+
+    public function assignedJapicCertificationProcessings(): HasMany
+    {
+        return $this->hasMany(JapicCertificationProcessing::class, 'assigned_to');
+    }
+
+    public function uploadedPswdoEnrollmentDocuments(): HasMany
+    {
+        return $this->hasMany(PswdoEnrollmentDocument::class, 'uploaded_by');
     }
 }

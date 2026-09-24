@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\{RcspBarangay, User};
+use App\Models\RcspActivity;
+use App\Models\RcspBarangay;
+use App\Models\RcspPhase;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
@@ -28,13 +31,17 @@ class SecurityHardeningTest extends TestCase
             $this->markTestSkipped('No LGU user for this barangay.');
         }
 
-        $activity = \App\Models\RcspActivity::where('rcsp_phase_id', 1)->firstOrFail();
+        $phase = RcspPhase::where('catalog_key', $bgy->catalog_key)->where('number', $bgy->current_phase)->firstOrFail();
+        $activities = RcspActivity::where('rcsp_phase_id', $phase->id)->get();
+        $conduct = $activities->mapWithKeys(fn ($activity) => [$activity->id => 'yes'])->all();
+        $activity = $activities->firstOrFail();
 
         $this->actingAs($lgu)
             ->post("/lgu/rcsp/{$bgy->id}/monitoring", [
-                'phase_id' => 1,
-                "file_{$activity->id}" => UploadedFile::fake()->create('payload.php', 8, 'application/x-php'),
+                'phase_id' => $phase->id,
+                'conduct' => $conduct,
+                'evidence' => [$activity->id => UploadedFile::fake()->create('payload.php', 8, 'application/x-php')],
             ])
-            ->assertSessionHasErrors("file_{$activity->id}");
+            ->assertSessionHasErrors("evidence.{$activity->id}");
     }
 }

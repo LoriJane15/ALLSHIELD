@@ -3,8 +3,8 @@
 namespace App\Events;
 
 use App\Models\MapBarangay;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -22,14 +22,11 @@ class RcspAreaUpdated implements ShouldBroadcast
     use InteractsWithSockets;
     use SerializesModels;
 
-    public function __construct(public MapBarangay $area)
-    {
-    }
+    public function __construct(public MapBarangay $area) {}
 
-    public function broadcastOn(): Channel
+    public function broadcastOn(): PrivateChannel
     {
-        // Everyone who can see the map sees the same public colouring.
-        return new Channel('rcsp-areas');
+        return new PrivateChannel('rcsp-areas');
     }
 
     public function broadcastAs(): string
