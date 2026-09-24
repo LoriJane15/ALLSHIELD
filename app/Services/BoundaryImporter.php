@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Barangay;
 use App\Models\MapBarangay;
 use Illuminate\Support\Facades\DB;
 
@@ -30,16 +29,34 @@ class BoundaryImporter
         $errors = [];
 
         DB::transaction(function () use ($featureCollection, $create, $replace, &$matched, &$created, &$skipped, &$errors) {
+            $canonicalById = [];
+            $canonicalByLocation = [];
+
+            foreach (DB::table('barangays as b')
+                ->join('municipalities as m', 'm.id', '=', 'b.municipality_id')
+                ->get(['b.id', 'b.name as barangay', 'm.name as municipality']) as $canonical) {
+                $canonicalById[(int) $canonical->id] = (int) $canonical->id;
+                $canonicalByLocation[$this->locationKey($canonical->municipality, $canonical->barangay)] = (int) $canonical->id;
+            }
+
             if ($replace) {
                 MapBarangay::whereNotNull('geometry')->update(['geometry' => null]);
+            }
+
+            $rowsByBarangayId = [];
+            $rowsByLocation = [];
+
+            foreach (MapBarangay::all() as $mapBarangay) {
+                if ($mapBarangay->barangay_id !== null) {
+                    $rowsByBarangayId[(int) $mapBarangay->barangay_id] = $mapBarangay;
+                }
+
+                $rowsByLocation[$this->locationKey($mapBarangay->municipality, $mapBarangay->barangay)] = $mapBarangay;
             }
 
             foreach ($featureCollection['features'] as $i => $feature) {
                 $p = $feature['properties'] ?? [];
                 $barangayId = isset($p['barangay_id']) ? (int) $p['barangay_id'] : null;
-                if ($barangayId && ! Barangay::whereKey($barangayId)->exists()) {
-                    $barangayId = null;
-                }
                 $municipality = trim($p['municipality'] ?? $p['NAME_2'] ?? '');
                 $barangay = trim($p['barangay'] ?? $p['NAME_3'] ?? '');
                 $geometry = $feature['geometry'] ?? null;
@@ -53,11 +70,16 @@ class BoundaryImporter
                     continue;
                 }
 
-                $row = $barangayId
-                    ? MapBarangay::where('barangay_id', $barangayId)->first()
-                    : null;
+                $locationKey = $this->locationKey($municipality, $barangay);
 
-                $row ??= MapBarangay::where('municipality', $municipality)->where('barangay', $barangay)->first();
+                // Names are authoritative because imported files can contain stale
+                // IDs from a different database. Fall back to a supplied ID only
+                // when its canonical location is unavailable.
+                $barangayId = $canonicalByLocation[$locationKey]
+                    ?? ($canonicalById[$barangayId] ?? null);
+
+                $row = $barangayId ? ($rowsByBarangayId[$barangayId] ?? null) : null;
+                $row ??= $rowsByLocation[$locationKey] ?? null;
 
                 if (! $row) {
                     if (! $create) {
@@ -76,8 +98,17 @@ class BoundaryImporter
                     $matched++;
                 }
 
+                $row->barangay_id = $barangayId;
                 $row->geometry = $this->normalize($geometry);
-                $row->save();
+
+                if (! $row->exists || $row->isDirty()) {
+                    $row->save();
+                }
+
+                if ($barangayId) {
+                    $rowsByBarangayId[$barangayId] = $row;
+                }
+                $rowsByLocation[$locationKey] = $row;
             }
         });
 
@@ -92,5 +123,10 @@ class BoundaryImporter
         }
 
         return $geometry;
+    }
+
+    private function locationKey(?string $municipality, ?string $barangay): string
+    {
+        return mb_strtolower(trim((string) $municipality).'|'.trim((string) $barangay));
     }
 }
