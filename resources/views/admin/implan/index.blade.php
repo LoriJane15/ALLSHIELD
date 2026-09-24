@@ -139,7 +139,7 @@
 
                                             {{-- Reassign modal --}}
                                             <div class="modal fade" id="reassign_{{ $im->id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog modal-dialog-centered modal-lg">
+                                                <div class="modal-dialog modal-lg">
                                                     <div class="modal-content">
                                                         <form method="POST" action="{{ route('admin.implan.reassign', $im) }}" class="reassign-form">
                                                             @csrf

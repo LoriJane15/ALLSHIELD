@@ -22,9 +22,7 @@
 @php
     $role = auth()->user()->role;
     $meta = config("shield.roles.$role");
-    $nav = collect($meta['nav'] ?? [])
-        ->concat(config('shield.shared_nav', []))
-        ->filter(fn ($i) => \Illuminate\Support\Facades\Route::has($i['route']));
+    $nav = collect($meta['nav'] ?? [])->filter(fn ($i) => \Illuminate\Support\Facades\Route::has($i['route']));
 @endphp
 <div class="container-scroller">
     <div class="horizontal-menu">
@@ -48,51 +46,18 @@
                             </div>
                         </li>
                     </ul>
-                    <ul class="navbar-nav navbar-nav-right d-flex align-items-center">
-                        <li class="nav-item me-2 d-flex align-items-center">
-                            <a class="chat-indicator-btn"
-                               href="{{ route('chat.index') }}"
-                               data-chat-nav data-unread-url="{{ route('chat.unread') }}"
-                               title="Private Messages">
-                                <i class="icon-bubbles"></i>
-                                <span class="badge badge-danger rounded-pill {{ ($chatUnread['total'] ?? 0) > 0 ? '' : 'd-none' }}"
-                                      data-chat-nav-badge aria-label="{{ $chatUnread['total'] ?? 0 }} unread messages"
-                                      style="position: absolute; top: -4px; right: -4px; font-size: 0.65rem; padding: 0.2em 0.45em; font-weight: 750;">
-                                    {{ $chatUnread['total_text'] ?? '0' }}
-                                </span>
-                            </a>
-                        </li>
+                    <ul class="navbar-nav navbar-nav-right">
                         <li class="nav-item nav-profile dropdown">
-                            <a class="user-profile-pill dropdown-toggle" href="#" data-bs-toggle="dropdown" id="profileDropdown" aria-expanded="false">
-                                <div class="user-avatar-wrap">
-                                    <img src="{{ auth()->user()->logo ? asset('assets/'.auth()->user()->logo) : asset('assets/img/kc-logo.svg') }}"
-                                         onerror="this.onerror=null;this.src='{{ asset('assets/img/kc-logo.svg') }}'" alt="profile" class="user-avatar-img" />
-                                    <span class="user-status-dot"></span>
-                                </div>
-                                <div class="user-info-wrap d-none d-sm-flex">
-                                    <span class="user-name">{{ auth()->user()->name }}</span>
-                                    @if(auth()->user()->role)
-                                        <span class="user-role-badge">
-                                            {{ str_replace('_', ' ', auth()->user()->role->value ?? auth()->user()->role) }}
-                                        </span>
-                                    @endif
-                                </div>
-                                <i class="mdi mdi-chevron-down user-chevron d-none d-sm-inline-block"></i>
+                            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" id="profileDropdown">
+                                <img src="{{ auth()->user()->logo ? asset('assets/'.auth()->user()->logo) : asset('assets/img/kc-logo.svg') }}"
+                                     onerror="this.onerror=null;this.src='{{ asset('assets/img/kc-logo.svg') }}'" alt="profile" />
                             </a>
-                            <div class="dropdown-menu dropdown-menu-right navbar-dropdown user-dropdown-menu" aria-labelledby="profileDropdown">
-                                <div class="user-dropdown-header">
-                                    <img src="{{ auth()->user()->logo ? asset('assets/'.auth()->user()->logo) : asset('assets/img/kc-logo.svg') }}"
-                                         onerror="this.onerror=null;this.src='{{ asset('assets/img/kc-logo.svg') }}'"
-                                         alt="profile" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1.5px solid #e2e8f0;" />
-                                    <div class="overflow-hidden">
-                                        <div class="font-weight-bold text-dark text-truncate" style="font-size: 0.84rem;">{{ auth()->user()->name }}</div>
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">{{ auth()->user()->email ?? auth()->user()->username }}</div>
-                                    </div>
-                                </div>
-                                <a class="dropdown-item user-dropdown-item" href="{{ route('profile.edit') }}"><i class="ti-settings text-primary"></i> Settings & Account</a>
-                                <div class="dropdown-divider m-0"></div>
+                            <div class="dropdown-menu dropdown-menu-right navbar-dropdown" aria-labelledby="profileDropdown">
+                                <h6 class="dropdown-header mb-0 text-truncate">{{ auth()->user()->name }}</h6>
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="ti-settings text-primary"></i> Settings</a>
                                 <form method="POST" action="{{ route('logout') }}">@csrf
-                                    <button class="dropdown-item user-dropdown-item text-danger" type="submit"><i class="ti-power-off text-danger"></i> Logout</button>
+                                    <button class="dropdown-item" type="submit"><i class="ti-power-off text-primary"></i> Logout</button>
                                 </form>
                             </div>
                         </li>
@@ -118,16 +83,9 @@
                             $isActive = request()->routeIs(...$patterns);
                         @endphp
                         <li class="nav-item {{ $isActive ? 'active' : '' }}">
-                            <a class="nav-link" href="{{ route($item['route']) }}"
-                               @if ($item['route'] === 'chat.index') data-chat-nav data-unread-url="{{ route('chat.unread') }}" @endif>
+                            <a class="nav-link" href="{{ route($item['route']) }}">
                                 <i class="{{ $item['skyicon'] ?? 'icon-grid' }} menu-icon"></i>
                                 <span class="menu-title">{{ $item['label'] }}</span>
-                                @if ($item['route'] === 'chat.index')
-                                    <span class="badge badge-danger ml-2 {{ ($chatUnread['total'] ?? 0) > 0 ? '' : 'd-none' }}"
-                                          data-chat-nav-badge aria-label="{{ $chatUnread['total'] ?? 0 }} unread messages">
-                                        {{ $chatUnread['total_text'] ?? '0' }}
-                                    </span>
-                                @endif
                             </a>
                         </li>
                     @endforeach

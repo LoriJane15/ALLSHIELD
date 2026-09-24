@@ -3,12 +3,10 @@
 namespace App\Http\Controllers\Lgu;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Rcsp\StoreRcspBarangayRequest;
 use App\Models\Barangay;
 use App\Models\RcspBarangay;
-use App\Services\RcspWorkflowService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class RcspBarangayController extends Controller
@@ -16,11 +14,10 @@ class RcspBarangayController extends Controller
     /** RCSP barangay evaluation list for the LGU's municipality. */
     public function index(): View
     {
-        Gate::authorize('viewAny', RcspBarangay::class);
         $muniId = auth()->user()->municipality_id;
 
         $rcspBarangays = RcspBarangay::query()
-            ->with(['barangay', 'municipality', 'phaseStatus'])
+            ->with(['barangay', 'phaseStatus'])
             ->when($muniId, fn ($q) => $q->where('municipality_id', $muniId))
             ->when(request('search'), fn ($q, $s) => $q->whereHas('barangay', fn ($b) => $b->where('name', 'like', "%{$s}%")))
             ->orderByDesc('id')
@@ -36,18 +33,49 @@ class RcspBarangayController extends Controller
         return view('lgu.rcsp.index', compact('rcspBarangays', 'available'));
     }
 
-    public function store(StoreRcspBarangayRequest $request, RcspWorkflowService $workflow): RedirectResponse
+    public function store(): RedirectResponse
     {
-        $workflow->createBarangay($request->integer('barangay_id'), $request->user());
+        $muniId = auth()->user()->municipality_id;
 
-        return back()->with('success', 'RCSP barangay registered.');
+        $data = request()->validate([
+            'barangay_id' => [
+                'required',
+                // barangay must belong to this LGU's municipality
+                function ($attr, $value, $fail) use ($muniId) {
+                    if (! Barangay::where('id', $value)->where('municipality_id', $muniId)->exists()) {
+                        $fail('Selected barangay is not in your municipality.');
+                    }
+                },
+            ],
+        ]);
+
+        DB::transaction(function () use ($data, $muniId) {
+            $rcsp = RcspBarangay::create([
+                'barangay_id' => $data['barangay_id'],
+                'municipality_id' => $muniId,
+                'status' => 'Pending',
+                'current_phase' => 0,
+            ]);
+            $rcsp->phaseStatus()->create([]); // all phases default false
+        });
+
+        return back()->with('success', 'RCSP barangay added.');
     }
 
     public function destroy(RcspBarangay $rcspBarangay): RedirectResponse
     {
-        Gate::authorize('delete', $rcspBarangay);
+        $this->authorizeMunicipality($rcspBarangay);
         $rcspBarangay->delete();
 
         return back()->with('success', 'RCSP barangay removed.');
+    }
+
+    private function authorizeMunicipality(RcspBarangay $rcspBarangay): void
+    {
+        abort_unless(
+            $rcspBarangay->municipality_id === auth()->user()->municipality_id,
+            403,
+            'This barangay is outside your municipality.'
+        );
     }
 }

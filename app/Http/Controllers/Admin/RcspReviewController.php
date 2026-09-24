@@ -4,18 +4,17 @@ namespace App\Http\Controllers\Admin;
 
 use App\Events\RcspCommentPosted;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Rcsp\ReviewRcspPhaseRequest;
-use App\Http\Requests\Rcsp\StoreRcspCommentRequest;
 use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
+use App\Models\RcspFileComment;
 use App\Models\RcspForm;
 use App\Models\RcspPhase;
-use App\Services\RcspWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Illuminate\Validation\Rule;
 
 /**
  * Katuparan Center review of LGU-submitted RCSP monitoring forms:
@@ -25,15 +24,13 @@ class RcspReviewController extends Controller
 {
     public function index(): View
     {
-        Gate::authorize('viewAny', RcspBarangay::class);
         $barangays = RcspBarangay::with(['barangay', 'municipality'])
             ->whereHas('forms')
             ->get();
 
-        // Classify using only the latest immutable version of each activity.
-        $formStatuses = RcspForm::select('id', 'rcsp_barangay_id', 'rcsp_activity_id', 'submission_version', 'status')
-            ->orderByDesc('submission_version')->orderByDesc('id')->get()
-            ->unique(fn (RcspForm $form) => $form->rcsp_barangay_id.'|'.$form->rcsp_activity_id)
+        // classify each barangay by its form statuses
+        $formStatuses = RcspForm::select('rcsp_barangay_id', 'status')
+            ->get()
             ->groupBy('rcsp_barangay_id')
             ->map(fn ($g) => $g->pluck('status')->unique());
 
@@ -56,30 +53,33 @@ class RcspReviewController extends Controller
 
     public function show(Request $request, RcspBarangay $rcspBarangay): View
     {
-        Gate::authorize('view', $rcspBarangay);
         $rcspBarangay->load('barangay', 'municipality');
-        $phases = RcspPhase::where('catalog_key', $rcspBarangay->catalog_key)->orderBy('number')->get();
+        $phases = RcspPhase::orderBy('number')->get();
 
         $phaseNumber = $request->integer('phase', $rcspBarangay->current_phase);
         $currentPhase = $phases->firstWhere('number', $phaseNumber) ?? $phases->first();
-        abort_unless($currentPhase, 422, 'No phase catalog is available for this RCSP barangay.');
 
-        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)->orderBy('id')->get();
+        $activities = RcspActivity::where('rcsp_phase_id', $currentPhase->id)->orderBy('id')->get();
 
         $forms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
             ->where('rcsp_phase_id', $currentPhase->id)
-            ->orderByDesc('submission_version')->orderByDesc('id')->get()->groupBy('rcsp_activity_id')
-            ->map(fn ($group) => $group->first());
+            ->get()->groupBy('rcsp_activity_id')
+            ->map(fn ($g) => $g->sortByDesc('id')->first());
+
+        $comments = RcspFileComment::with('user')
+            ->whereIn('rcsp_activity_id', $activities->pluck('id'))
+            ->where('rcsp_phase_id', $currentPhase->id)
+            ->orderBy('id')
+            ->get()->groupBy('rcsp_activity_id');
 
         return view('admin.rcsp.show', compact(
-            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms'
+            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'comments'
         ));
     }
 
     /** Full-page file viewer with side-by-side comment thread. */
     public function file(RcspForm $form): View
     {
-        Gate::authorize('view', $form);
         $form->load([
             'rcspBarangay.barangay', 'rcspBarangay.municipality',
             'phase', 'activity', 'lguUser', 'fileComments.user',
@@ -88,17 +88,33 @@ class RcspReviewController extends Controller
         return view('admin.rcsp.file', compact('form'));
     }
 
-    public function updateStatus(ReviewRcspPhaseRequest $request, RcspBarangay $rcspBarangay, RcspWorkflowService $workflow): RedirectResponse
+    public function updateStatus(Request $request, RcspBarangay $rcspBarangay): RedirectResponse
     {
-        $data = $request->validated();
-        $workflow->reviewPhase($rcspBarangay, $request->user(), $data['statuses'], $data['remarks'] ?? []);
+        $data = $request->validate([
+            'phase_id' => ['required', 'exists:rcsp_phases,id'],
+            'statuses' => ['required', 'array'],
+            'statuses.*' => [Rule::in(['approved', 'disapproved', 'to be complied', 'to be conducted'])],
+            'remarks' => ['array'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            foreach ($data['statuses'] as $formId => $status) {
+                $form = RcspForm::find($formId);
+                if ($form) {
+                    $form->update([
+                        'status' => $status,
+                        'remarks' => $data['remarks'][$formId] ?? $form->remarks,
+                    ]);
+                }
+            }
+        });
 
         return back()->with('success', 'Review saved.');
     }
 
-    public function storeComment(StoreRcspCommentRequest $request, RcspForm $form): JsonResponse
+    public function storeComment(Request $request, RcspForm $form): JsonResponse
     {
-        $data = $request->validated();
+        $data = $request->validate(['text' => ['required', 'string']]);
 
         $comment = $form->fileComments()->create([
             'rcsp_phase_id' => $form->rcsp_phase_id,
@@ -113,12 +129,7 @@ class RcspReviewController extends Controller
             'success' => true,
             'comment' => [
                 'text' => $comment->text,
-                'id' => $comment->id,
                 'user' => $request->user()->name,
-                'role' => $request->user()->role,
-                'user_logo' => $request->user()->logo
-                    ? asset('assets/'.$request->user()->logo)
-                    : asset('assets/img/kc-logo.svg'),
                 'at' => $comment->created_at->diffForHumans(),
             ],
         ]);

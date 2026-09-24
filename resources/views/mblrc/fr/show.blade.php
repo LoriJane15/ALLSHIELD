@@ -5,126 +5,61 @@
 @php
     $ps = $fr->programStatus;
     $softStatus = match ($fr->status) {
-        'Active', 'Reintegrated', 'Completed' => 'badge-soft-shield',
+        'Active', 'Reintegrated', 'Completed' => 'badge-soft-success',
         'On hold', 'Under Review', 'Pending', 'Suspended' => 'badge-soft-warning',
         'Inactive', 'Disengaged', 'Deceased' => 'badge-soft-danger',
         default => 'badge-soft-info',
     };
     $fullName = trim($fr->firstname.' '.$fr->lastname.' '.$fr->suffix);
     $batch = 'Batch '.($fr->batch_section ? $fr->batch_section.' - ' : '').($fr->batch_year ?: '—');
-    $fullAddress = trim(($fr->residential_address ? $fr->residential_address.', ' : '').($fr->barangay?->name ? $fr->barangay->name.', ' : '').($fr->municipality?->name ?? ''));
+    // [label, mdi icon, value, col class]
+    $profileFields = [
+        ['NAME', 'mdi-card-account-details', $fullName, 'col-md-8'],
+        ['ALIAS', 'mdi-tag-text', $fr->nickname ?: '—', 'col-md-4'],
+        ['GENDER', 'mdi-gender-male-female', $fr->gender ?: '—', 'col-md-4'],
+        ['CIVIL STATUS', 'mdi-heart', $fr->civil_status ?: '—', 'col-md-4'],
+        ['BIRTHDAY', 'mdi-calendar', $fr->birthdate?->format('F d, Y') ?: '—', 'col-md-4'],
+        ['CONTACT NUMBER', 'mdi-phone', $fr->contact_num ?: 'No contact number available', 'col-md-8'],
+        ['AGE', 'mdi-cake-variant', $fr->age ? $fr->age.' yrs old' : '—', 'col-md-4'],
+        ['MUNICIPALITY', 'mdi-city', $fr->municipality?->name ?: '—', 'col-md-4'],
+        ['BARANGAY', 'mdi-map-marker', $fr->barangay?->name ?: '—', 'col-md-4'],
+        ['ZIP CODE', 'mdi-mailbox', $fr->zipcode ?: '—', 'col-md-4'],
+        ['RESIDENTIAL ADDRESS', 'mdi-home', trim(($fr->residential_address ? $fr->residential_address.', ' : '').($fr->barangay?->name ? $fr->barangay->name.', ' : '').($fr->municipality?->name ?? '')), 'col-12'],
+    ];
+    $bgFields = [
+        ['Date of Surrender', 'mdi-calendar', $fr->surrender_date?->format('F d, Y') ?: '—', 'col-md-8', 'accent'],
+        ['Batch Year', 'mdi-account-group', $batch, 'col-md-4', 'accent'],
+        ['Reason of Surrender', 'mdi-file-document', $fr->surrender_reason ?: '—', 'col-12', 'accent'],
+    ];
 @endphp
 
 @push('styles')
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="{{ asset('assets/css/mblrc-dashboard.css') }}">
 <style>
-    .fr-avatar { width: 72px; height: 72px; object-fit: cover; }
-    .mblrc-profile-tab-nav {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 0.5rem;
-        box-shadow: 0 1px 3px rgba(15,23,42,0.04);
-        margin-bottom: 1.5rem;
-    }
-    .mblrc-profile-tab-nav .nav-pills .nav-link {
-        border-radius: 10px;
-        padding: 0.7rem 1.25rem;
-        font-weight: 750;
-        font-size: 0.8125rem;
-        color: #64748b;
-        letter-spacing: 0.03em;
-        transition: all 0.2s ease;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.45rem;
-    }
-    .mblrc-profile-tab-nav .nav-pills .nav-link:hover {
-        color: #1e1b4b;
-        background: #f8fafc;
-    }
-    .mblrc-profile-tab-nav .nav-pills .nav-link.active {
-        background: #312e81;
-        color: #ffffff;
-        box-shadow: 0 4px 12px rgba(49, 46, 129, 0.25);
-    }
-    .info-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1rem 1.15rem;
-        height: 100%;
-        transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    .info-card:hover {
-        border-color: #cbd5e1;
-        box-shadow: 0 4px 12px rgba(15,23,42,.05);
-    }
-    .info-card small.label-text {
-        color: #64748b;
-        font-size: 0.6875rem;
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        margin-bottom: 0.35rem;
-        display: block;
-    }
-    .icon-container {
-        width: 36px;
-        height: 36px;
-        min-width: 36px;
-        background: #eef2ff;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 12px;
-        color: #4338ca;
-        font-size: 1.2rem;
-    }
-    .icon-container.accent-amber { background: #fffbeb; color: #d97706; }
-    .icon-container.accent-blue { background: #eff6ff; color: #2563eb; }
-    .icon-container.accent-shield { background: #eef2ff; color: #312e81; }
-    .icon-container.accent-purple { background: #f5f3ff; color: #7c3aed; }
-    .form-control-static {
-        font-weight: 700;
-        color: #0f172a;
-        margin-bottom: 0;
-        font-size: 0.9375rem;
-        line-height: 1.35;
-        word-break: break-word;
-    }
-    .badge-soft-danger { color: #e11d48; background-color: #fff1f2; border: 1px solid #fecdd3; }
-    .badge-soft-shield { color: #312e81; background-color: #eef2ff; border: 1px solid #c7d2fe; }
-    .badge-soft-info { color: #0284c7; background-color: #f0f9ff; border: 1px solid #bae6fd; }
-    .badge-soft-warning { color: #d97706; background-color: #fffbeb; border: 1px solid #fde68a; }
-    #frLocationMap {
-        height: 400px;
-        width: 100%;
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-    }
-    .item-card-row {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 0.9rem 1.15rem;
-        transition: all 0.2s ease;
-    }
-    .item-card-row:hover {
-        background: #ffffff;
-        border-color: #cbd5e1;
-        box-shadow: 0 2px 8px rgba(15,23,42,0.05);
-    }
+    .fr-banner { height: 200px; background-image: url('{{ asset('assets/images/8.jpg') }}'); background-size: cover; background-position: center; }
+    .fr-avatar { width: 120px; height: 120px; object-fit: cover; }
+    .info-card { background: #fff; border: 1px solid rgba(0,0,0,.05); border-radius: 10px; padding: 16px 20px; height: 100%; transition: box-shadow .2s; }
+    .info-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .info-card small { color: #6c757d; font-size: .75rem; letter-spacing: .5px; }
+    .icon-container { width: 40px; height: 40px; min-width: 40px; background: #f8f9fa; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 15px; color: #63479B; }
+    .icon-container.accent { background: rgba(245,166,35,.1); color: #F5A623; }
+    .icon-container.green { background: rgba(0,179,0,.1); color: #00b300; }
+    .form-control-static { font-weight: 500; color: #2d2d2d; padding: .375rem 0; margin-bottom: 0; font-size: 1rem; line-height: 1.5; }
+    .info-item { margin-top: 6px; }
+    .badge-soft-danger { color: #dc3545; background-color: rgba(220,53,69,.1); }
+    .badge-soft-success { color: #28a745; background-color: rgba(40,167,69,.1); }
+    .badge-soft-info { color: #17a2b8; background-color: rgba(23,162,184,.1); }
+    .badge-soft-warning { color: #d39e00; background-color: rgba(255,193,7,.15); }
+    .nav-tabs-line { border-bottom: 2px solid #e9ecef; }
+    .nav-tabs-line .nav-link { border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 1rem 1.5rem; font-weight: 500; color: #6c757d; }
+    .nav-tabs-line .nav-link.active { color: #007bff; border-bottom-color: #007bff; background: transparent; }
+    .section-head h3 { font-size: 1.25rem; }
+    #frLocationMap { height: 400px; width: 100%; border-radius: 6px; }
 </style>
 @endpush
 
 @section('content')
-<div class="mblrc-dashboard-container" id="frProfile"
+<div id="frProfile"
      data-fr-id="{{ $fr->id }}"
      data-program-status="{{ route('mblrc.fr.program-status.update', $fr) }}"
      data-location-save="{{ route('mblrc.fr.location.save', $fr) }}"
@@ -135,310 +70,142 @@
      data-education-store="{{ route('mblrc.fr.education.update', $fr) }}"
      data-lat="{{ $fr->latitude }}" data-lng="{{ $fr->longitude }}">
 
-    {{-- Modern Hero Banner (SHIELD Brand Design) --}}
-    <div class="mblrc-hero mb-4">
-        <div class="d-flex justify-content-between align-items-center flex-wrap" style="position: relative; z-index: 2; gap: 1.25rem;">
-            <div class="d-flex align-items-center" style="gap: 1.25rem;">
-                <div class="rounded-circle overflow-hidden border border-3 border-white shadow-sm flex-shrink-0" style="width: 72px; height: 72px; background: #ffffff;">
-                    <img src="{{ asset('assets/img/fr-profile.jpg') }}" alt="profile" style="width: 100%; height: 100%; object-fit: cover;">
-                </div>
-                <div>
-                    <div class="mblrc-hero-eyebrow">
-                        MBLRC Profile &middot; {{ $fr->classified_id }}
-                    </div>
-                    <h1 class="mblrc-hero-title mb-1">{{ $fullName }}</h1>
-                    <div class="d-flex align-items-center flex-wrap gap-2 mt-1">
-                        <span class="badge" style="background: rgba(225, 29, 72, 0.25); color: #fecdd3; border: 1px solid rgba(225, 29, 72, 0.4); font-weight: 750; font-size: 0.75rem; padding: 0.35rem 0.75rem; border-radius: 9999px;">
-                            <i class="mdi mdi-shield-account mr-1"></i> Former Rebel
-                        </span>
-                        <span class="badge {{ $softStatus }}" style="padding: 0.35rem 0.75rem; border-radius: 9999px; font-weight: 750; font-size: 0.75rem;">
-                            <i class="mdi mdi-check-circle-outline mr-1"></i> {{ $fr->status }}
-                        </span>
+    {{-- Profile Header Card --}}
+    <div class="card mb-4" style="border-radius:.75rem;overflow:hidden;">
+        <div class="position-relative">
+            <div class="fr-banner"></div>
+            <div class="position-absolute" style="bottom:-50px;left:50px;">
+                <img src="{{ asset('assets/img/fr-profile.jpg') }}" class="fr-avatar rounded-circle border border-4 border-white" alt="profile">
+            </div>
+        </div>
+        <div class="card-body pt-5 pb-3" style="padding-left:50px;">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div style="margin-top:20px;">
+                    <h3 class="font-weight-bold mb-3">{{ $fullName }} <small class="text-muted">· {{ $fr->classified_id }}</small></h3>
+                    <div class="d-flex align-items-center flex-wrap gap-2">
+                        <span class="badge badge-soft-danger px-3 py-2"><i class="mdi mdi-shield-account me-1"></i> Former Rebel</span>
+                        <span class="badge {{ $softStatus }} px-3 py-2"><i class="mdi mdi-check-circle me-1"></i> {{ $fr->status }}</span>
                         @if ($fr->surrender_date)
-                            <span class="badge" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.25); font-weight: 700; font-size: 0.75rem; padding: 0.35rem 0.75rem; border-radius: 9999px;">
-                                <i class="mdi mdi-calendar mr-1"></i> Surrendered {{ $fr->surrender_date->format('M d, Y') }}
-                            </span>
+                            <span class="badge badge-soft-info px-3 py-2"><i class="mdi mdi-calendar me-1"></i> Surrendered in {{ $fr->surrender_date->format('F Y') }}</span>
                         @endif
                     </div>
                 </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <a href="{{ route('mblrc.fr.edit', $fr) }}" class="btn" style="background: #ffffff; color: #312e81; font-weight: 800; font-size: 0.875rem; padding: 0.55rem 1.25rem; border-radius: 10px; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.18); transition: all 0.2s ease;">
-                    <i class="mdi mdi-pencil mr-1"></i> Edit Profile
-                </a>
-                <a href="{{ route('mblrc.fr.index') }}" class="btn" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #ffffff; font-weight: 700; border-radius: 10px; padding: 0.55rem 1.15rem;">
-                    <i class="mdi mdi-arrow-left mr-1"></i> Back
-                </a>
+                <div class="d-flex gap-2" style="margin-top:20px;">
+                    <a href="{{ route('mblrc.fr.edit', $fr) }}" class="btn btn-outline-primary btn-sm"><i class="mdi mdi-pencil"></i> Edit</a>
+                    <a href="{{ route('mblrc.fr.index') }}" class="btn btn-light btn-sm">Back</a>
+                </div>
             </div>
         </div>
     </div>
 
-    {{-- Tabs Navigation --}}
-    <div class="mblrc-profile-tab-nav">
-        <ul class="nav nav-pills border-0" role="tablist">
-            <li class="nav-item">
-                <a class="nav-link active" data-bs-toggle="tab" href="#tab-profile" role="tab">
-                    <i class="mdi mdi-account-circle"></i> Profile Information
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#tab-reintegration" role="tab">
-                    <i class="mdi mdi-school"></i> Reintegration Information
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#tab-geotag" role="tab">
-                    <i class="mdi mdi-map-marker-radius"></i> Geotag & Location
-                </a>
-            </li>
-        </ul>
+    {{-- Tabs --}}
+    <div class="card mb-4">
+        <div class="card-body p-0">
+            <ul class="nav nav-tabs nav-tabs-line" role="tablist">
+                <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-profile" role="tab">PROFILE INFORMATION</a></li>
+                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-reintegration" role="tab">REINTEGRATION INFORMATION</a></li>
+                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-geotag" role="tab">GEOTAG AND LOCATION INFORMATION</a></li>
+            </ul>
+        </div>
     </div>
 
     <div class="tab-content">
-        {{-- TAB 1: PROFILE INFORMATION --}}
+        {{-- PROFILE TAB --}}
         <div class="tab-pane fade show active" id="tab-profile" role="tabpanel">
-            
-            {{-- Card 1: Personal Demographic Details --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #eef2ff; color: #312e81;">
-                            <i class="mdi mdi-account-card-details"></i>
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4 section-head">
+                        <div class="d-flex align-items-center">
+                            <i class="mdi mdi-account-circle me-2" style="font-size:1.8rem;color:#63479B;"></i>
+                            <h3 class="font-weight-bold mb-0" style="color:#63479B;">PROFILE INFORMATION</h3>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Personal Profile Information</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Core demographic records and contact information</p>
-                        </div>
+                        <a href="{{ route('mblrc.fr.edit', $fr) }}" class="btn btn-primary"><i class="mdi mdi-pencil me-1"></i>Edit Profile</a>
                     </div>
-                    <a href="{{ route('mblrc.fr.edit', $fr) }}" class="btn btn-sm" style="background: #eef2ff; color: #312e81; font-weight: 750; border-radius: 8px; padding: 0.4rem 0.9rem; border: 1px solid #c7d2fe;">
-                        <i class="mdi mdi-pencil mr-1"></i> Edit Details
-                    </a>
-                </div>
-                <div class="mblrc-form-card-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="info-card">
-                                <small class="label-text">Full Legal Name</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-shield"><i class="mdi mdi-account-card-details"></i></div>
-                                    <div class="form-control-static">{{ $fullName }}</div>
+                        @foreach ($profileFields as [$label, $icon, $value, $col])
+                            <div class="{{ $col }}">
+                                <div class="info-card">
+                                    <small class="text-muted text-uppercase">{{ $label }}</small>
+                                    <div class="d-flex align-items-center info-item">
+                                        <div class="icon-container"><i class="mdi {{ $icon }}"></i></div>
+                                        <div class="form-control-static">{{ $value }}</div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Alias / Nickname</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-shield"><i class="mdi mdi-tag-outline"></i></div>
-                                    <div class="form-control-static">{{ $fr->nickname ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Contact Number</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-shield"><i class="mdi mdi-phone"></i></div>
-                                    <div class="form-control-static">{{ $fr->contact_num ?: 'None' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Gender</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-gender-male-female"></i></div>
-                                    <div class="form-control-static">{{ $fr->gender ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Civil Status</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-heart"></i></div>
-                                    <div class="form-control-static">{{ $fr->civil_status ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Date of Birth</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-calendar"></i></div>
-                                    <div class="form-control-static">{{ $fr->birthdate?->format('F d, Y') ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-card">
-                                <small class="label-text">Age</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-cake-variant"></i></div>
-                                    <div class="form-control-static">{{ $fr->age ? $fr->age.' yrs old' : '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
+                        @endforeach
                     </div>
                 </div>
             </div>
 
-            {{-- Card 2: Address & Location Details --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #fffbeb; color: #d97706;">
-                            <i class="mdi mdi-map-marker"></i>
-                        </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Address & Location Details</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Municipality, barangay, and residential address</p>
-                        </div>
+            {{-- Background --}}
+            <div class="card mt-4">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4 section-head">
+                        <i class="mdi mdi-history me-2" style="font-size:1.8rem;color:#F5A623;"></i>
+                        <h3 class="font-weight-bold mb-0" style="color:#F5A623;">BACKGROUND</h3>
                     </div>
-                </div>
-                <div class="mblrc-form-card-body">
                     <div class="row g-3">
-                        <div class="col-md-4">
-                            <div class="info-card">
-                                <small class="label-text">Municipality</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-amber"><i class="mdi mdi-city"></i></div>
-                                    <div class="form-control-static">{{ $fr->municipality?->name ?: '—' }}</div>
+                        @foreach ($bgFields as [$label, $icon, $value, $col, $accent])
+                            <div class="{{ $col }}">
+                                <div class="info-card">
+                                    <small class="text-muted">{{ $label }}</small>
+                                    <div class="d-flex align-items-center info-item">
+                                        <div class="icon-container {{ $accent }}"><i class="mdi {{ $icon }}"></i></div>
+                                        <div class="form-control-static">{{ $value }}</div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="info-card">
-                                <small class="label-text">Barangay</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-amber"><i class="mdi mdi-map-marker"></i></div>
-                                    <div class="form-control-static">{{ $fr->barangay?->name ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="info-card">
-                                <small class="label-text">Zip Code</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-amber"><i class="mdi mdi-numeric"></i></div>
-                                    <div class="form-control-static">{{ $fr->zipcode ?: '—' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-card">
-                                <small class="label-text">Complete Residential Address</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-amber"><i class="mdi mdi-home"></i></div>
-                                    <div class="form-control-static">{{ $fullAddress ?: 'No specific street address provided' }}</div>
-                                </div>
-                            </div>
-                        </div>
+                        @endforeach
                     </div>
                 </div>
             </div>
 
-            {{-- Card 3: Surrender Background --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #eff6ff; color: #2563eb;">
-                            <i class="mdi mdi-history"></i>
+            {{-- 3-Months Program Status --}}
+            <div class="card mt-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4 section-head">
+                        <div class="d-flex align-items-center">
+                            <i class="mdi mdi-clipboard-list me-2" style="font-size:1.8rem;color:#3D0075;"></i>
+                            <h3 class="font-weight-bold mb-0" style="color:#3D0075;">3-MONTHS PROGRAM STATUS</h3>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Surrender Background</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Surrender timeline, batch assignment, and remarks</p>
-                        </div>
+                        <button type="button" class="btn" style="background-color:#3D0075;color:#fff;" data-bs-toggle="collapse" data-bs-target="#editStatusForm">Edit Status</button>
                     </div>
-                </div>
-                <div class="mblrc-form-card-body">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="info-card">
-                                <small class="label-text">Date of Surrender</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-calendar"></i></div>
-                                    <div class="form-control-static">{{ $fr->surrender_date?->format('F d, Y') ?: '—' }}</div>
+                                <small class="text-muted">Reintegration Status</small>
+                                <div class="d-flex align-items-center info-item">
+                                    <div class="icon-container green"><i class="mdi mdi-check-circle"></i></div>
+                                    <div class="form-control-static">{{ $ps?->reintegration_status ?? 'Not set' }}</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-card">
-                                <small class="label-text">Batch Information</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-blue"><i class="mdi mdi-account-group"></i></div>
-                                    <div class="form-control-static">{{ $batch }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-card">
-                                <small class="label-text">Reason of Surrender / Narrative</small>
-                                <div class="d-flex align-items-start">
-                                    <div class="icon-container accent-blue mt-1"><i class="mdi mdi-file-document"></i></div>
-                                    <div class="form-control-static" style="font-weight: 500; font-size: 0.875rem; line-height: 1.5;">{{ $fr->surrender_reason ?: 'No surrender narrative recorded.' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Card 4: 3-Months Program Status --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #f5f3ff; color: #7c3aed;">
-                            <i class="mdi mdi-clipboard-text"></i>
-                        </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">3-Months Program Status</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Reintegration track and completion milestone</p>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm" style="background-color: #312e81; color: #ffffff; font-weight: 750; border-radius: 8px; padding: 0.4rem 0.9rem;" data-bs-toggle="collapse" data-bs-target="#editStatusForm">
-                        <i class="mdi mdi-pencil mr-1"></i> Update Status
-                    </button>
-                </div>
-                <div class="mblrc-form-card-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="info-card">
-                                <small class="label-text">Reintegration Status</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-purple"><i class="mdi mdi-check-circle-outline"></i></div>
-                                    <div class="form-control-static">{{ $ps?->reintegration_status ?? 'Not-Started' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-card">
-                                <small class="label-text">Date of Reintegration</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-purple"><i class="mdi mdi-calendar-check"></i></div>
+                                <small class="text-muted">Date of Reintegration</small>
+                                <div class="d-flex align-items-center info-item">
+                                    <div class="icon-container green"><i class="mdi mdi-calendar-check"></i></div>
                                     <div class="form-control-static">{{ $ps?->reintegration_date?->format('F d, Y') ?? 'Not set' }}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="collapse mt-3" id="editStatusForm">
-                        <form data-program-form class="p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-5">
-                                    <label class="mblrc-label">Reintegration Status</label>
-                                    <select name="reintegration_status" class="mblrc-select">
-                                        @foreach (['Not-Started', 'On-going', 'Completed'] as $s)
-                                            <option value="{{ $s }}" @selected(($ps?->reintegration_status ?? 'Not-Started') === $s)>{{ $s }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="mblrc-label">Date of Reintegration</label>
-                                    <input name="reintegration_date" type="date" value="{{ $ps?->reintegration_date?->toDateString() }}" class="mblrc-input">
-                                </div>
-                                <div class="col-md-2">
-                                    <button class="btn w-100" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.65rem 1rem;">Update</button>
-                                </div>
+                        <form data-program-form class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label">Reintegration Status</label>
+                                <select name="reintegration_status" class="form-select">
+                                    @foreach (['Not-Started', 'On-going', 'Completed'] as $s)
+                                        <option value="{{ $s }}" @selected($ps?->reintegration_status === $s)>{{ $s }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label">Date of Reintegration</label>
+                                <input name="reintegration_date" type="date" value="{{ $ps?->reintegration_date?->toDateString() }}" class="form-control">
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-primary w-100">Update</button>
                             </div>
                         </form>
                     </div>
@@ -446,52 +213,37 @@
             </div>
         </div>
 
-        {{-- TAB 2: REINTEGRATION INFORMATION --}}
+        {{-- REINTEGRATION TAB --}}
         <div class="tab-pane fade" id="tab-reintegration" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="font-weight-bold mb-4" style="color:#3F51B5;">SOCIO-ECONOMIC STATUS</h4>
 
-            {{-- Card 1: Education and Work --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #eef2ff; color: #312e81;">
-                            <i class="mdi mdi-school"></i>
+                    {{-- Education and Work --}}
+                    <div class="info-card mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">EDUCATION AND WORK INFORMATION</small>
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#eduForm"><i class="mdi mdi-pencil"></i> Edit</button>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Education & Employment</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Educational attainment and current occupation</p>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm" style="background: #eef2ff; color: #312e81; font-weight: 750; border-radius: 8px; padding: 0.4rem 0.9rem; border: 1px solid #c7d2fe;" data-bs-toggle="collapse" data-bs-target="#eduForm">
-                        <i class="mdi mdi-pencil mr-1"></i> Edit Info
-                    </button>
-                </div>
-                <div class="mblrc-form-card-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="info-card">
-                                <small class="label-text">Educational Attainment</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-shield"><i class="mdi mdi-school"></i></div>
-                                    <div class="form-control-static">{{ $education?->educational_attainment ?: 'Not Specified' }}</div>
-                                </div>
+                        <div class="d-flex align-items-center info-item mb-2">
+                            <div class="icon-container"><i class="mdi mdi-school"></i></div>
+                            <div class="info-content">
+                                <small class="text-muted d-block">Educational Level</small>
+                                <div class="form-control-static">{{ $education?->educational_attainment ?: 'Not Specified' }}</div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="info-card">
-                                <small class="label-text">Current Work / Profession</small>
-                                <div class="d-flex align-items-center">
-                                    <div class="icon-container accent-shield"><i class="mdi mdi-briefcase"></i></div>
-                                    <div class="form-control-static">{{ $education?->occupation ?: ($fr->occupation ?: 'Not specified') }}</div>
-                                </div>
+                        <div class="d-flex align-items-center info-item">
+                            <div class="icon-container"><i class="mdi mdi-briefcase"></i></div>
+                            <div class="info-content">
+                                <small class="text-muted d-block">Current Work/Profession</small>
+                                <div class="form-control-static">{{ $education?->occupation ?: ($fr->occupation ?: 'Not specified') }}</div>
                             </div>
                         </div>
-                    </div>
-                    <div class="collapse mt-3" id="eduForm">
-                        <form data-education-form class="p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                            <div class="row g-3">
+                        <div class="collapse mt-3" id="eduForm">
+                            <form data-education-form class="row g-2">
                                 <div class="col-sm-6">
-                                    <label class="mblrc-label">Educational Level</label>
-                                    <select name="educational_attainment" class="mblrc-select">
+                                    <label class="form-label">Educational Level</label>
+                                    <select name="educational_attainment" class="form-select">
                                         <option value="">Select Educational Level</option>
                                         @foreach (['Elementary Level','Elementary Graduate','High School Level','High School Graduate','College Level','College Graduate','Post Graduate','Vocational'] as $lvl)
                                             <option value="{{ $lvl }}" @selected($education?->educational_attainment === $lvl)>{{ $lvl }}</option>
@@ -499,201 +251,135 @@
                                     </select>
                                 </div>
                                 <div class="col-sm-6">
-                                    <label class="mblrc-label">Current Work/Profession</label>
-                                    <input name="occupation" placeholder="Enter current work/profession" class="mblrc-input" value="{{ $education?->occupation ?? $fr->occupation }}">
+                                    <label class="form-label">Current Work/Profession</label>
+                                    <input name="occupation" placeholder="Enter current work/profession" class="form-control" value="{{ $education?->occupation ?? $fr->occupation }}">
                                 </div>
-                                <div class="col-12 text-end">
-                                    <button class="btn" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.6rem 1.4rem;">Save Information</button>
-                                </div>
-                            </div>
-                        </form>
+                                <div class="col-12"><button class="btn btn-primary">Save Information</button></div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            {{-- Card 2: Skill/Works Enhancement --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #eff6ff; color: #2563eb;">
-                            <i class="mdi mdi-wrench"></i>
+                    {{-- Skill/Works Enhancement --}}
+                    <div class="info-card mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <small class="text-muted">SKILL/WORKS ENHANCEMENT</small>
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#skillForm"><i class="mdi mdi-plus"></i> Add Skills</button>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Skills & Vocational Enhancement</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Technical proficiencies and specialized training</p>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm" style="background: #2563eb; color: #ffffff; font-weight: 750; border-radius: 8px; padding: 0.4rem 0.9rem;" data-bs-toggle="collapse" data-bs-target="#skillForm">
-                        <i class="mdi mdi-plus mr-1"></i> Add Skill
-                    </button>
-                </div>
-                <div class="mblrc-form-card-body">
-                    <ul data-skills-list class="list-unstyled mb-0 d-flex flex-column gap-2">
-                        @foreach ($fr->skills as $skill)
-                            <li class="item-card-row d-flex align-items-center justify-content-between" data-skill-id="{{ $skill->id }}">
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="icon-container accent-blue mb-0"><i class="mdi mdi-wrench"></i></div>
-                                    <div>
-                                        <h6 class="mb-1 font-weight-bold" style="color: #0f172a; font-size: 0.9375rem;">{{ $skill->skill_name }}</h6>
-                                        <span class="badge" style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-weight: 700; font-size: 0.75rem;">
-                                            <i class="mdi mdi-star mr-1"></i> {{ $skill->proficiency_level }}
-                                        </span>
+                        <ul data-skills-list class="list-unstyled mb-0">
+                            @foreach ($fr->skills as $skill)
+                                <li class="d-flex align-items-center info-item mb-3 p-2 border-bottom" data-skill-id="{{ $skill->id }}">
+                                    <div class="icon-container me-3"><i class="mdi mdi-tools text-primary"></i></div>
+                                    <div class="info-content flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1">{{ $skill->skill_name }}</h6>
+                                                <small class="text-muted"><i class="mdi mdi-star me-1"></i>{{ $skill->proficiency_level }}</small>
+                                            </div>
+                                            <button type="button" data-skill-delete="{{ route('mblrc.fr.skills.destroy', $skill) }}" class="btn btn-outline-danger btn-sm"><i class="mdi mdi-delete"></i></button>
+                                        </div>
                                     </div>
-                                </div>
-                                <button type="button" data-skill-delete="{{ route('mblrc.fr.skills.destroy', $skill) }}" class="btn btn-outline-danger btn-sm" style="border-radius: 8px; padding: 0.35rem 0.65rem;" title="Delete skill">
-                                    <i class="mdi mdi-delete"></i>
-                                </button>
-                            </li>
-                        @endforeach
-                    </ul>
-                    @if ($fr->skills->isEmpty())
-                        <div class="d-flex align-items-center p-3 rounded-3 text-muted" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
-                            <i class="mdi mdi-information-outline me-2" style="font-size: 1.25rem; color: #64748b;"></i>
-                            <span>No skills or vocational records added yet.</span>
-                        </div>
-                    @endif
-                    <div class="collapse mt-3" id="skillForm">
-                        <form data-skill-form class="p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                            <div class="row g-3">
+                                </li>
+                            @endforeach
+                        </ul>
+                        @if ($fr->skills->isEmpty())
+                            <div class="d-flex align-items-center info-item p-3 bg-light rounded">
+                                <div class="icon-container me-3"><i class="mdi mdi-information text-muted"></i></div>
+                                <div class="text-muted">No skills added yet</div>
+                            </div>
+                        @endif
+                        <div class="collapse mt-3" id="skillForm">
+                            <form data-skill-form class="row g-2">
                                 <div class="col-md-6">
-                                    <label class="mblrc-label">Skill Name</label>
-                                    <input name="skill_name" list="skillSuggestions" placeholder="e.g. Carpentry, Welding, Farming" class="mblrc-input" required>
+                                    <input name="skill_name" list="skillSuggestions" placeholder="Skill name" class="form-control" required>
                                     <datalist id="skillSuggestions"></datalist>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="mblrc-label">Proficiency Level</label>
-                                    <select name="proficiency_level" class="mblrc-select">
+                                    <select name="proficiency_level" class="form-select">
                                         @foreach (['Beginner', 'Intermediate', 'Advanced'] as $p)
                                             <option value="{{ $p }}">{{ $p }}</option>
                                         @endforeach
                                     </select>
                                 </div>
-                                <div class="col-md-2 d-flex align-items-end">
-                                    <button class="btn w-100" style="background: #2563eb; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.65rem 1rem;">Add</button>
-                                </div>
-                            </div>
-                        </form>
+                                <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            {{-- Card 3: Government Assistance Received --}}
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #fffbeb; color: #d97706;">
-                            <i class="mdi mdi-gift-outline"></i>
+                    {{-- Government Assistance Received --}}
+                    <div class="info-card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <small class="text-muted">GOVERNMENT ASSISTANCE RECEIVED</small>
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#assistForm"><i class="mdi mdi-plus"></i> Add New Assistance</button>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Government Assistance Received</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Aid, livelihood packages, and social assistance granted</p>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-sm" style="background: #d97706; color: #ffffff; font-weight: 750; border-radius: 8px; padding: 0.4rem 0.9rem;" data-bs-toggle="collapse" data-bs-target="#assistForm">
-                        <i class="mdi mdi-plus mr-1"></i> Add Assistance
-                    </button>
-                </div>
-                <div class="mblrc-form-card-body">
-                    <ul data-assistance-list class="list-unstyled mb-0 d-flex flex-column gap-2">
-                        @foreach ($fr->assistances as $a)
-                            <li class="item-card-row d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="icon-container accent-amber mb-0"><i class="mdi mdi-gift-outline"></i></div>
-                                    <div>
-                                        <div class="d-flex align-items-center gap-2 mb-1">
-                                            <h6 class="mb-0 font-weight-bold" style="color: #0f172a; font-size: 0.9375rem;">{{ $a->assistance_type }}</h6>
-                                            <span class="badge badge-soft-info" style="font-size: 0.75rem; border-radius: 6px; padding: 0.2rem 0.55rem;">{{ $a->status }}</span>
+                        <ul data-assistance-list class="list-unstyled mb-0">
+                            @foreach ($fr->assistances as $a)
+                                <li class="d-flex align-items-center info-item mb-3 p-2 border-bottom">
+                                    <div class="icon-container me-3"><i class="mdi mdi-hand-heart text-primary"></i></div>
+                                    <div class="info-content flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1">{{ $a->assistance_type }} <span class="badge badge-secondary ms-1">{{ $a->status }}</span></h6>
+                                                <small class="text-muted"><i class="mdi mdi-calendar me-1"></i>{{ $a->date_received?->format('F d, Y') ?? '—' }}</small>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                @if ($a->certificate_file)
+                                                    <a href="{{ Storage::url($a->certificate_file) }}" target="_blank" class="btn btn-outline-primary btn-sm"><i class="mdi mdi-file-document me-1"></i> Certificate</a>
+                                                @endif
+                                                <button type="button" data-assistance-delete="{{ route('mblrc.fr.assistance.destroy', $a) }}" class="btn btn-outline-danger btn-sm"><i class="mdi mdi-delete"></i></button>
+                                            </div>
                                         </div>
-                                        <small class="text-muted"><i class="mdi mdi-calendar mr-1"></i>{{ $a->date_received?->format('F d, Y') ?? 'Date unspecified' }}</small>
                                     </div>
-                                </div>
-                                <div class="d-flex align-items-center gap-2">
-                                    @if ($a->certificate_file)
-                                        <a href="{{ Storage::url($a->certificate_file) }}" target="_blank" class="btn btn-sm" style="background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; font-weight: 700; border-radius: 8px; padding: 0.35rem 0.75rem;">
-                                            <i class="mdi mdi-file-document mr-1"></i> Certificate
-                                        </a>
-                                    @endif
-                                    <button type="button" data-assistance-delete="{{ route('mblrc.fr.assistance.destroy', $a) }}" class="btn btn-outline-danger btn-sm" style="border-radius: 8px; padding: 0.35rem 0.65rem;" title="Delete record">
-                                        <i class="mdi mdi-delete"></i>
-                                    </button>
-                                </div>
-                            </li>
-                        @endforeach
-                    </ul>
-                    @if ($fr->assistances->isEmpty())
-                        <div class="d-flex align-items-center p-3 rounded-3 text-muted" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
-                            <i class="mdi mdi-information-outline me-2" style="font-size: 1.25rem; color: #64748b;"></i>
-                            <span>No government assistance records registered yet.</span>
-                        </div>
-                    @endif
-                    <div class="collapse mt-3" id="assistForm">
-                        <form data-assistance-form class="p-3 rounded-3" enctype="multipart/form-data" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="mblrc-label">Assistance Type</label>
-                                    <input name="assistance_type" placeholder="e.g. Livelihood Grant, Medical Assistance" class="mblrc-input" required>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="mblrc-label">Date Received</label>
-                                    <input name="date_received" type="date" class="mblrc-input">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="mblrc-label">Status</label>
-                                    <select name="status" class="mblrc-select">
+                                </li>
+                            @endforeach
+                        </ul>
+                        @if ($fr->assistances->isEmpty())
+                            <div class="d-flex align-items-center info-item p-3 bg-light rounded">
+                                <div class="icon-container me-3"><i class="mdi mdi-information text-muted"></i></div>
+                                <div class="text-muted">No government assistance records yet</div>
+                            </div>
+                        @endif
+                        <div class="collapse mt-3" id="assistForm">
+                            <form data-assistance-form class="row g-2" enctype="multipart/form-data">
+                                <div class="col-12"><input name="assistance_type" placeholder="Assistance type" class="form-control" required></div>
+                                <div class="col-sm-6"><input name="date_received" type="date" class="form-control"></div>
+                                <div class="col-sm-6">
+                                    <select name="status" class="form-select">
                                         @foreach (['Pending', 'In Progress', 'Completed'] as $s)
                                             <option value="{{ $s }}">{{ $s }}</option>
                                         @endforeach
                                     </select>
                                 </div>
-                                <div class="col-md-12">
-                                    <label class="mblrc-label">Supporting Document / Certificate (optional)</label>
-                                    <input name="certificate" type="file" accept=".jpg,.jpeg,.png,.gif,.pdf" class="mblrc-input">
-                                </div>
-                                <div class="col-12 text-end">
-                                    <button class="btn" style="background: #d97706; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.6rem 1.4rem;">Add Assistance Record</button>
-                                </div>
-                            </div>
-                        </form>
+                                <div class="col-12"><input name="certificate" type="file" accept=".jpg,.jpeg,.png,.gif,.pdf" class="form-control form-control-sm"></div>
+                                <div class="col-12"><button class="btn btn-primary w-100">Add assistance</button></div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- TAB 3: GEOTAG & LOCATION --}}
+        {{-- GEOTAG TAB --}}
         <div class="tab-pane fade" id="tab-geotag" role="tabpanel">
-            <div class="mblrc-form-card">
-                <div class="mblrc-form-card-header">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="mblrc-form-header-icon" style="background: #eef2ff; color: #312e81;">
-                            <i class="mdi mdi-map-marker-radius"></i>
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 section-head">
+                        <div class="d-flex align-items-center">
+                            <i class="mdi mdi-map-marker-radius me-2" style="font-size:1.6rem;color:#3F51B5;"></i>
+                            <h3 class="font-weight-bold mb-0" style="color:#3F51B5;">LOCATION INFORMATION</h3>
                         </div>
-                        <div>
-                            <h4 class="mb-0" style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">Placement Geotag & Location</h4>
-                            <p class="mb-0 text-muted" style="font-size: 0.8125rem;">Interactive map coordinates and placement history</p>
-                        </div>
+                        <span class="small text-muted">Click the map to set a point</span>
                     </div>
-                    <span class="badge" style="background: #eef2ff; color: #312e81; font-weight: 700; border-radius: 8px; padding: 0.4rem 0.8rem; border: 1px solid #c7d2fe;">
-                        <i class="mdi mdi-map-marker mr-1"></i> Click map to pin location
-                    </span>
-                </div>
-                <div class="mblrc-form-card-body">
                     <div id="frLocationMap"></div>
-                    <form data-location-form class="mt-3 p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-9">
-                                <label class="mblrc-label">Placement Address & Landmarks</label>
-                                <input name="placement_address" value="{{ $fr->placement_address }}" placeholder="Enter placement address or landmark details" class="mblrc-input" required>
-                            </div>
-                            <input name="latitude" type="hidden" value="{{ $fr->latitude }}">
-                            <input name="longitude" type="hidden" value="{{ $fr->longitude }}">
-                            <div class="col-md-3">
-                                <button class="btn w-100" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.65rem 1rem;">
-                                    <i class="mdi mdi-content-save mr-1"></i> Save Location
-                                </button>
-                            </div>
+                    <form data-location-form class="mt-3 d-flex flex-wrap align-items-end gap-2">
+                        <div class="flex-grow-1">
+                            <label class="form-label">Placement address</label>
+                            <input name="placement_address" value="{{ $fr->placement_address }}" class="form-control" required>
                         </div>
+                        <input name="latitude" type="hidden" value="{{ $fr->latitude }}">
+                        <input name="longitude" type="hidden" value="{{ $fr->longitude }}">
+                        <button class="btn btn-success">Save location</button>
                     </form>
-                    <div data-location-history class="mt-3"></div>
+                    <div data-location-history class="mt-3 small text-muted"></div>
                 </div>
             </div>
         </div>
@@ -753,32 +439,6 @@
         if (r.success) location.reload();
     });
 
-    const pinIcon = L.divIcon({
-        className: 'mblrc-pin-wrapper',
-        html: `
-            <div style="
-                position: relative;
-                width: 32px;
-                height: 32px;
-                background: #312e81;
-                border: 2.5px solid #ffffff;
-                border-radius: 50% 50% 50% 0;
-                transform: rotate(-45deg);
-                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            ">
-                <svg style="transform: rotate(45deg); width: 15px; height: 15px; fill: #ffffff;" viewBox="0 0 24 24">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                </svg>
-            </div>
-        `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
-    });
-
     function initLocationMap(root) {
         const mapEl = document.getElementById('frLocationMap');
         if (!mapEl) return;
@@ -792,12 +452,12 @@
         document.querySelector('a[href="#tab-geotag"]')?.addEventListener('shown.bs.tab', () => map.invalidateSize());
 
         const form = root.querySelector('[data-location-form]');
-        let marker = root.dataset.lat ? L.marker([lat, lng], { icon: pinIcon }).addTo(map) : null;
+        let marker = root.dataset.lat ? L.marker([lat, lng]).addTo(map) : null;
 
         map.on('click', (e) => {
             const { lat, lng } = e.latlng;
             if (marker) marker.setLatLng(e.latlng);
-            else marker = L.marker(e.latlng, { icon: pinIcon }).addTo(map);
+            else marker = L.marker(e.latlng).addTo(map);
             form.latitude.value = lat.toFixed(8);
             form.longitude.value = lng.toFixed(8);
         });
@@ -820,8 +480,8 @@
                 const box = root.querySelector('[data-location-history]');
                 if (!box) return;
                 box.innerHTML = rows.length
-                    ? '<div class="p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;"><h6 class="font-weight-bold text-muted mb-2" style="font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.05em;">Placement History</h6>' + rows.map((h) =>
-                        `<div class="d-flex align-items-center gap-2 mb-1" style="font-size: 0.875rem;"><i class="mdi mdi-map-marker text-primary"></i> <span>${h.placement_address ?? ''}</span> <span class="text-muted small">(${h.updated_by ?? ''})</span></div>`).join('') + '</div>'
+                    ? '<p class="fw-semibold text-muted mb-1">History</p>' + rows.map((h) =>
+                        `<p class="mb-0">• ${h.placement_address ?? ''} <span class="text-muted">(${h.updated_by ?? ''})</span></p>`).join('')
                     : '';
             });
     }
@@ -874,4 +534,3 @@
 })();
 </script>
 @endpush
-

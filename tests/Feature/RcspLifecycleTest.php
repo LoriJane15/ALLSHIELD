@@ -7,9 +7,7 @@ use App\Models\Municipality;
 use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
-use App\Models\RcspFormReview;
 use App\Models\RcspPhase;
-use App\Models\RcspPhaseTransition;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -21,22 +19,16 @@ class RcspLifecycleTest extends TestCase
     use RefreshDatabase;
 
     private Municipality $muni;
-
     private Barangay $barangay;
-
     private User $lgu;
-
     private User $admin;
-
     private RcspBarangay $rb;
-
     /** @var array<int,RcspPhase> */
     private array $phases = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('local');
         Storage::fake('public');
 
         $this->muni = Municipality::create(['name' => 'Digos']);
@@ -45,39 +37,33 @@ class RcspLifecycleTest extends TestCase
         $this->lgu = User::factory()->lgu($this->muni->id)->create();
         $this->admin = User::factory()->role('admin')->create();
 
-        $this->phases = RcspPhase::where('catalog_key', RcspPhase::CONFIGURABLE_CATALOG_KEY)
-            ->orderBy('number')->get()->keyBy('number')->all();
+        // 6 phases (0-5), phase 0 has 2 activities
+        foreach (range(0, 5) as $n) {
+            $this->phases[$n] = RcspPhase::create(['number' => $n, 'name' => "Phase {$n} name"]);
+        }
+        RcspActivity::create(['rcsp_phase_id' => $this->phases[0]->id, 'description' => 'Activity A']);
+        RcspActivity::create(['rcsp_phase_id' => $this->phases[0]->id, 'description' => 'Activity B']);
 
         $this->rb = RcspBarangay::create([
             'barangay_id' => $this->barangay->id,
             'municipality_id' => $this->muni->id,
             'status' => 'Pending',
             'current_phase' => 0,
-            'catalog_key' => RcspPhase::CONFIGURABLE_CATALOG_KEY,
         ]);
-        $this->rb->phaseStatus()->create();
-        foreach (['Activity A', 'Activity B'] as $title) {
-            RcspActivity::create([
-                'rcsp_phase_id' => $this->phases[0]->id,
-                'rcsp_barangay_id' => $this->rb->id,
-                'created_by_user_id' => $this->lgu->id,
-                'description' => $title,
-                'normalized_title' => RcspActivity::normalizeTitle($title),
-            ]);
-        }
     }
 
     private function submitPhaseZero(): void
     {
         $activities = RcspActivity::where('rcsp_phase_id', $this->phases[0]->id)->get();
+        $payload = ['phase_id' => $this->phases[0]->id];
         foreach ($activities as $a) {
-            $this->actingAs($this->lgu)
-                ->post(route('lgu.monitoring.submit', [$this->rb, $a]), [
-                    'conduct' => 'yes',
-                    'evidence' => UploadedFile::fake()->image("evidence_{$a->id}.png"),
-                ])
-                ->assertRedirect(route('lgu.monitoring.show', $this->rb));
+            $payload["conduct_{$a->id}"] = 'yes';
+            $payload["file_{$a->id}"] = UploadedFile::fake()->create("evidence_{$a->id}.pdf", 50, 'application/pdf');
         }
+
+        $this->actingAs($this->lgu)
+            ->post(route('lgu.monitoring.submit', $this->rb), $payload)
+            ->assertRedirect(route('lgu.monitoring.show', $this->rb));
     }
 
     private function approvePhaseZero(): void
@@ -89,7 +75,8 @@ class RcspLifecycleTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('admin.rcsp.review', $this->rb), [
-                'statuses' => $statuses, 'remarks' => [],
+                'phase_id' => $this->phases[0]->id,
+                'statuses' => $statuses,
             ])->assertRedirect();
     }
 
@@ -101,13 +88,11 @@ class RcspLifecycleTest extends TestCase
         $this->assertCount(2, $forms);
         $this->assertTrue($forms->every(fn ($f) => $f->status === 'submitted'));
         $this->assertTrue($forms->every(fn ($f) => $f->conduct === 'yes'));
-        $this->assertTrue($forms->every(fn ($f) => $f->submission_version === 1));
-        $this->assertTrue($forms->every(fn ($f) => $f->original_filename && $f->detected_mime_type === 'image/png'));
 
         // evidence files landed on the fake public disk
         foreach ($forms as $f) {
             $this->assertNotNull($f->file);
-            Storage::disk('local')->assertExists(str_replace('private:', '', $f->file));
+            Storage::disk('public')->assertExists($f->file);
         }
 
         $this->assertSame('Ongoing', $this->rb->fresh()->status);
@@ -119,7 +104,7 @@ class RcspLifecycleTest extends TestCase
 
         $this->actingAs($this->lgu)
             ->post(route('lgu.monitoring.proceed', $this->rb))
-            ->assertSessionHasErrors('phase');
+            ->assertSessionHas('error');
 
         $this->assertSame(0, $this->rb->fresh()->current_phase);
     }
@@ -141,12 +126,6 @@ class RcspLifecycleTest extends TestCase
         $fresh = $this->rb->fresh();
         $this->assertSame(1, $fresh->current_phase);
         $this->assertTrue((bool) $fresh->phaseStatus->phase0_completed);
-        $this->assertDatabaseHas('rcsp_phase_transitions', [
-            'rcsp_barangay_id' => $this->rb->id,
-            'from_phase' => 0,
-            'to_phase' => 1,
-            'advanced_by_user_id' => $this->lgu->id,
-        ]);
     }
 
     public function test_lgu_can_post_a_comment_on_a_submitted_form(): void
@@ -171,7 +150,7 @@ class RcspLifecycleTest extends TestCase
         $other = User::factory()->lgu(Municipality::create(['name' => 'Bansalan'])->id)->create();
 
         $this->actingAs($other)
-            ->post(route('lgu.monitoring.submit', [$this->rb, RcspActivity::firstOrFail()]), ['conduct' => 'yes'])
+            ->post(route('lgu.monitoring.submit', $this->rb), ['phase_id' => $this->phases[0]->id])
             ->assertForbidden();
     }
 
@@ -179,22 +158,13 @@ class RcspLifecycleTest extends TestCase
     {
         // jump straight to phase 5 with one approved activity
         $this->rb->update(['current_phase' => 5, 'status' => 'Ongoing']);
-        $activity = RcspActivity::create([
-            'rcsp_phase_id' => $this->phases[5]->id,
-            'rcsp_barangay_id' => $this->rb->id,
-            'created_by_user_id' => $this->lgu->id,
-            'description' => 'Final activity',
-            'normalized_title' => 'final activity',
-        ]);
-        Storage::disk('local')->put("rcsp/{$this->rb->id}/final.png", 'final evidence');
+        $activity = RcspActivity::create(['rcsp_phase_id' => $this->phases[5]->id, 'description' => 'Final activity']);
         RcspForm::create([
             'rcsp_barangay_id' => $this->rb->id,
             'rcsp_phase_id' => $this->phases[5]->id,
             'rcsp_activity_id' => $activity->id,
             'lgu_user_id' => $this->lgu->id,
             'conduct' => 'yes',
-            'submission_version' => 1,
-            'file' => "private:rcsp/{$this->rb->id}/final.png",
             'status' => 'approved',
         ]);
 
@@ -203,38 +173,5 @@ class RcspLifecycleTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame('Completed', $this->rb->fresh()->status);
-        $this->assertSame(1, RcspPhaseTransition::where('rcsp_barangay_id', $this->rb->id)->count());
-    }
-
-    public function test_returned_activity_resubmission_creates_an_immutable_version_and_retains_evidence(): void
-    {
-        $activity = RcspActivity::where('rcsp_phase_id', $this->phases[0]->id)->firstOrFail();
-        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activity]), [
-            'conduct' => 'no',
-            'evidence' => UploadedFile::fake()->image('first.png'),
-        ])->assertSessionHasNoErrors();
-        $first = RcspForm::firstOrFail();
-
-        $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->rb), [
-            'statuses' => [$first->id => 'to be complied'],
-            'remarks' => [$first->id => 'Provide clarification.'],
-        ])->assertSessionHasNoErrors();
-
-        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activity]), [
-            'conduct' => 'yes',
-        ])->assertSessionHasNoErrors();
-
-        $versions = RcspForm::where('rcsp_activity_id', $activity->id)->orderBy('submission_version')->get();
-        $this->assertCount(2, $versions);
-        $this->assertSame([1, 2], $versions->pluck('submission_version')->all());
-        $this->assertSame($first->file, $versions[1]->file);
-        $this->assertSame('to be complied', $versions[0]->status);
-        $this->assertSame('submitted', $versions[1]->status);
-        $this->assertDatabaseHas('rcsp_form_reviews', [
-            'rcsp_form_id' => $first->id,
-            'reviewer_user_id' => $this->admin->id,
-            'status' => 'to be complied',
-        ]);
-        $this->assertSame(1, RcspFormReview::count());
     }
 }

@@ -18,9 +18,4 @@ class GovAgency extends Model
     {
         return $this->hasMany(AgencyImplanResponse::class);
     }
-
-    public function implementationTaggings(): HasMany
-    {
-        return $this->hasMany(ImplementationTagging::class);
-    }
 }

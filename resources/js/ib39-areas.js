@@ -27,21 +27,21 @@ function initMunicipalityCascade() {
 
         barangay.innerHTML = '<option value="">Loading…</option>';
 
-        fetch(`${municipality.dataset.barangays}?municipality_id=${encodeURIComponent(value)}`, {
+        fetch(`${municipality.dataset.barangays}?municipality=${encodeURIComponent(value)}`, {
             headers: { Accept: 'application/json' },
         })
             .then((r) => r.json())
-            .then((barangays) => {
+            .then((names) => {
                 barangay.innerHTML = '<option value="">Select Barangay</option>';
 
-                barangays.forEach((item) => {
+                names.forEach((name) => {
                     const opt = document.createElement('option');
-                    opt.value = item.id;
-                    opt.textContent = item.name;
+                    opt.value = name;
+                    opt.textContent = name;
                     barangay.appendChild(opt);
                 });
 
-                barangay.disabled = barangays.length === 0;
+                barangay.disabled = names.length === 0;
             })
             .catch(() => {
                 barangay.innerHTML = '<option value="">Could not load barangays</option>';
@@ -66,11 +66,9 @@ function initEditButtons() {
         if (!btn) return;
 
         form.action = btn.dataset.action;
-        setValue('edit_barangay_id', btn.dataset.barangayId);
         setValue('edit_municipality', btn.dataset.municipality);
         setValue('edit_barangay', btn.dataset.barangay);
         setValue('edit_frs', btn.dataset.frs);
-        setValue('edit_effective_date', btn.dataset.effectiveDate);
     });
 }
 

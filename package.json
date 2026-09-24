@@ -19,6 +19,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "@geoman-io/leaflet-geoman-free": "^2.20.1",
         "chart.js": "^4.5.1",
         "gsap": "^3.15.0",
         "laravel-echo": "^2.4.0",

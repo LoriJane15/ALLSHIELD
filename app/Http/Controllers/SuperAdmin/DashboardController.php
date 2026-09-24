@@ -24,23 +24,11 @@ class DashboardController extends Controller
             ->map->count();
 
         // Recent form activity — document overview table.
-        $recentDocuments = RcspForm::with(['rcspBarangay.barangay', 'rcspBarangay.municipality', 'phase'])
-            ->latest()->take(10)->get();
-
-        $systemUsersCount = \App\Models\User::count();
-        $govAgenciesCount = \App\Models\GovAgency::count();
-        $totalMunicipalitiesCount = $rcspByMunicipality->count();
+        $recentDocuments = RcspForm::with(['rcspBarangay.barangay', 'phase'])
+            ->latest()->take(6)->get();
 
         $userFullname = auth()->user()->name;
 
-        return view('super_admin.dashboard', compact(
-            'rcsp',
-            'rcspByMunicipality',
-            'recentDocuments',
-            'userFullname',
-            'systemUsersCount',
-            'govAgenciesCount',
-            'totalMunicipalitiesCount'
-        ));
+        return view('super_admin.dashboard', compact('rcsp', 'rcspByMunicipality', 'recentDocuments', 'userFullname'));
     }
 }

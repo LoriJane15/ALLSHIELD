@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RcspBarangay extends Model
 {
-    protected $fillable = ['barangay_id', 'municipality_id', 'status', 'current_phase', 'catalog_key'];
+    protected $fillable = ['barangay_id', 'municipality_id', 'status', 'current_phase'];
 
     public function barangay(): BelongsTo
     {
@@ -29,16 +29,6 @@ class RcspBarangay extends Model
     public function forms(): HasMany
     {
         return $this->hasMany(RcspForm::class);
-    }
-
-    public function activities(): HasMany
-    {
-        return $this->hasMany(RcspActivity::class);
-    }
-
-    public function phaseTransitions(): HasMany
-    {
-        return $this->hasMany(RcspPhaseTransition::class);
     }
 
     /** Progress percentage across the 6 phases (0..5). */

@@ -29,8 +29,7 @@ function initHeroMap() {
     // Guard against a second init on the same element, which Leaflet throws on.
     if (el._leaflet_id) return;
 
-    const map = L.map(el, { zoomControl: false, attributionControl: false }).setView(DAVAO_SUR, 9);
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    const map = L.map(el, { zoomControl: true, attributionControl: false }).setView(DAVAO_SUR, 9);
 
     // The hero is sized in vh inside an absolutely-positioned container, so
     // Leaflet can measure it before layout settles and render nothing. Recheck
@@ -89,7 +88,7 @@ function initHeroMap() {
 
 /** Legacy hero had a "Search for barangay or municipality" box over the map. */
 function addSearch(map, index) {
-    const control = L.control({ position: 'topright' });
+    const control = L.control({ position: 'topleft' });
 
     control.onAdd = () => {
         const wrap = L.DomUtil.create('div', 'hero-map-search');
@@ -150,40 +149,22 @@ function initProgressChart() {
 
     const ctx = canvas.getContext('2d');
 
-    // SHIELD Palette Gradients: Sky Blue for Completed, Amber for In Progress
-    const blueGradient = ctx.createLinearGradient(0, 0, 0, 360);
-    blueGradient.addColorStop(0, '#2563eb');
-    blueGradient.addColorStop(1, '#60a5fa');
+    // The legacy chart used vertical gradients for both series.
+    const blue = ctx.createLinearGradient(0, 0, 0, 400);
+    blue.addColorStop(0, '#38bdf8');
+    blue.addColorStop(1, '#0ea5e9');
 
-    const amberGradient = ctx.createLinearGradient(0, 0, 0, 360);
-    amberGradient.addColorStop(0, '#d97706');
-    amberGradient.addColorStop(1, '#fbbf24');
+    const green = ctx.createLinearGradient(0, 0, 0, 400);
+    green.addColorStop(0, '#34d399');
+    green.addColorStop(1, '#059669');
 
     new Chart(ctx, {
         type: 'bar',
         data: {
             labels: read('labels'),
             datasets: [
-                {
-                    label: 'Completed',
-                    data: read('completed'),
-                    backgroundColor: blueGradient,
-                    borderRadius: 8,
-                    borderSkipped: false,
-                    maxBarThickness: 36,
-                    barPercentage: 0.75,
-                    categoryPercentage: 0.65,
-                },
-                {
-                    label: 'In Progress',
-                    data: read('inprogress'),
-                    backgroundColor: amberGradient,
-                    borderRadius: 8,
-                    borderSkipped: false,
-                    maxBarThickness: 36,
-                    barPercentage: 0.75,
-                    categoryPercentage: 0.65,
-                },
+                { label: 'Completed', data: read('completed'), backgroundColor: blue, borderRadius: 8, borderSkipped: false },
+                { label: 'In Progress', data: read('inprogress'), backgroundColor: green, borderRadius: 8, borderSkipped: false },
             ],
         },
         options: {
@@ -193,27 +174,21 @@ function initProgressChart() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    titleColor: '#ffffff',
-                    bodyColor: '#e2e8f0',
-                    borderColor: 'rgba(255, 255, 255, 0.15)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: 'rgba(59, 130, 246, 0.2)',
                     borderWidth: 1,
-                    cornerRadius: 10,
+                    cornerRadius: 12,
                     padding: 12,
-                    boxPadding: 6,
-                    usePointStyle: true,
                 },
             },
             scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#64748b', font: { size: 12, weight: '600' } },
-                },
+                x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12, weight: '500' } } },
                 y: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(226, 232, 240, 0.8)' },
-                    ticks: { color: '#64748b', stepSize: 1, precision: 0, font: { weight: '600' } },
-                    title: { display: true, text: 'Number of RCSP Barangays', color: '#475569', font: { weight: '700', size: 11 } },
+                    ticks: { color: '#64748b', stepSize: 1, precision: 0 },
+                    title: { display: true, text: 'Number of RCSP Barangays', color: '#64748b' },
                 },
             },
         },

@@ -1,192 +1,19 @@
 /*
- * 39th Infantry Battalion — RCSP Areas Modern Styling
+ * Add Area modals — styling carried over from the legacy
+ * accounts/39th-IB/add_rcsp.php <style> block.
+ *
+ * Bootstrap still drives show/hide, but the inner chrome is the legacy design.
+ * Everything is prefixed `ib39-` rather than reusing the legacy class names
+ * (.modal-content, .close, .form-group, .submit-btn), which would collide with
+ * Bootstrap's and with SkyDash's own rules.
  */
 
-.ib39-areas-hero {
-    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 14px !important;
-    padding: 1.25rem 1.75rem !important;
-    color: #ffffff !important;
-    margin-bottom: 1.25rem !important;
-    box-shadow: 0 8px 24px -4px rgba(30, 27, 75, 0.25) !important;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1.25rem;
-    position: relative !important;
-    overflow: hidden !important;
-}
-
-.ib39-areas-hero::after {
-    content: '';
-    position: absolute;
-    right: -30px;
-    bottom: -30px;
-    width: 160px;
-    height: 160px;
-    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%);
-    border-radius: 50%;
-    pointer-events: none;
-}
-
-.ib39-areas-hero .hero-main {
-    display: flex;
-    align-items: center;
-    gap: 1.15rem;
-    min-width: 0;
-    position: relative;
-    z-index: 1;
-}
-
-.ib39-areas-hero .hero-icon-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 50px;
-    height: 50px;
-    flex: 0 0 50px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    color: #67e8f9;
-    font-size: 1.45rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.ib39-areas-hero .hero-eyebrow {
-    color: #f59e0b;
-    font-size: 0.6875rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 0.2rem;
-}
-
-.ib39-areas-hero h2 {
-    color: #ffffff !important;
-    font-size: 1.35rem !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.01em !important;
-    margin: 0 0 0.2rem 0 !important;
-    line-height: 1.25 !important;
-}
-
-.ib39-areas-hero p {
-    font-size: 0.85rem !important;
-    color: #c7d2fe !important;
-    margin: 0 !important;
-    font-weight: 500 !important;
-}
-
-.ib39-areas-hero .hero-btn-primary {
-    background: #ffffff !important;
-    color: #1e1b4b !important;
-    border: none !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
-    font-weight: 700 !important;
-    font-size: 0.84rem !important;
-    border-radius: 9px !important;
-    min-height: 40px !important;
-    padding: 0.5rem 1.15rem !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.45rem !important;
-    text-decoration: none !important;
-    transition: all 0.2s ease !important;
-}
-
-.ib39-areas-hero .hero-btn-primary i {
-    color: #4338ca !important;
-    font-size: 1.15rem !important;
-}
-
-.ib39-areas-hero .hero-btn-primary:hover {
-    background: #f8fafc !important;
-    color: #1e1b4b !important;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2) !important;
-}
-
-.ib39-areas-hero .hero-btn-glass {
-    background: rgba(255, 255, 255, 0.16) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
-    backdrop-filter: blur(8px) !important;
-    font-weight: 600 !important;
-    font-size: 0.84rem !important;
-    border-radius: 9px !important;
-    min-height: 40px !important;
-    padding: 0.5rem 1.15rem !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.45rem !important;
-    text-decoration: none !important;
-    transition: all 0.2s ease !important;
-}
-
-.ib39-areas-hero .hero-btn-glass:hover {
-    background: rgba(255, 255, 255, 0.25) !important;
-    color: #ffffff !important;
-    border-color: rgba(255, 255, 255, 0.6) !important;
-    transform: translateY(-1px);
-}
-
-.ib39-filter-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-}
-
-.ib39-table-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
-    overflow: hidden;
-}
-
-.ib39-areas-table {
-    margin: 0;
-    width: 100%;
-}
-
-.ib39-areas-table thead th {
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-    color: #64748b;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0.85rem 1.2rem;
-    white-space: nowrap;
-}
-
-.ib39-areas-table tbody td {
-    padding: 0.95rem 1.2rem;
-    vertical-align: middle;
-    font-size: 0.86rem;
-    color: #334155;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.ib39-areas-table tbody tr:hover td {
-    background-color: #f8fafc;
-}
-
-/* Modals */
 .ib39-modal .modal-content {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
-    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
-    padding: 2rem;
-    position: relative;
+    background: #fff;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    padding: 2.5rem;
 }
 
 .ib39-modal .modal-dialog {
@@ -194,100 +21,103 @@
 }
 
 .ib39-modal-title {
-    font-size: 1.35rem;
-    font-weight: 750;
+    font-size: 1.5rem;
+    font-weight: 700;
     color: #0f172a;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
+/* Legacy used Font Awesome glyphs: plus for Add, pencil for Update. */
 .ib39-modal-title::before {
     font-family: "FontAwesome", "Font Awesome 5 Free";
-    font-size: 1.15rem;
-    color: #4f46e5;
+    font-size: 1.25rem;
+    color: #2563eb;
 }
 
 .ib39-modal-title.is-add::before { content: "\f067"; }
 .ib39-modal-title.is-edit::before { content: "\f044"; }
 
+/* ---- Form controls ---------------------------------------------------- */
 .ib39-form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
 }
 
 .ib39-form-group label {
     display: block;
-    margin-bottom: 0.45rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #475569;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
 }
 
 .ib39-form-group input,
 .ib39-form-group select {
     width: 100%;
-    padding: 0.75rem 0.95rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    font-size: 0.88rem;
-    color: #0f172a;
+    padding: 0.875rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: #111827;
     transition: all 0.2s ease;
-    background: #f8fafc;
+    background: #f9fafb;
 }
 
 .ib39-form-group input:focus,
 .ib39-form-group select:focus {
-    border-color: #4f46e5;
-    background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+    border-color: #2563eb;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
     outline: none;
+    transform: translateY(-1px);
 }
 
 .ib39-form-group input:disabled,
 .ib39-form-group select:disabled {
-    background: #f1f5f9;
-    color: #64748b;
+    background: #f3f4f6;
+    color: #6b7280;
     cursor: not-allowed;
-    border-color: #e2e8f0;
 }
 
+/* ---- Threshold info panel --------------------------------------------- */
 .ib39-form-info {
-    margin-top: 0.85rem;
-    padding: 1rem 1rem 1rem 2.85rem;
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border-radius: 10px;
-    border: 1px solid #bbf7d0;
+    margin-top: 1rem;
+    padding: 1.25rem 1.25rem 1.25rem 3rem;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-radius: 12px;
+    border: 1px solid #bae6fd;
     position: relative;
-    font-size: 0.78rem;
-    color: #166534;
+    font-size: 0.813rem;
+    color: #0c4a6e;
 }
 
 .ib39-form-info::before {
     content: "\f05a";
     font-family: "FontAwesome", "Font Awesome 5 Free";
     position: absolute;
-    top: 1rem;
-    left: 1rem;
-    color: #16a34a;
-    font-size: 1.1rem;
+    top: 1.25rem;
+    left: 1.25rem;
+    color: #0284c7;
+    font-size: 1rem;
 }
 
 .ib39-form-info ul {
-    margin: 0.5rem 0 0;
+    margin: 0.75rem 0 0;
     padding-left: 0;
     list-style-type: none;
 }
 
 .ib39-form-info li {
-    margin-bottom: 0.35rem;
-    font-size: 0.76rem;
-    color: #166534;
+    margin-bottom: 0.5rem;
+    font-size: 0.813rem;
+    color: #0c4a6e;
     position: relative;
-    padding-left: 1.25rem;
-    line-height: 1.4;
+    padding-left: 1.5rem;
+    line-height: 1.5;
 }
 
 .ib39-form-info li::before {
@@ -295,41 +125,44 @@
     font-family: "FontAwesome", "Font Awesome 5 Free";
     position: absolute;
     left: 0;
-    color: #16a34a;
-    font-size: 0.45rem;
-    top: 0.45rem;
+    color: #0284c7;
+    font-size: 0.5rem;
+    top: 0.5rem;
 }
 
+/* ---- Submit ----------------------------------------------------------- */
 .ib39-submit-btn {
     width: 100%;
-    padding: 0.85rem;
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-    color: #ffffff;
+    padding: 1rem;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: #fff;
     border: none;
-    border-radius: 10px;
-    font-size: 0.88rem;
-    font-weight: 700;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
     transition: all 0.2s ease;
-    margin-top: 1.5rem;
+    margin-top: 2rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
-    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
 }
 
 .ib39-submit-btn:hover {
-    background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
     transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35);
-    color: #ffffff;
+    box-shadow: 0 8px 15px -3px rgba(37, 99, 235, 0.4);
+    color: #fff;
 }
 
+.ib39-submit-btn:active { transform: translateY(0); }
+
+/* ---- Close ------------------------------------------------------------ */
 .ib39-close {
     position: absolute;
-    right: 1.25rem;
-    top: 1.25rem;
-    width: 34px;
-    height: 34px;
+    right: 1.5rem;
+    top: 1.5rem;
+    width: 36px;
+    height: 36px;
     border-radius: 8px;
     background: #f1f5f9;
     color: #64748b;
@@ -339,7 +172,7 @@
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 1.1rem;
+    font-size: 1rem;
     line-height: 1;
     z-index: 2;
 }
@@ -349,11 +182,10 @@
     color: #0f172a;
 }
 
-/* Action Buttons */
+/* ---- Table action buttons --------------------------------------------- */
 .ib39-action-buttons {
     display: flex;
-    gap: 0.5rem;
-    align-items: center;
+    gap: 0.75rem;
 }
 
 .ib39-edit-btn,
@@ -368,68 +200,57 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
 }
 
 .ib39-edit-btn {
-    background: #eef2ff;
-    color: #4f46e5;
-    border: 1px solid #e0e7ff;
+    background: linear-gradient(135deg, #bfdbfe 0%, #dbeafe 100%);
+    color: #2563eb;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
 }
 
 .ib39-delete-btn {
-    background: #fef2f2;
+    background: linear-gradient(135deg, #fecaca 0%, #fee2e2 100%);
     color: #dc2626;
-    border: 1px solid #fee2e2;
+    box-shadow: 0 2px 4px rgba(220, 38, 38, 0.1);
 }
 
 .ib39-edit-btn:hover {
-    background: #4f46e5;
-    color: #ffffff;
+    background: linear-gradient(135deg, #93c5fd 0%, #bfdbfe 100%);
     transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+    color: #2563eb;
 }
 
 .ib39-delete-btn:hover {
-    background: #dc2626;
-    color: #ffffff;
+    background: linear-gradient(135deg, #fca5a5 0%, #fecaca 100%);
     transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.2);
+    box-shadow: 0 4px 6px rgba(220, 38, 38, 0.15);
+    color: #dc2626;
 }
 
-/* Status Badges */
-.status-badge {
-    padding: 0.35rem 0.8rem;
-    border-radius: 9999px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
+/* Row hover */
+.ib39-areas-table tbody tr:hover td {
+    background-color: #f8fafc;
+    transition: background-color 0.2s ease;
 }
 
+/* ---- Status badge glyphs ---------------------------------------------- */
+/* SkyDash ships Font Awesome 4.7, so the family is 'FontAwesome' and the
+   glyphs render at normal weight. The codepoints match the legacy page. */
 .status-badge::before {
     font-family: "FontAwesome", "Font Awesome 5 Free";
-    font-size: 0.75rem;
 }
 
-.status-konsolidado { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
-.status-rekonsilida,
-.status-rekonsilido { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
-.status-expansion   { background: #fefce8; color: #ca8a04; border: 1px solid #fef9c3; }
-.status-recovery    { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
-.status-unclassified { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
-
 .status-konsolidado::before { content: "\f024"; }  /* flag */
-.status-rekonsilida::before,
-.status-rekonsilido::before { content: "\f071"; }  /* warning */
+.status-rekonsilida::before { content: "\f071"; }  /* warning triangle */
 .status-expansion::before   { content: "\f0c8"; }  /* square */
 .status-recovery::before    { content: "\f055"; }  /* plus-circle */
 
+/* ---- Empty state ------------------------------------------------------ */
 .ib39-no-results {
     text-align: center;
-    padding: 3.5rem 2rem;
+    padding: 3rem 2rem;
     color: #64748b;
+    font-style: italic;
 }

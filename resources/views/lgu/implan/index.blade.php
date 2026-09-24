@@ -114,7 +114,7 @@
 
     {{-- Add modal --}}
     <div class="modal fade" id="addImplanModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
@@ -123,10 +123,6 @@
                     <p class="text-muted">Add issues or concerns to be addressed and responsible agencies</p>
                     <form method="POST" action="{{ route('lgu.implan.store') }}">
                         @csrf
-                        @php
-                            $selectedTargetAreas = array_map('strval', (array) old('target_areas', []));
-                            $selectedAgencies = array_map('strval', (array) old('agencies', []));
-                        @endphp
                         <div class="mb-3">
                             <label class="form-label">Issues and Concerns to be Addressed</label>
                             <textarea name="issues" rows="3" required class="form-control">{{ old('issues') }}</textarea>
@@ -138,10 +134,8 @@
                                 <div class="border rounded p-2" style="max-height:10rem;overflow-y:auto">
                                     @forelse ($targetAreas as $area)
                                         <div class="form-check">
-                                            <label class="form-check-label" for="implan-target-area-{{ $area['id'] }}">
-                                                <input type="checkbox" name="target_areas[]" value="{{ $area['id'] }}" class="form-check-input" id="implan-target-area-{{ $area['id'] }}" @checked(in_array((string) $area['id'], $selectedTargetAreas, true))>
-                                                {{ $area['name'] }}
-                                            </label>
+                                            <input type="checkbox" name="target_areas[]" value="{{ $area['id'] }}" class="form-check-input" id="area_{{ $area['id'] }}">
+                                            <label class="form-check-label" for="area_{{ $area['id'] }}">{{ $area['name'] }}</label>
                                         </div>
                                     @empty
                                         <p class="text-muted small mb-0">No RCSP barangays yet.</p>
@@ -153,10 +147,8 @@
                                 <div class="border rounded p-2" style="max-height:10rem;overflow-y:auto">
                                     @foreach ($agencies as $agency)
                                         <div class="form-check">
-                                            <label class="form-check-label" for="implan-responsible-agency-{{ $agency->id }}">
-                                                <input type="checkbox" name="agencies[]" value="{{ $agency->id }}" class="form-check-input" id="implan-responsible-agency-{{ $agency->id }}" @checked(in_array((string) $agency->id, $selectedAgencies, true))>
-                                                {{ $agency->acronym }}
-                                            </label>
+                                            <input type="checkbox" name="agencies[]" value="{{ $agency->id }}" class="form-check-input" id="agency_{{ $agency->id }}">
+                                            <label class="form-check-label" for="agency_{{ $agency->id }}">{{ $agency->acronym }}</label>
                                         </div>
                                     @endforeach
                                 </div>

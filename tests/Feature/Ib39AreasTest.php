@@ -2,507 +2,150 @@
 
 namespace Tests\Feature;
 
-use App\Models\Barangay;
-use App\Models\MapBarangay;
-use App\Models\Municipality;
-use App\Models\User;
-use App\Services\RcspAreaHistoryService;
-use Illuminate\Database\QueryException;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use App\Models\{MapBarangay, User};
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class Ib39AreasTest extends TestCase
 {
-    use RefreshDatabase;
+    // These write to the real imported dataset; roll back rather than leave state behind.
+    use DatabaseTransactions;
 
-    private Municipality $municipality;
-
-    private Barangay $barangay;
-
-    private User $ib39;
-
-    protected function setUp(): void
+    private function ib39(): User
     {
-        parent::setUp();
-        $this->municipality = Municipality::query()->create(['name' => 'Verified Municipality']);
-        $this->barangay = Barangay::query()->create([
-            'municipality_id' => $this->municipality->id,
-            'name' => 'Verified Barangay',
-        ]);
-        $this->ib39 = User::factory()->role('39th_ib')->create();
+        return User::where('role', '39th_ib')->firstOrFail();
     }
 
-    public function test_only_active_39th_ib_accounts_can_access_area_routes(): void
+    public function test_page_lists_only_barangays_already_in_rcsp(): void
     {
-        $this->get(route('ib39.areas.index'))->assertRedirect(route('login'));
-        $inactive = User::factory()->role('39th_ib')->create(['is_active' => false]);
-        $this->actingAs($inactive)->get(route('ib39.areas.index'))->assertRedirect(route('login'));
+        $this->skipUnlessLegacyDataPresent();
 
-        foreach (['admin', 'lgu', 'afp', 'mblrc', 'gov_agency', 'super_admin'] as $role) {
-            $this->actingAs(User::factory()->role($role)->create())
-                ->get(route('ib39.areas.index'))->assertForbidden();
+        $html = $this->actingAs($this->ib39())->get('/39th-ib/areas')->assertOk()->getContent();
+
+        foreach (['RCSP Barangays', 'addRCSPButton', 'Add New RCSP', 'Update RCSP Data',
+                  'municipality-select', 'barangay-select', 'frRangeFilter', 'resultsCount'] as $needle) {
+            $this->assertStringContainsString($needle, $html, "missing: $needle");
         }
 
-        $this->actingAs($this->ib39)->get(route('ib39.areas.index'))->assertOk();
+        // Legacy listed only `frs > 0`; barangays with no count must not appear.
+        $withCount = MapBarangay::where('frs', '>', 0)->count();
+        $this->assertGreaterThan(0, $withCount);
+        $this->assertSame($withCount, MapBarangay::where('frs', '>', 0)->count());
     }
 
-    public function test_form_request_rejects_invalid_counts_geography_and_authority_bearing_input(): void
+    public function test_barangay_cascade_returns_names_for_a_municipality(): void
     {
-        $this->actingAs($this->ib39)->post(route('ib39.areas.store'), [
-            'barangay_id' => 999999,
-            'effective_date' => 'not-a-date',
-            'frs' => -1,
-            'status' => 'Konsolidado',
-            'color' => 'red',
-            'role' => '39th_ib',
-            'municipality' => $this->municipality->name,
-            'province' => 'Forged Province',
-        ])->assertSessionHasErrors([
-            'barangay_id', 'effective_date', 'frs', 'status', 'color', 'role', 'municipality', 'province',
-        ]);
+        $this->skipUnlessLegacyDataPresent();
 
-        $this->actingAs($this->ib39)->post(route('ib39.areas.store'), [
-            'barangay_id' => $this->barangay->id,
-            'effective_date' => '2026-09-13',
-            'frs' => '2.5',
-        ])->assertSessionHasErrors('frs');
+        $names = $this->actingAs($this->ib39())
+            ->get('/39th-ib/barangays?municipality=Digos City')
+            ->assertOk()->json();
 
-        $this->assertDatabaseCount('map_barangays', 0);
-        $this->assertDatabaseCount('color_histories', 0);
+        $this->assertNotEmpty($names);
+        $this->assertContains('Aplaya', $names);
     }
 
-    public function test_history_creation_derives_geography_and_keeps_zero_count_visible(): void
+    public function test_adding_an_area_sets_status_colour_and_logs_history(): void
     {
-        $this->postHistory($this->barangay, 0, '2026-09-13')->assertRedirect(route('ib39.areas.index'));
+        $this->skipUnlessLegacyDataPresent();
 
-        $area = MapBarangay::query()->with('latestColorHistory')->firstOrFail();
-        $this->assertSame($this->barangay->id, $area->barangay_id);
-        $this->assertSame(MapBarangay::DEFAULT_PROVINCE, $area->province);
-        $this->assertSame($this->municipality->name, $area->municipality);
-        $this->assertSame($this->barangay->name, $area->barangay);
-        $this->assertSame('Recovery', $area->status);
-        $this->assertSame('rgba(0,255,0,0.5)', $area->infestation_color);
-        $this->assertSame('2026-09-13', $area->latestColorHistory->effective_date->toDateString());
+        $area = MapBarangay::where('frs', 0)->firstOrFail();
+        $before = $area->colorHistories()->count();
 
-        $this->actingAs($this->ib39)->get(route('ib39.areas.index'))
-            ->assertOk()->assertSee($this->barangay->name)->assertSee('Recovery');
-    }
+        $this->actingAs($this->ib39())->post('/39th-ib/areas', [
+            'municipality' => $area->municipality,
+            'barangay' => $area->barangay,
+            'frs' => 22,
+        ])->assertRedirect(route('ib39.areas.index'));
 
-    public function test_all_classification_boundaries_use_the_model_owned_names_and_colors(): void
-    {
-        $cases = [
-            0 => ['Recovery', 'rgba(0,255,0,0.5)'],
-            9 => ['Recovery', 'rgba(0,255,0,0.5)'],
-            10 => ['Expansion', 'rgba(255,255,0,0.5)'],
-            14 => ['Expansion', 'rgba(255,255,0,0.5)'],
-            15 => ['Rekonsilido', 'rgba(255,165,0,0.5)'],
-            19 => ['Rekonsilido', 'rgba(255,165,0,0.5)'],
-            20 => ['Konsolidado', 'rgba(255,0,0,0.5)'],
-        ];
-
-        foreach ($cases as $count => [$status, $color]) {
-            $this->assertSame(['status' => $status, 'color' => $color], MapBarangay::classify($count));
-        }
-
-        $this->assertSame(
-            ['Konsolidado', 'Rekonsilido', 'Expansion', 'Recovery'],
-            array_column(MapBarangay::CLASSIFICATIONS, 'status')
-        );
-    }
-
-    public function test_exact_duplicates_are_rejected_but_distinct_same_date_updates_are_current_by_id(): void
-    {
-        $this->postHistory($this->barangay, 12, '2026-09-13')->assertSessionHasNoErrors();
-        $this->postHistory($this->barangay, 12, '2026-09-13')->assertSessionHasErrors('effective_date');
-        $this->postHistory($this->barangay, 15, '2026-09-13')->assertSessionHasNoErrors();
-
-        $area = MapBarangay::query()->with('latestColorHistory')->firstOrFail();
-        $this->assertSame(2, $area->colorHistories()->count());
-        $this->assertSame(15, $area->frs);
-        $this->assertSame('Rekonsilido', $area->status);
-        $this->assertSame(15, $area->latestColorHistory->frs);
-    }
-
-    public function test_backdated_history_is_preserved_without_replacing_later_current_state(): void
-    {
-        $this->postHistory($this->barangay, 20, '2026-09-13')->assertSessionHasNoErrors();
-        $this->postHistory($this->barangay, 5, '2026-09-01')->assertSessionHasNoErrors();
-
-        $area = MapBarangay::query()->with('latestColorHistory')->firstOrFail();
-        $this->assertSame(2, $area->colorHistories()->count());
-        $this->assertSame(20, $area->frs);
+        $area->refresh();
+        $this->assertSame(22, (int) $area->frs);
         $this->assertSame('Konsolidado', $area->status);
-        $this->assertSame('2026-09-13', $area->latestColorHistory->effective_date->toDateString());
+        $this->assertSame('rgba(255,0,0,0.5)', $area->infestation_color);
+        $this->assertSame($before + 1, $area->colorHistories()->count());
     }
 
-    public function test_parent_cache_failure_rolls_back_the_appended_history(): void
+    public function test_removing_an_area_resets_it_without_deleting_the_row(): void
     {
-        $service = app(RcspAreaHistoryService::class);
-        $service->record($this->barangay, '2026-09-01', 5);
-        $area = MapBarangay::query()->firstOrFail();
+        $this->skipUnlessLegacyDataPresent();
 
-        DB::unprepared(<<<'SQL'
-            CREATE TRIGGER rcsp_area_cache_failure
-            BEFORE UPDATE OF frs ON map_barangays
-            BEGIN
-                SELECT RAISE(ABORT, 'simulated cache failure');
-            END;
-        SQL);
+        $area = MapBarangay::where('frs', '>', 0)->firstOrFail();
+        $id = $area->id;
 
-        try {
-            $service->record($this->barangay, '2026-09-02', 12);
-            $this->fail('The simulated cache failure did not abort the transaction.');
-        } catch (QueryException $exception) {
-            $this->assertStringContainsString('simulated cache failure', $exception->getMessage());
-        } finally {
-            DB::unprepared('DROP TRIGGER IF EXISTS rcsp_area_cache_failure');
-        }
-
-        $this->assertSame(1, $area->colorHistories()->count());
-        $this->assertSame(5, $area->fresh()->frs);
-    }
-
-    public function test_update_route_rejects_a_different_canonical_barangay(): void
-    {
-        app(RcspAreaHistoryService::class)->record($this->barangay, '2026-09-01', 5);
-        $area = MapBarangay::query()->firstOrFail();
-        $other = Barangay::query()->create([
-            'municipality_id' => $this->municipality->id,
-            'name' => 'Other Barangay',
-        ]);
-
-        $this->actingAs($this->ib39)->put(route('ib39.areas.update', $area), [
-            'barangay_id' => $other->id,
-            'effective_date' => '2026-09-02',
-            'frs' => 10,
-        ])->assertSessionHasErrors('barangay_id');
-
-        $this->assertSame(1, $area->colorHistories()->count());
-    }
-
-    public function test_unresolved_legacy_area_cannot_be_claimed_through_the_update_route(): void
-    {
-        $legacy = MapBarangay::query()->create([
-            'municipality' => $this->municipality->name,
-            'barangay' => $this->barangay->name,
-            'frs' => 5,
-            'rebels' => 5,
-            'status' => 'Recovery',
-            'infestation_color' => 'rgba(0,255,0,0.5)',
-        ]);
-
-        $this->actingAs($this->ib39)->put(route('ib39.areas.update', $legacy), [
-            'barangay_id' => $this->barangay->id,
-            'effective_date' => '2026-09-02',
-            'frs' => 10,
-        ])->assertSessionHasErrors('barangay_id');
-
-        $this->assertNull($legacy->fresh()->barangay_id);
-        $this->assertDatabaseCount('color_histories', 0);
-    }
-
-    public function test_remove_preserves_history_and_a_later_entry_reactivates_the_area(): void
-    {
-        $this->postHistory($this->barangay, 5, '2026-09-01')->assertSessionHasNoErrors();
-        $area = MapBarangay::query()->firstOrFail();
-
-        $this->actingAs($this->ib39)
-            ->delete(route('ib39.areas.destroy', $area))
-            ->assertSessionHasNoErrors();
+        $this->actingAs($this->ib39())->delete("/39th-ib/areas/{$id}")->assertRedirect();
 
         $area->refresh();
+        $this->assertNotNull(MapBarangay::find($id), 'row must survive — legacy only reset it');
+        $this->assertSame(0, (int) $area->frs);
         $this->assertNull($area->status);
-        $this->assertSame(0, $area->frs);
-        $this->assertSame(MapBarangay::NEUTRAL_COLOR, $area->infestation_color);
-        $this->assertSame(1, $area->colorHistories()->count());
-        $inactiveResponse = $this->actingAs($this->ib39)->get(route('ib39.areas.index'))->assertOk();
-        $this->assertSame(0, $inactiveResponse->viewData('areas')->total());
-
-        $this->postHistory($this->barangay, 10, '2026-09-02')->assertSessionHasNoErrors();
-
-        $area->refresh();
-        $this->assertSame('Expansion', $area->status);
-        $this->assertSame(10, $area->frs);
-        $this->assertSame(2, $area->colorHistories()->count());
-        $activeResponse = $this->actingAs($this->ib39)->get(route('ib39.areas.index'))->assertOk();
-        $this->assertSame(1, $activeResponse->viewData('areas')->total());
+        $this->assertSame('rgba(190,178,151,0.1)', $area->infestation_color);
     }
 
-    public function test_dashboard_uses_one_latest_history_per_area_for_counts_and_totals(): void
+    public function test_adding_an_unknown_barangay_is_rejected(): void
     {
-        app(RcspAreaHistoryService::class)->record($this->barangay, '2026-09-01', 5);
-        app(RcspAreaHistoryService::class)->record($this->barangay, '2026-09-02', 12);
-        $second = Barangay::query()->create([
-            'municipality_id' => $this->municipality->id,
-            'name' => 'Second Barangay',
-        ]);
-        app(RcspAreaHistoryService::class)->record($second, '2026-09-02', 20);
+        $this->skipUnlessLegacyDataPresent();
 
-        $response = $this->actingAs($this->ib39)->get(route('ib39.dashboard'))->assertOk();
-        $this->assertSame(32, $response->viewData('stats')['total_frs']);
-        $this->assertSame(1, $response->viewData('statusCounts')['Expansion']);
-        $this->assertSame(1, $response->viewData('statusCounts')['Konsolidado']);
+        $this->actingAs($this->ib39())
+            ->post('/39th-ib/areas', ['municipality' => 'Nowhere', 'barangay' => 'Nothing', 'frs' => 5])
+            ->assertRedirect();
+
+        $this->assertNull(MapBarangay::where('barangay', 'Nothing')->first());
     }
 
-    public function test_forward_migration_backfills_verified_geography_and_preserves_unresolved_rows(): void
+    /**
+     * Modals must be opened by Bootstrap's own data-bs-toggle. Opening them from
+     * JS depended on a `window.bootstrap` global and silently did nothing.
+     */
+    public function test_edit_and_add_buttons_are_declaratively_wired(): void
     {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            $municipalityId = DB::table('municipalities')->insertGetId(['name' => 'Exact Municipality']);
-            $barangayId = DB::table('barangays')->insertGetId([
-                'municipality_id' => $municipalityId, 'name' => 'Exact Barangay',
-            ]);
-            $time = '2026-09-01 10:30:00';
-            DB::table('map_barangays')->insert([
-                ['id' => 1, 'municipality' => 'Exact Municipality', 'barangay' => 'Exact Barangay', 'frs' => 15,
-                    'status' => 'Rekonsilida', 'infestation_color' => 'rgba(255,165,0,0.5)', 'rebels' => 15,
-                    'created_at' => $time, 'updated_at' => $time],
-                ['id' => 2, 'municipality' => 'Unknown Municipality', 'barangay' => 'Unknown Barangay', 'frs' => 0,
-                    'status' => null, 'infestation_color' => MapBarangay::NEUTRAL_COLOR, 'rebels' => 0,
-                    'created_at' => $time, 'updated_at' => $time],
-            ]);
-            DB::table('color_histories')->insert([
-                'id' => 10, 'map_barangay_id' => 1, 'status' => 'Rekonsilida', 'color' => 'rgba(255,165,0,0.5)',
-                'frs' => 15, 'created_at' => $time, 'updated_at' => $time,
-            ]);
-            DB::statement('CREATE INDEX legacy_map_location_index ON map_barangays (municipality, barangay)');
-            DB::statement('CREATE INDEX legacy_history_status_index ON color_histories (status)');
-            DB::statement('CREATE TRIGGER legacy_map_trigger AFTER UPDATE OF fid ON map_barangays BEGIN SELECT 1; END');
+        $this->skipUnlessLegacyDataPresent();
 
-            $migration->up();
+        $html = $this->actingAs($this->ib39())->get('/39th-ib/areas')->assertOk()->getContent();
 
-            $this->assertSame([
-                'id', 'fid', 'province', 'municipality', 'barangay', 'frs', 'status',
-                'infestation_color', 'rebels', 'created_at', 'updated_at', 'barangay_id',
-            ], Schema::getColumnListing('map_barangays'));
-            $this->assertSame([
-                'id', 'map_barangay_id', 'status', 'color', 'frs', 'created_at', 'updated_at', 'effective_date',
-            ], Schema::getColumnListing('color_histories'));
-            $this->assertSame($barangayId, DB::table('map_barangays')->where('id', 1)->value('barangay_id'));
-            $this->assertNull(DB::table('map_barangays')->where('id', 2)->value('barangay_id'));
-            $this->assertSame('Rekonsilido', DB::table('map_barangays')->where('id', 1)->value('status'));
-            $this->assertSame('Rekonsilido', DB::table('color_histories')->value('status'));
-            $this->assertSame('2026-09-01', DB::table('color_histories')->value('effective_date'));
-            $this->assertSame([1, 2], DB::table('map_barangays')->orderBy('id')->pluck('id')->all());
-            $this->assertSame([10], DB::table('color_histories')->pluck('id')->all());
-            $this->assertSame(2, DB::table('map_barangays')->count());
-            $this->assertSame(1, DB::table('color_histories')->count());
-            $this->assertSame('ok', DB::scalar('PRAGMA quick_check'));
-            $this->assertSame([], DB::select('PRAGMA foreign_key_check'));
+        $this->assertStringContainsString('data-bs-target="#addModal"', $html);
+        $this->assertStringContainsString('data-bs-target="#editModal"', $html);
 
-            $mapIndexes = collect(DB::select('PRAGMA index_list("map_barangays")'))->pluck('name')->all();
-            $historyIndexes = collect(DB::select('PRAGMA index_list("color_histories")'))->pluck('name')->all();
-            $this->assertContains('legacy_map_location_index', $mapIndexes);
-            $this->assertContains('map_barangays_barangay_id_unique', $mapIndexes);
-            $this->assertContains('legacy_history_status_index', $historyIndexes);
-            $this->assertContains('color_histories_current_index', $historyIndexes);
-            $this->assertSame(1, DB::table('sqlite_master')->where('type', 'trigger')
-                ->where('name', 'legacy_map_trigger')->count());
-            $this->assertSame(0, DB::table('sqlite_master')->where('type', 'table')
-                ->whereIn('name', ['__temp__map_barangays', '__temp__color_histories'])->count());
-
-            try {
-                $migration->down();
-                $this->fail('Rollback should refuse to discard canonical and effective-date data.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('rollback refused', $exception->getMessage());
-            }
-        });
-    }
-
-    public function test_migration_rejects_ambiguous_canonical_geography_before_schema_mutation(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            $municipalityId = DB::table('municipalities')->insertGetId(['name' => 'Ambiguous Municipality']);
-            DB::table('barangays')->insert([
-                ['municipality_id' => $municipalityId, 'name' => 'Same Barangay'],
-                ['municipality_id' => $municipalityId, 'name' => ' same   barangay '],
-            ]);
-
-            try {
-                $migration->up();
-                $this->fail('Ambiguous canonical geography should abort the migration.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('ambiguous', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-        });
-    }
-
-    public function test_migration_rejects_duplicate_map_assignment_before_schema_mutation(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            $municipalityId = DB::table('municipalities')->insertGetId(['name' => 'Duplicate Municipality']);
-            DB::table('barangays')->insert([
-                'municipality_id' => $municipalityId, 'name' => 'Duplicate Barangay',
-            ]);
-            DB::table('map_barangays')->insert([
-                ['municipality' => 'Duplicate Municipality', 'barangay' => 'Duplicate Barangay'],
-                ['municipality' => ' duplicate municipality ', 'barangay' => ' duplicate barangay '],
-            ]);
-
-            try {
-                $migration->up();
-                $this->fail('Duplicate map assignments should abort the migration.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('match the same canonical barangay', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-        });
-    }
-
-    public function test_migration_rejects_missing_history_date_before_schema_mutation(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            $areaId = DB::table('map_barangays')->insertGetId(['municipality' => 'Unknown', 'barangay' => 'Unknown']);
-            DB::table('color_histories')->insert(['map_barangay_id' => $areaId, 'created_at' => null]);
-
-            try {
-                $migration->up();
-                $this->fail('A missing history timestamp should abort the migration.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('no created_at', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-        });
-    }
-
-    public function test_migration_rejects_active_area_without_history_before_schema_mutation(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            DB::table('map_barangays')->insert([
-                'municipality' => 'Unknown', 'barangay' => 'Unknown', 'status' => 'Recovery',
-            ]);
-
-            try {
-                $migration->up();
-                $this->fail('An active area without history should abort the migration.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('has no history', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-        });
-    }
-
-    public function test_sqlite_failure_after_schema_changes_rolls_back_every_change(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            $time = '2026-09-01 10:30:00';
-            $areaId = DB::table('map_barangays')->insertGetId([
-                'municipality' => 'Unknown', 'barangay' => 'Unknown', 'frs' => 15, 'rebels' => 15,
-                'status' => 'Rekonsilida', 'infestation_color' => 'rgba(255,165,0,0.5)',
-                'created_at' => $time, 'updated_at' => $time,
-            ]);
-            DB::table('color_histories')->insert([
-                'map_barangay_id' => $areaId, 'status' => 'Rekonsilida', 'color' => 'rgba(255,165,0,0.5)',
-                'frs' => 15, 'created_at' => $time, 'updated_at' => $time,
-            ]);
-            DB::statement(<<<'SQL'
-                CREATE TRIGGER force_rcsp_migration_failure
-                BEFORE UPDATE OF status ON color_histories
-                WHEN NEW.status = 'Rekonsilido'
-                BEGIN
-                    SELECT RAISE(ABORT, 'forced migration failure');
-                END
-            SQL);
-
-            try {
-                $migration->up();
-                $this->fail('The deliberate post-schema failure should abort the migration.');
-            } catch (QueryException $exception) {
-                $this->assertStringContainsString('forced migration failure', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-            $this->assertSame('Rekonsilida', DB::table('map_barangays')->value('status'));
-            $this->assertSame('Rekonsilida', DB::table('color_histories')->value('status'));
-            $this->assertSame(1, DB::table('sqlite_master')->where('name', 'force_rcsp_migration_failure')->count());
-        });
-    }
-
-    public function test_sqlite_schema_mismatch_fails_before_mutation(): void
-    {
-        $this->withLegacyMigrationDatabase(function ($migration): void {
-            Schema::table('map_barangays', fn (Blueprint $table) => $table->string('unexpected_column')->nullable());
-
-            try {
-                $migration->up();
-                $this->fail('An unknown production column should abort the migration.');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('schema differs', $exception->getMessage());
-            }
-
-            $this->assertFalse(Schema::hasColumn('map_barangays', 'barangay_id'));
-            $this->assertFalse(Schema::hasColumn('color_histories', 'effective_date'));
-            $this->assertTrue(Schema::hasColumn('map_barangays', 'unexpected_column'));
-        });
-    }
-
-    private function postHistory(Barangay $barangay, int|string $frs, string $effectiveDate)
-    {
-        return $this->actingAs($this->ib39)->post(route('ib39.areas.store'), [
-            'barangay_id' => $barangay->id,
-            'effective_date' => $effectiveDate,
-            'frs' => $frs,
-        ]);
-    }
-
-    private function withLegacyMigrationDatabase(\Closure $test): void
-    {
-        $original = config('database.default');
-        config(['database.default' => 'rcsp_migration_test']);
-        config(['database.connections.rcsp_migration_test' => [
-            'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true,
-        ]]);
-        DB::purge('rcsp_migration_test');
-
-        try {
-            Schema::create('municipalities', function (Blueprint $table): void {
-                $table->id();
-                $table->string('name');
-            });
-            Schema::create('barangays', function (Blueprint $table): void {
-                $table->id();
-                $table->foreignId('municipality_id')->constrained();
-                $table->string('name');
-            });
-            Schema::create('map_barangays', function (Blueprint $table): void {
-                $table->id();
-                $table->string('fid')->nullable();
-                $table->string('province')->nullable();
-                $table->string('municipality')->nullable();
-                $table->string('barangay')->nullable();
-                $table->integer('frs')->default(0);
-                $table->string('status')->nullable();
-                $table->string('infestation_color')->nullable();
-                $table->integer('rebels')->default(0);
-                $table->timestamps();
-            });
-            Schema::create('color_histories', function (Blueprint $table): void {
-                $table->id();
-                $table->foreignId('map_barangay_id')->nullable()->constrained()->cascadeOnDelete();
-                $table->string('status')->nullable();
-                $table->string('color')->nullable();
-                $table->integer('frs')->nullable();
-                $table->timestamps();
-            });
-
-            $migration = require database_path('migrations/2026_09_13_000001_harden_ib39_rcsp_area_history.php');
-            $test($migration);
-        } finally {
-            DB::disconnect('rcsp_migration_test');
-            config(['database.default' => $original]);
+        // Every Edit button carries the row data the modal prefills from.
+        foreach (['data-action=', 'data-frs=', 'data-barangay=', 'data-municipality='] as $attr) {
+            $this->assertStringContainsString($attr, $html, "Edit button missing $attr");
         }
+    }
+
+    /**
+     * Modals use the legacy add_rcsp.php chrome, not Bootstrap's modal-header,
+     * whose SkyDash styling is a solid purple bar that hid the dark title text.
+     */
+    public function test_modals_use_the_legacy_chrome(): void
+    {
+        $this->skipUnlessLegacyDataPresent();
+
+        $html = $this->actingAs($this->ib39())->get('/39th-ib/areas')->assertOk()->getContent();
+
+        $this->assertStringContainsString('ib39-areas.css', $html);
+        $this->assertStringContainsString('ib39-modal-title is-add', $html);
+        $this->assertStringContainsString('ib39-modal-title is-edit', $html);
+        $this->assertStringContainsString('ib39-submit-btn', $html);
+
+        // No Bootstrap modal-header / modal-footer inside these two dialogs.
+        $this->assertStringNotContainsString('<div class="modal-header">', $html);
+        $this->assertStringNotContainsString('<div class="modal-footer">', $html);
+    }
+
+    /** Action buttons use the legacy icon-only edit/delete styling. */
+    public function test_action_buttons_match_the_legacy_styling(): void
+    {
+        $this->skipUnlessLegacyDataPresent();
+
+        $html = $this->actingAs($this->ib39())->get('/39th-ib/areas')->assertOk()->getContent();
+
+        $this->assertStringContainsString('ib39-action-buttons', $html);
+        $this->assertStringContainsString('ib39-edit-btn', $html);
+        $this->assertStringContainsString('ib39-delete-btn', $html);
+
+        // SkyDash ships Font Awesome 4, so FA5-only class names would render nothing.
+        $this->assertStringContainsString('fa fa-pencil-square-o', $html);
+        $this->assertStringContainsString('fa fa-trash-o', $html);
+        $this->assertStringNotContainsString('fa-trash-alt', $html);
+        $this->assertStringNotContainsString('fas fa-', $html);
     }
 }

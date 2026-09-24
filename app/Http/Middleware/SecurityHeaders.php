@@ -17,12 +17,7 @@ class SecurityHeaders
         $response = $next($request);
 
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        if ($this->isInlineRcspEvidence($request, $response)) {
-            $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
-            $response->headers->set('Content-Security-Policy', "frame-ancestors 'self'");
-        } else {
-            $response->headers->set('X-Frame-Options', 'DENY');
-        }
+        $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
         // X-XSS-Protection is deprecated and unsafe in older browsers; modern
@@ -30,21 +25,5 @@ class SecurityHeaders
         $response->headers->set('X-XSS-Protection', '0');
 
         return $response;
-    }
-
-    private function isInlineRcspEvidence(Request $request, Response $response): bool
-    {
-        if (! $request->user() || ! $request->routeIs('rcsp.evidence') || ! $response->isSuccessful()) {
-            return false;
-        }
-
-        $contentType = strtolower(trim(explode(';', (string) $response->headers->get('Content-Type'), 2)[0]));
-        if (! in_array($contentType, ['application/pdf', 'image/jpeg', 'image/png'], true)) {
-            return false;
-        }
-
-        $disposition = strtolower(trim(explode(';', (string) $response->headers->get('Content-Disposition'), 2)[0]));
-
-        return $disposition === 'inline';
     }
 }
