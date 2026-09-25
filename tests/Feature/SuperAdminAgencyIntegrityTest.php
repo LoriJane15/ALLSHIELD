@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Models\GovAgency;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SuperAdminAgencyIntegrityTest extends TestCase
@@ -14,6 +17,23 @@ class SuperAdminAgencyIntegrityTest extends TestCase
     use RefreshDatabase;
 
     private const DEPENDENCY_ERROR = 'Agency cannot be deleted while linked accounts or implementation records exist.';
+
+    private ?string $isolatedPublicPath = null;
+
+    private ?string $originalPublicPath = null;
+
+    protected function tearDown(): void
+    {
+        if ($this->originalPublicPath !== null) {
+            $this->app->usePublicPath($this->originalPublicPath);
+        }
+
+        if ($this->isolatedPublicPath !== null) {
+            File::deleteDirectory($this->isolatedPublicPath);
+        }
+
+        parent::tearDown();
+    }
 
     public function test_agency_delete_route_remains_delete_only_with_existing_middleware(): void
     {
@@ -281,6 +301,166 @@ class SuperAdminAgencyIntegrityTest extends TestCase
         ]);
     }
 
+    public function test_agency_form_lists_only_valid_top_level_logo_images_and_supports_uploads(): void
+    {
+        $directory = $this->useIsolatedAgencyLogoDirectory();
+        $this->placeLogo($directory, 'existing-agency.png');
+        File::copy($directory.'/existing-agency.png', $directory.'/.hidden-agency.png');
+        File::copy($directory.'/existing-agency.png', $directory.'/executable.php');
+        File::put($directory.'/disguised.png', '<?php echo "not an image";');
+        File::put($directory.'/notes.txt', 'not an image');
+        File::ensureDirectoryExists($directory.'/nested.png');
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('super_admin.agencies.index'))
+            ->assertOk()
+            ->assertSee('enctype="multipart/form-data"', false)
+            ->assertSee('name="profile_upload"', false)
+            ->assertSee('name="profile"', false)
+            ->assertSee('data-agency-logo-picker', false)
+            ->assertSee('data-logo="existing-agency.png"', false)
+            ->assertSee('src="'.asset('assets/logoAgency/existing-agency.png').'"', false)
+            ->assertDontSee('<select name="profile"', false)
+            ->assertDontSee('.hidden-agency.png')
+            ->assertDontSee('executable.php')
+            ->assertDontSee('disguised.png')
+            ->assertDontSee('notes.txt')
+            ->assertDontSee('nested.png');
+    }
+
+    public function test_existing_agency_logo_selection_persists_renders_and_rejects_forged_paths(): void
+    {
+        $directory = $this->useIsolatedAgencyLogoDirectory();
+        $this->placeLogo($directory, 'selectable-agency.png');
+        $superAdmin = $this->superAdmin();
+
+        $this->actingAs($superAdmin)
+            ->post(route('super_admin.agencies.store'), [
+                'name' => 'Selected Logo Agency',
+                'acronym' => 'SLA',
+                'profile' => 'selectable-agency.png',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $agency = GovAgency::query()->where('acronym', 'SLA')->sole();
+        $this->assertSame('selectable-agency.png', $agency->profile);
+
+        $this->get(route('super_admin.agencies.index'))
+            ->assertOk()
+            ->assertSee('src="'.asset('assets/logoAgency/selectable-agency.png').'"', false)
+            ->assertSee('data-profile="selectable-agency.png"', false);
+
+        $this->post(route('super_admin.agencies.store'), [
+            'name' => 'Forged Logo Agency',
+            'acronym' => 'FLA',
+            'profile' => '../selectable-agency.png',
+        ])->assertSessionHasErrors('profile');
+
+        $this->assertDatabaseMissing('gov_agencies', ['acronym' => 'FLA']);
+    }
+
+    public function test_agency_logo_upload_uses_a_safe_unique_filename_and_rejects_invalid_or_ambiguous_files(): void
+    {
+        $directory = $this->useIsolatedAgencyLogoDirectory();
+        $this->placeLogo($directory, 'existing-agency.png');
+        $superAdmin = $this->superAdmin();
+
+        $this->actingAs($superAdmin)
+            ->post(route('super_admin.agencies.store'), [
+                'name' => 'Uploaded Logo Agency',
+                'acronym' => 'ULA',
+                'profile_upload' => UploadedFile::fake()->image('shared agency logo.png'),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $first = GovAgency::query()->where('acronym', 'ULA')->sole();
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}\.png$/', $first->profile);
+        $this->assertFileExists($directory.'/'.$first->profile);
+
+        $this->post(route('super_admin.agencies.store'), [
+            'name' => 'Second Uploaded Logo Agency',
+            'acronym' => 'SULA',
+            'profile_upload' => UploadedFile::fake()->image('shared agency logo.png'),
+        ])->assertSessionHasNoErrors();
+
+        $second = GovAgency::query()->where('acronym', 'SULA')->sole();
+        $this->assertNotSame($first->profile, $second->profile);
+        $this->assertFileExists($directory.'/'.$second->profile);
+
+        $this->get(route('super_admin.agencies.index'))
+            ->assertOk()
+            ->assertSee('data-logo="'.$first->profile.'"', false)
+            ->assertSee('src="'.asset('assets/logoAgency/'.$first->profile).'"', false);
+
+        $this->post(route('super_admin.agencies.store'), [
+            'name' => 'Invalid Upload Agency',
+            'acronym' => 'IUA',
+            'profile_upload' => UploadedFile::fake()
+                ->createWithContent('payload.php', '<?php echo "not an image";')
+                ->mimeType('application/x-php'),
+        ])->assertSessionHasErrors('profile_upload');
+
+        $beforeAmbiguousSubmission = count(File::files($directory));
+        $this->post(route('super_admin.agencies.store'), [
+            'name' => 'Ambiguous Logo Agency',
+            'acronym' => 'ALA',
+            'profile' => 'existing-agency.png',
+            'profile_upload' => UploadedFile::fake()->image('ambiguous.png'),
+        ])->assertSessionHasErrors(['profile', 'profile_upload']);
+
+        $this->assertSame($beforeAmbiguousSubmission, count(File::files($directory)));
+        $this->assertDatabaseMissing('gov_agencies', ['acronym' => 'IUA']);
+        $this->assertDatabaseMissing('gov_agencies', ['acronym' => 'ALA']);
+    }
+
+    public function test_edit_preserves_displays_and_replaces_the_current_agency_logo(): void
+    {
+        $directory = $this->useIsolatedAgencyLogoDirectory();
+        $this->placeLogo($directory, 'current-agency.png');
+        $this->placeLogo($directory, 'replacement-agency.png');
+        $agency = GovAgency::create([
+            'name' => 'Editable Logo Agency',
+            'acronym' => 'ELA',
+            'profile' => 'current-agency.png',
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('super_admin.agencies.index'))
+            ->assertOk()
+            ->assertSee('data-profile="current-agency.png"', false)
+            ->assertSee('src="'.asset('assets/logoAgency/current-agency.png').'"', false);
+
+        $this->put(route('super_admin.agencies.update', $agency), [
+            'name' => 'Editable Logo Agency Renamed',
+            'acronym' => 'ELA',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('current-agency.png', $agency->refresh()->profile);
+
+        $this->put(route('super_admin.agencies.update', $agency), [
+            'name' => $agency->name,
+            'acronym' => $agency->acronym,
+            'profile' => 'replacement-agency.png',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('replacement-agency.png', $agency->refresh()->profile);
+
+        $this->put(route('super_admin.agencies.update', $agency), [
+            'name' => $agency->name,
+            'acronym' => $agency->acronym,
+            'profile_upload' => UploadedFile::fake()->image('uploaded-replacement.jpg'),
+        ])->assertSessionHasNoErrors();
+
+        $uploadedProfile = $agency->refresh()->profile;
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}\.jpg$/', $uploadedProfile);
+        $this->assertFileExists($directory.'/'.$uploadedProfile);
+        $this->assertFileExists($directory.'/current-agency.png');
+        $this->assertFileExists($directory.'/replacement-agency.png');
+
+        $this->get(route('super_admin.agencies.index'))
+            ->assertOk()
+            ->assertSee('data-profile="'.$uploadedProfile.'"', false)
+            ->assertSee('src="'.asset('assets/logoAgency/'.$uploadedProfile).'"', false);
+    }
+
     public function test_index_dependency_aggregates_use_a_bounded_number_of_queries(): void
     {
         $this->agency('Initial Query Agency', 'IQA');
@@ -307,6 +487,23 @@ class SuperAdminAgencyIntegrityTest extends TestCase
     private function superAdmin(): User
     {
         return User::factory()->role('super_admin')->create();
+    }
+
+    private function useIsolatedAgencyLogoDirectory(): string
+    {
+        $this->withoutVite();
+        $this->originalPublicPath = $this->app->publicPath();
+        $this->isolatedPublicPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'allshield-agency-logos-'.Str::uuid();
+        $directory = $this->isolatedPublicPath.DIRECTORY_SEPARATOR.'assets'.DIRECTORY_SEPARATOR.'logoAgency';
+        File::ensureDirectoryExists($directory);
+        $this->app->usePublicPath($this->isolatedPublicPath);
+
+        return $directory;
+    }
+
+    private function placeLogo(string $directory, string $filename): void
+    {
+        UploadedFile::fake()->image($filename)->move($directory, $filename);
     }
 
     private function agency(string $name, string $acronym): GovAgency

@@ -46,6 +46,87 @@
     object-fit: contain;
 }
 
+.sa-logo-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 0.65rem;
+    max-height: 248px;
+    overflow-y: auto;
+    padding: 0.65rem;
+    border: 1.5px solid var(--sa-slate-200);
+    border-radius: 12px;
+    background: var(--sa-slate-50);
+}
+
+.sa-logo-option {
+    position: relative;
+    min-width: 0;
+    padding: 0.55rem;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: #ffffff;
+    color: var(--sa-slate-700);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.sa-logo-option:hover,
+.sa-logo-option:focus-visible {
+    border-color: #a5b4fc;
+    box-shadow: 0 3px 10px rgba(79, 70, 229, 0.12);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.sa-logo-option.is-selected {
+    border-color: var(--sa-primary);
+    background: #eef2ff;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
+}
+
+.sa-logo-option-image {
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sa-logo-option-image img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.sa-logo-option-fallback {
+    color: var(--sa-slate-500);
+    font-size: 1.5rem;
+}
+
+.sa-logo-option-name {
+    display: block;
+    margin-top: 0.4rem;
+    overflow: hidden;
+    color: var(--sa-slate-500);
+    font-size: 0.68rem;
+    line-height: 1.2;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sa-logo-option-check {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.3rem;
+    color: var(--sa-primary);
+    font-size: 1rem;
+    opacity: 0;
+}
+
+.sa-logo-option.is-selected .sa-logo-option-check {
+    opacity: 1;
+}
+
 .sa-acronym-pill {
     font-size: 0.76rem;
     font-weight: 800;
@@ -402,7 +483,7 @@
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form method="POST" action="{{ route('super_admin.agencies.store') }}">
+                <form method="POST" action="{{ route('super_admin.agencies.store') }}" enctype="multipart/form-data" data-agency-form>
                     @csrf
                     <div class="clean-modal-body">
                         @include('super_admin.agencies._fields')
@@ -436,7 +517,7 @@
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form method="POST" data-edit-agency-form>
+                <form method="POST" enctype="multipart/form-data" data-agency-form data-edit-agency-form>
                     @csrf @method('PUT')
                     <div class="clean-modal-body">
                         @include('super_admin.agencies._fields')
@@ -458,13 +539,85 @@
 
 @push('scripts')
     <script>
+        const agencyLogoBaseUrl = @json(rtrim(asset('assets/logoAgency'), '/'));
+
+        function showAgencyLogoPreview(form, source, alt = 'Selected agency logo') {
+            const preview = form.querySelector('[data-agency-logo-preview]');
+            preview.replaceChildren();
+
+            if (source) {
+                const image = document.createElement('img');
+                image.src = source;
+                image.alt = alt;
+                image.className = 'sa-agency-logo-img';
+                image.addEventListener('error', () => {
+                    preview.innerHTML = '<i class="mdi mdi-bank text-muted" style="font-size: 1.35rem;"></i>';
+                }, { once: true });
+                preview.appendChild(image);
+                return;
+            }
+
+            preview.innerHTML = '<i class="mdi mdi-bank text-muted" style="font-size: 1.35rem;"></i>';
+        }
+
+        function existingAgencyLogoUrl(filename) {
+            return filename ? `${agencyLogoBaseUrl}/${encodeURIComponent(filename)}` : '';
+        }
+
+        function selectExistingAgencyLogo(form, filename, previewSource) {
+            const value = form.querySelector('[data-agency-logo-value]');
+            const upload = form.querySelector('[data-agency-logo-upload]');
+            let selectedOption = null;
+
+            form.querySelectorAll('[data-agency-logo-option]').forEach((option) => {
+                const isSelected = option.dataset.logo === filename;
+                option.classList.toggle('is-selected', isSelected);
+                option.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                if (isSelected) selectedOption = option;
+            });
+
+            value.value = selectedOption ? selectedOption.dataset.logo : '';
+            if (selectedOption) upload.value = '';
+
+            const source = previewSource === undefined
+                ? existingAgencyLogoUrl(value.value)
+                : previewSource;
+            showAgencyLogoPreview(form, source);
+        }
+
+        document.querySelectorAll('[data-agency-form]').forEach((form) => {
+            const value = form.querySelector('[data-agency-logo-value]');
+            const upload = form.querySelector('[data-agency-logo-upload]');
+
+            form.querySelectorAll('[data-agency-logo-option]').forEach((option) => {
+                option.addEventListener('click', () => {
+                    selectExistingAgencyLogo(form, option.dataset.logo);
+                });
+            });
+
+            upload.addEventListener('change', () => {
+                const file = upload.files[0];
+
+                if (! file) {
+                    showAgencyLogoPreview(form, existingAgencyLogoUrl(value.value));
+                    return;
+                }
+
+                selectExistingAgencyLogo(form, '');
+                const reader = new FileReader();
+                reader.addEventListener('load', () => showAgencyLogoPreview(form, reader.result));
+                reader.readAsDataURL(file);
+            });
+        });
+
         document.querySelectorAll('[data-edit-agency]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const f = document.querySelector('[data-edit-agency-form]');
                 f.action = btn.dataset.action;
                 f.querySelector('[name=acronym]').value = btn.dataset.acronym;
                 f.querySelector('[name=name]').value = btn.dataset.name;
-                f.querySelector('[name=profile]').value = btn.dataset.profile || '';
+                f.querySelector('[data-agency-logo-upload]').value = '';
+                selectExistingAgencyLogo(f, btn.dataset.profile || '', existingAgencyLogoUrl(btn.dataset.profile));
                 new bootstrap.Modal(document.getElementById('editAgencyModal')).show();
             });
         });

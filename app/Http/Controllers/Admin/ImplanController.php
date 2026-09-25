@@ -5,89 +5,86 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\GovAgency;
 use App\Models\Implementation;
+use App\Models\Municipality;
 use App\Models\RcspBarangay;
+use App\Services\ImplanWorkbookExporter;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ImplanController extends Controller
 {
     public function index(): View
     {
-        $all = Implementation::with('taggings.govAgency')->latest()->get();
+        $counts = DB::table('implementations')
+            ->join('users', 'users.id', '=', 'implementations.lgu_user_id')
+            ->where('implementations.status', '!=', 'not yet started')
+            ->whereNotNull('users.municipality_id')
+            ->groupBy('users.municipality_id')
+            ->selectRaw('users.municipality_id, COUNT(*) as total')
+            ->pluck('total', 'municipality_id');
 
-        $tabs = [
-            'verification' => $all->where('status', 'for verification'),
-            'ongoing' => $all->where('status', 'ongoing'),
-            'not_started' => $all->where('status', 'not yet started'),
-            'verified' => $all->where('status', 'verified'),
-            // plans with a rejected tag can be reassigned
-            'reassign' => $all->filter(fn ($i) => $i->taggings->contains('status', 'Rejected')),
-        ];
+        $municipalities = Municipality::orderBy('name')->get();
 
-        // Lookup: rcsp_barangay id => "Barangay - Municipality" for the Target Area column.
-        $areaNames = RcspBarangay::with(['barangay', 'municipality'])->get()
-            ->mapWithKeys(fn ($r) => [
-                $r->id => ($r->barangay?->name ?? "Barangay #{$r->barangay_id}").' - '.($r->municipality?->name ?? ''),
-            ]);
-
-        $allAgencies = GovAgency::orderBy('acronym')->get();
-
-        return view('admin.implan.index', compact('tabs', 'areaNames', 'allAgencies'));
+        return view('admin.implan.index-monitoring', compact('municipalities', 'counts'));
     }
 
     public function show(Implementation $implan): View
     {
-        $implan->load('files', 'photos', 'taggings.govAgency', 'responses.govAgency');
+        abort_if($implan->status === 'not yet started', 404);
+        $municipality = $implan->lguUser?->municipality;
+        abort_unless($municipality, 404, 'The IMPLAN has no municipality.');
 
-        return view('admin.implan.show', [
-            'implan' => $implan,
-            'areaNames' => RcspBarangay::with('barangay')->whereIn('id', $implan->target_areas ?? [])
-                ->get()->map(fn ($r) => $r->barangay?->name ?? "Barangay #{$r->barangay_id}"),
-            'assignedAgencies' => GovAgency::whereIn('id', $implan->agencies ?? [])->get(),
-            'allAgencies' => GovAgency::orderBy('acronym')->get(),
-        ]);
+        return $this->municipality($municipality);
+    }
+
+    public function municipality(Municipality $municipality): View
+    {
+        $implans = $this->submittedMunicipalityImplans($municipality);
+
+        return view('admin.implan.municipality', $this->officialViewData($municipality, $implans));
+    }
+
+    public function download(Municipality $municipality, ImplanWorkbookExporter $exporter): StreamedResponse
+    {
+        return $exporter->download($municipality, $this->submittedMunicipalityImplans($municipality));
     }
 
     public function verify(Implementation $implan): RedirectResponse
     {
-        $implan->update(['status' => 'verified']);
-
-        return back()->with('success', 'Implementation plan verified.');
+        abort(403, 'Katuparan IMPLAN monitoring is read-only.');
     }
 
-    /** Reassign a plan (with rejected agencies) to a new set of agencies. */
-    public function reassign(Request $request, Implementation $implan): RedirectResponse
+    public function reassign(Implementation $implan): RedirectResponse
     {
-        $data = $request->validate([
-            'agencies' => ['required', 'array', 'min:1'],
-            'agencies.*' => ['integer', 'exists:gov_agencies,id'],
-        ]);
+        abort(403, 'Katuparan IMPLAN monitoring is read-only.');
+    }
 
-        DB::transaction(function () use ($implan, $data) {
-            // retire rejected taggings
-            $implan->taggings()->where('status', 'Rejected')->update(['status' => 'Reassigned']);
+    private function submittedMunicipalityImplans(Municipality $municipality)
+    {
+        return Implementation::query()
+            ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
+            ->where('status', '!=', 'not yet started')
+            ->with([
+                'lguUser.municipality', 'originalFiles', 'originalPhotos',
+                'responses.govAgency', 'responses.files', 'responses.photos',
+            ])
+            ->oldest('uploaded_at')
+            ->oldest('id')
+            ->get();
+    }
 
-            $agencies = array_map('intval', $data['agencies']);
-            $implan->update([
-                'agencies' => $agencies,
-                'status' => 'for verification',
-            ]);
-
-            // fresh pending response + tagging for each newly assigned agency
-            foreach ($agencies as $agencyId) {
-                $implan->responses()->updateOrCreate(
-                    ['gov_agency_id' => $agencyId],
-                    ['response_status' => 'pending', 'rejection_reason' => null]
-                );
-                $implan->taggings()->updateOrCreate(
-                    ['gov_agency_id' => $agencyId],
-                    ['status' => 'Pending', 'reason' => null]
-                );
-            }
-        });
-
-        return back()->with('success', 'Plan reassigned to selected agencies.');
+    private function officialViewData(Municipality $municipality, $implans): array
+    {
+        return [
+            'municipality' => $municipality,
+            'implans' => $implans,
+            'agenciesById' => GovAgency::all()->keyBy('id'),
+            'areaNamesByImplan' => $implans->mapWithKeys(fn (Implementation $implan) => [
+                $implan->id => RcspBarangay::with('barangay')->whereIn('id', $implan->target_areas ?? [])
+                    ->get()->map(fn ($area) => $area->barangay?->name ?? "Barangay #{$area->barangay_id}"),
+            ]),
+        ];
     }
 }

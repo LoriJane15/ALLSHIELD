@@ -7,7 +7,7 @@
         ? asset('assets/logoAgency/'.$agency->profile)
         : (auth()->user()->logo ? asset('assets/'.auth()->user()->logo) : asset('assets/img/kc-logo.svg'));
     $statusBadge = fn ($s) => match ($s) {
-        'for verification' => 'badge-info', 'ongoing' => 'badge-primary',
+        'submitted' => 'badge-info', 'for verification' => 'badge-info', 'ongoing' => 'badge-primary',
         'not yet started' => 'badge-danger', default => 'badge-secondary',
     };
 @endphp
@@ -51,6 +51,42 @@
                 <button class="btn btn-sm btn-light bg-white">
                     <i class="mdi mdi-calendar"></i> Today is <span class="text-primary">{{ now()->format('d F Y') }}</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-12 grid-margin stretch-card" data-municipality-monitoring-list>
+        <div class="card implan-card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <h4 class="font-weight-bold mb-1">Municipality IMPLAN Monitoring</h4>
+                    <p class="text-muted mb-0">Read-only access to the complete official IMPLAN of municipalities where your agency participates.</p>
+                </div>
+
+                <div class="implementation-list">
+                    @forelse ($monitoringMunicipalities as $municipality)
+                        @php($implanCount = (int) ($monitoringCounts[$municipality->id] ?? 0))
+                        <div class="implementation-item" data-monitoring-municipality="{{ $municipality->id }}">
+                            <div class="item-content">
+                                <div class="agency-info">
+                                    <div class="program-details">
+                                        <h4>{{ $municipality->name }}</h4>
+                                        <p class="subtitle" data-monitoring-count="{{ $implanCount }}">
+                                            {{ $implanCount }} IMPLAN{{ $implanCount === 1 ? '' : 's' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="action-buttons">
+                                    <a href="{{ route('gov_agency.implan.municipality', $municipality) }}" class="btn-view">
+                                        <i class="mdi mdi-eye"></i> View Full IMPLAN
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="no-data">No municipality IMPLANs are available for monitoring.</div>
+                    @endforelse
+                </div>
             </div>
         </div>
     </div>
@@ -101,7 +137,7 @@
                 <div class="modal-body">
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
                     <h3 style="color:#35127d;font-weight:bold;">New List of Implan</h3>
-                    <p class="text-muted">Verify Implan</p>
+                    <p class="text-muted">Review assigned IMPLANs</p>
 
                     <div class="implementation-list">
                         @forelse ($grouped['pending'] as $row)

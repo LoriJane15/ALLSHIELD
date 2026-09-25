@@ -11,6 +11,7 @@ use App\Models\Municipality;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class FormerRebelController extends Controller
@@ -52,6 +53,9 @@ class FormerRebelController extends Controller
         $data['province'] ??= 'Davao del Sur';
         $data['status'] ??= 'Active';
         $data['registered_at'] = now();
+        $data['age'] = isset($data['birthdate'])
+            ? Carbon::parse($data['birthdate'])->age
+            : null;
         $data['contact_num'] = $this->cleanContact($data['contact_num'] ?? null);
 
         $fr = FormerRebel::create($data);
@@ -86,6 +90,9 @@ class FormerRebelController extends Controller
     public function update(UpdateFormerRebelRequest $request, FormerRebel $formerRebel): RedirectResponse
     {
         $data = $request->validated();
+        $data['age'] = isset($data['birthdate'])
+            ? Carbon::parse($data['birthdate'])->age
+            : null;
         $data['contact_num'] = $this->cleanContact($data['contact_num'] ?? null);
         $formerRebel->update($data);
 

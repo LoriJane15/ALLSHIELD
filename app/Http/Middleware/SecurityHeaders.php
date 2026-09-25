@@ -39,7 +39,13 @@ class SecurityHeaders
         }
 
         $contentType = strtolower(trim(explode(';', (string) $response->headers->get('Content-Type'), 2)[0]));
-        if (! in_array($contentType, ['application/pdf', 'image/jpeg', 'image/png'], true)) {
+        if (! in_array($contentType, [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+        ], true)) {
             return false;
         }
 

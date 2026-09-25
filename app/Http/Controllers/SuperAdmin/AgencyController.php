@@ -10,11 +10,21 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class AgencyController extends Controller
 {
+    private const LOGO_DIRECTORY = 'assets/logoAgency';
+
+    private const LOGO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    private const LOGO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
     public function index(Request $request): View
     {
         $stats = [
@@ -32,6 +42,7 @@ class AgencyController extends Controller
                 ->when($request->search, fn ($q, $s) => $q->where('acronym', 'like', "%{$s}%")->orWhere('name', 'like', "%{$s}%"))
                 ->orderBy('acronym')->paginate(15)->withQueryString(),
             'stats' => $stats,
+            'agencyLogos' => $this->availableAgencyLogos(),
         ]);
     }
 
@@ -39,7 +50,10 @@ class AgencyController extends Controller
     {
         $data = $this->validatedAgencyData($request);
 
-        $this->persistAgency(fn () => GovAgency::create($data));
+        $this->persistAgency(
+            fn () => GovAgency::create($data),
+            $request->hasFile('profile_upload') ? $data['profile'] : null,
+        );
 
         return back()->with('success', "Agency {$data['acronym']} added.");
     }
@@ -48,7 +62,10 @@ class AgencyController extends Controller
     {
         $data = $this->validatedAgencyData($request, $agency);
 
-        $this->persistAgency(fn () => $agency->update($data));
+        $this->persistAgency(
+            fn () => $agency->update($data),
+            $request->hasFile('profile_upload') ? $data['profile'] : null,
+        );
 
         return back()->with('success', 'Agency updated.');
     }
@@ -79,12 +96,14 @@ class AgencyController extends Controller
     /** @return array{name: string, acronym: string, profile: ?string} */
     private function validatedAgencyData(Request $request, ?GovAgency $agency = null): array
     {
+        $availableLogos = $this->availableAgencyLogos();
+
         $request->merge([
             'name' => $this->trimIdentity($request->input('name')),
             'acronym' => $this->trimIdentity($request->input('acronym')),
         ]);
 
-        return $request->validate([
+        $data = $request->validate([
             'name' => [
                 'bail', 'required', 'string', 'max:255',
                 $this->canonicalUniqueRule('name', $agency),
@@ -93,8 +112,59 @@ class AgencyController extends Controller
                 'bail', 'required', 'string', 'max:50',
                 $this->canonicalUniqueRule('acronym', $agency),
             ],
-            'profile' => ['nullable', 'string', 'max:255'],
+            'profile' => [
+                'nullable', 'string', 'max:255', Rule::in($availableLogos),
+                Rule::prohibitedIf(fn (): bool => $request->hasFile('profile_upload')),
+            ],
+            'profile_upload' => [
+                'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120',
+                Rule::prohibitedIf(fn (): bool => filled($request->input('profile'))),
+            ],
         ]);
+
+        unset($data['profile_upload']);
+
+        if ($request->hasFile('profile_upload')) {
+            $data['profile'] = $this->storeAgencyLogo($request);
+        } elseif (blank($data['profile'] ?? null)) {
+            $data['profile'] = $agency?->profile;
+        }
+
+        return $data;
+    }
+
+    /** @return list<string> */
+    private function availableAgencyLogos(): array
+    {
+        $directory = public_path(self::LOGO_DIRECTORY);
+
+        if (! File::isDirectory($directory)) {
+            return [];
+        }
+
+        return collect(File::files($directory))
+            ->reject(fn ($file): bool => $file->isLink() || str_starts_with($file->getFilename(), '.'))
+            ->filter(fn ($file): bool => in_array(strtolower($file->getExtension()), self::LOGO_EXTENSIONS, true)
+                && in_array(File::mimeType($file->getPathname()), self::LOGO_MIME_TYPES, true))
+            ->map(fn ($file): string => $file->getFilename())
+            ->sortBy(fn (string $filename): string => mb_strtolower($filename), SORT_NATURAL)
+            ->values()
+            ->all();
+    }
+
+    private function storeAgencyLogo(Request $request): string
+    {
+        $upload = $request->file('profile_upload');
+        $extension = match ($upload->getMimeType()) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        };
+        $filename = Str::uuid()->toString().'.'.$extension;
+
+        $upload->move(public_path(self::LOGO_DIRECTORY), $filename);
+
+        return $filename;
     }
 
     private function trimIdentity(mixed $value): mixed
@@ -120,11 +190,19 @@ class AgencyController extends Controller
         };
     }
 
-    private function persistAgency(Closure $operation): void
+    private function persistAgency(Closure $operation, ?string $uploadedLogo = null): void
     {
         try {
             $operation();
-        } catch (QueryException $exception) {
+        } catch (Throwable $exception) {
+            if ($uploadedLogo !== null) {
+                File::delete(public_path(self::LOGO_DIRECTORY.'/'.$uploadedLogo));
+            }
+
+            if (! $exception instanceof QueryException) {
+                throw $exception;
+            }
+
             $field = $this->identityConflictField($exception);
 
             if ($field === null) {

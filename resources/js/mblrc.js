@@ -239,47 +239,217 @@ export function initProfile() {
 function initLocationMap(root) {
     const mapEl = document.getElementById('frLocationMap');
     if (!mapEl) return;
-    const lat = parseFloat(root.dataset.lat) || DAVAO_SUR[0];
-    const lng = parseFloat(root.dataset.lng) || DAVAO_SUR[1];
-    const map = L.map(mapEl).setView([lat, lng], root.dataset.lat ? 14 : 10);
+
+    const form = root.querySelector('[data-location-form]');
+    if (!form) return;
+
+    const address = form.elements.namedItem('placement_address');
+    const landmark = form.elements.namedItem('landmark');
+    const latitude = form.elements.namedItem('latitude');
+    const longitude = form.elements.namedItem('longitude');
+    const status = root.querySelector('[data-location-status]');
+    const saveButton = root.querySelector('[data-location-save-button]');
+    const savedLatitude = parseFloat(root.dataset.lat);
+    const savedLongitude = parseFloat(root.dataset.lng);
+    const hasSavedLocation = root.dataset.hasSavedLocation === '1'
+        && Number.isFinite(savedLatitude)
+        && Number.isFinite(savedLongitude);
+    const map = L.map(mapEl).setView(
+        hasSavedLocation ? [savedLatitude, savedLongitude] : DAVAO_SUR,
+        hasSavedLocation ? 14 : 10,
+    );
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap', maxZoom: 19,
     }).addTo(map);
 
-    const form = root.querySelector('[data-location-form]');
     const pinIcon = createShieldPinIcon('#312e81');
-    let marker = root.dataset.lat ? L.marker([lat, lng], { icon: pinIcon }).addTo(map) : null;
+    let marker = null;
+    let resolvedKey = null;
+    let pendingLookupKey = null;
+    let lookupTimer = null;
+    let lookupSequence = 0;
 
-    map.on('click', (e) => {
-        const { lat, lng } = e.latlng;
-        if (marker) marker.setLatLng(e.latlng);
-        else marker = L.marker(e.latlng, { icon: pinIcon }).addTo(map);
-        form.latitude.value = lat.toFixed(8);
-        form.longitude.value = lng.toFixed(8);
+    const geotagTab = document.querySelector('[data-bs-toggle="tab"][href="#tab-geotag"]');
+    const refreshMapLayout = () => {
+        window.requestAnimationFrame(() => {
+            map.invalidateSize();
+            if (marker) {
+                map.setView(marker.getLatLng(), map.getZoom(), { animate: false });
+            }
+        });
+    };
+    geotagTab?.addEventListener('shown.bs.tab', refreshMapLayout);
+
+    const currentKey = () => `${address.value.trim()}\n${landmark.value.trim()}`;
+
+    const setStatus = (message, tone = 'muted') => {
+        if (!status) return;
+        status.textContent = message;
+        status.classList.remove('text-muted', 'text-success', 'text-danger');
+        status.classList.add(`text-${tone}`);
+    };
+
+    const setSaveEnabled = (enabled) => {
+        if (saveButton) saveButton.disabled = !enabled;
+    };
+
+    const clearPreview = () => {
+        latitude.value = '';
+        longitude.value = '';
+        if (marker) {
+            map.removeLayer(marker);
+            marker = null;
+        }
+    };
+
+    const showPreview = (result, zoom = 16) => {
+        const lat = parseFloat(result.latitude);
+        const lng = parseFloat(result.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+
+        const point = [lat, lng];
+        if (marker) marker.setLatLng(point);
+        else marker = L.marker(point, { icon: pinIcon }).addTo(map);
+        latitude.value = lat.toFixed(8);
+        longitude.value = lng.toFixed(8);
+        map.setView(point, zoom);
+        return true;
+    };
+
+    const lookupLocation = async ({ registrationAddress = false } = {}) => {
+        const sequence = ++lookupSequence;
+        const addressValue = address.value.trim();
+        const landmarkValue = landmark.value.trim();
+        const key = registrationAddress ? null : currentKey();
+
+        if (!registrationAddress && !addressValue) {
+            clearPreview();
+            resolvedKey = null;
+            setSaveEnabled(false);
+            setStatus('Enter a placement address to locate it on the map.');
+            return false;
+        }
+
+        if (!registrationAddress && (resolvedKey === key || pendingLookupKey === key)) {
+            return false;
+        }
+
+        pendingLookupKey = key;
+
+        setSaveEnabled(false);
+        setStatus(registrationAddress
+            ? 'Locating the saved residential address…'
+            : 'Locating the placement address…');
+
+        try {
+            const result = await postJson(root.dataset.locationGeocode, registrationAddress
+                ? { registration_address: true }
+                : { address: addressValue, landmark: landmarkValue || null });
+
+            if (sequence !== lookupSequence) return false;
+
+            if (!result.success || !showPreview(result, registrationAddress ? 15 : 16)) {
+                clearPreview();
+                resolvedKey = null;
+                setStatus(result.message || 'Location could not be found. Please provide a more specific address or landmark.', 'danger');
+                return false;
+            }
+
+            resolvedKey = registrationAddress ? null : currentKey();
+            setSaveEnabled(!registrationAddress);
+            if (registrationAddress && result.match_level === 'municipality') {
+                setStatus(`Exact registered address could not be located. Showing the municipality area: ${result.display_name}`, 'success');
+            } else if (registrationAddress) {
+                setStatus(`Matched registered location: ${result.display_name}`, 'success');
+            } else {
+                setStatus(`Matched location: ${result.display_name}`, 'success');
+            }
+            return true;
+        } catch (error) {
+            if (sequence !== lookupSequence) return false;
+            clearPreview();
+            resolvedKey = null;
+            setSaveEnabled(false);
+            setStatus('Location lookup is temporarily unavailable. Please try again.', 'danger');
+            return false;
+        } finally {
+            if (!registrationAddress && pendingLookupKey === key) pendingLookupKey = null;
+        }
+    };
+
+    const queueLookup = () => {
+        window.clearTimeout(lookupTimer);
+        lookupSequence++;
+        resolvedKey = null;
+        clearPreview();
+        setSaveEnabled(false);
+
+        if (!address.value.trim()) {
+            setStatus('Enter a placement address to locate it on the map.');
+            return;
+        }
+
+        setStatus('Waiting to locate the updated address…');
+        lookupTimer = window.setTimeout(() => {
+            lookupTimer = null;
+            lookupLocation();
+        }, 700);
+    };
+
+    [address, landmark].forEach((input) => {
+        input.addEventListener('input', queueLookup);
+        input.addEventListener('blur', (event) => {
+            if (event.relatedTarget === saveButton) return;
+            const key = currentKey();
+            if (resolvedKey === key || pendingLookupKey === key) return;
+            window.clearTimeout(lookupTimer);
+            lookupTimer = null;
+            lookupLocation();
+        });
     });
+
+    if (hasSavedLocation) {
+        showPreview({ latitude: savedLatitude, longitude: savedLongitude }, 14);
+        resolvedKey = currentKey();
+        setSaveEnabled(Boolean(address.value.trim()));
+        setStatus(`Saved location: ${address.value.trim() || 'Coordinates available'}`);
+    } else {
+        setSaveEnabled(false);
+        lookupLocation({ registrationAddress: true });
+    }
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!form.latitude.value) return alert('Click the map to set a location first.');
-        const r = await postJson(root.dataset.locationSave, {
-            placement_address: form.placement_address.value,
-            latitude: form.latitude.value,
-            longitude: form.longitude.value,
-        });
-        if (r.success) location.reload();
+        window.clearTimeout(lookupTimer);
+
+        if (!address.value.trim()) {
+            setStatus('Enter a placement address before saving.', 'danger');
+            return;
+        }
+
+        if (resolvedKey !== currentKey() && !await lookupLocation()) return;
+
+        setSaveEnabled(false);
+        setStatus('Confirming and saving the matched location…');
+
+        try {
+            const result = await postJson(root.dataset.locationSave, {
+                placement_address: address.value.trim(),
+                landmark: landmark.value.trim() || null,
+            });
+            if (result.success) {
+                location.reload();
+                return;
+            }
+
+            setStatus(result.message || 'Location could not be saved. Please try again.', 'danger');
+            setSaveEnabled(true);
+        } catch (error) {
+            setStatus('Location lookup is temporarily unavailable. Please try again.', 'danger');
+            setSaveEnabled(true);
+        }
     });
 
-    // History
-    fetch(root.dataset.locationHistory, { headers: { Accept: 'application/json' } })
-        .then((r) => r.json())
-        .then((rows) => {
-            const box = root.querySelector('[data-location-history]');
-            if (!box) return;
-            box.innerHTML = rows.length
-                ? '<p class="font-semibold text-slate-600">History</p>' + rows.map((h) =>
-                    `<p>• ${h.placement_address ?? ''} <span class="text-slate-400">(${h.updated_by ?? ''})</span></p>`).join('')
-                : '';
-        });
 }
 
 function initSkills(root) {

@@ -63,12 +63,14 @@ class RcspEvidenceAccessTest extends TestCase
         ]);
     }
 
-    public function test_katuparan_can_preview_pdf_jpeg_and_png_with_same_origin_framing(): void
+    public function test_katuparan_can_preview_browser_supported_evidence_with_same_origin_framing(): void
     {
         $previewable = [
             ['preview.pdf', 'application/pdf', "%PDF-1.4\n%%EOF"],
             ['preview.jpg', 'image/jpeg', "\xFF\xD8\xFF\xD9"],
             ['preview.png', 'image/png', "\x89PNG\r\n\x1A\n"],
+            ['preview.webp', 'image/webp', 'RIFF0000WEBP'],
+            ['preview.gif', 'image/gif', 'GIF89a'],
         ];
 
         foreach ($previewable as [$filename, $mime, $contents]) {
@@ -129,6 +131,8 @@ class RcspEvidenceAccessTest extends TestCase
         $this->assertSame('image/jpeg', $form->detected_mime_type);
         $this->actingAs($this->lgu)->get(route('rcsp.evidence', $form))
             ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg')
+            ->assertHeader('Content-Disposition', 'inline; filename=safe.jpg')
             ->assertHeader('Cache-Control', 'max-age=0, no-cache, no-store, private');
     }
 

@@ -41,6 +41,16 @@ class RcspActivityCatalogTest extends TestCase
                 RcspActivity::forBarangayPhase($record, $phase)->orderBy('id')->pluck('description')->all(),
             );
         }
+
+        $page = $this->actingAs($lgu)->get(route('lgu.monitoring.show', $record));
+        $page->assertOk()
+            ->assertDontSeeText('New activity title')
+            ->assertDontSeeText('Add Activity')
+            ->assertDontSee('>Correct</button>', false)
+            ->assertDontSee('data-confirm="Delete this activity?"', false);
+        foreach (RcspActivityCatalog::ACTIVITIES[0] as $officialTitle) {
+            $page->assertSeeText($officialTitle);
+        }
     }
 
     public function test_catalog_migration_backfills_existing_rcsp_barangays_idempotently(): void

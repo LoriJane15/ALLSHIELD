@@ -63,7 +63,7 @@ class ImportLegacyData extends Command
     {
         foreach ([
             'implementation_taggings', 'agency_implan_responses', 'implementation_photos',
-            'implementation_files', 'implementations', 'rcsp_lgu_comments', 'rcsp_file_comments',
+            'implementation_files', 'implementations', 'implementation_plans', 'rcsp_lgu_comments', 'rcsp_file_comments',
             'rcsp_forms', 'rcsp_phase_statuses', 'rcsp_barangays', 'rcsp_activities', 'rcsp_phases',
             'color_histories', 'map_barangays', 'fr_government_assistances', 'fr_skills',
             'fr_location_histories', 'fr_education_works', 'fr_program_statuses', 'former_rebels',
@@ -406,6 +406,23 @@ class ImportLegacyData extends Command
                     'tagging' => $this->nn($r->fr_rcsp_imp_tagging),
                 ];
             })->all();
+
+        // Legacy data has no trustworthy parent/header key, so preserve every
+        // historical baseline row and give it a separate parent instead of
+        // guessing which old rows belonged to one submission.
+        if (Schema::hasTable('implementation_plans')) {
+            foreach ($impls as &$impl) {
+                $impl['implementation_plan_id'] = DB::table('implementation_plans')->insertGetId([
+                    'lgu_user_id' => $impl['lgu_user_id'],
+                    'title' => 'Legacy IMPLAN #'.$impl['id'],
+                    'status' => $impl['status'],
+                    'submitted_at' => $impl['uploaded_at'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+            unset($impl);
+        }
         $this->insertChunked('implementations', $impls);
 
         $implIds = DB::table('implementations')->pluck('id')->flip();

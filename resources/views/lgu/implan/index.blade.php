@@ -5,7 +5,7 @@
 @php
     $badge = fn ($s) => match ($s) {
         'not yet started' => 'badge-danger', 'ongoing' => 'badge-primary',
-        'verified' => 'badge-success', 'for verification' => 'badge-info', default => 'badge-secondary',
+        'submitted' => 'badge-info', 'verified' => 'badge-success', 'for verification' => 'badge-secondary', default => 'badge-secondary',
     };
 @endphp
 
@@ -43,8 +43,8 @@
     <div class="row mb-4">
         @foreach ([
             ['Ongoing', $counts['ongoing'], '#F8F7FF', '#E8E5FF', '#6C5DD3', 'icon-refresh'],
-            ['For Verification', $counts['verification'], '#F1FAFF', '#E2F5FF', '#3E7BFA', 'icon-magnifier'],
-            ['Verified', $counts['verified'], '#F0FFF7', '#E2FFE9', '#1AB76C', 'icon-check'],
+            ['Submitted', $counts['submitted'], '#F1FAFF', '#E2F5FF', '#3E7BFA', 'icon-paper-plane'],
+            ['Historical Verified', $counts['verified'], '#F0FFF7', '#E2FFE9', '#1AB76C', 'icon-check'],
             ['Not Yet Started', $counts['not_started'], '#FFF1F1', '#FFE2E2', '#FF4B4B', 'icon-control-pause'],
         ] as [$label, $value, $cardBg, $iconBg, $iconColor, $icon])
             <div class="col-md-3 mb-3">
@@ -65,7 +65,10 @@
         @endforeach
     </div>
 
-    <div class="d-flex justify-content-end mb-3">
+    <div class="d-flex justify-content-end gap-2 mb-3">
+        <a href="{{ route('lgu.implan.official') }}" class="btn btn-outline-primary">
+            <i class="mdi mdi-table-large"></i> Official Municipality IMPLAN
+        </a>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addImplanModal">
             <i class="ti-plus"></i> Add Implementation
         </button>
@@ -134,7 +137,7 @@
                         </div>
                         <div class="row">
                             <div class="col-sm-6 mb-3">
-                                <label class="form-label">Target Areas</label>
+                                <label class="form-label">Target Area</label>
                                 <div class="border rounded p-2" style="max-height:10rem;overflow-y:auto">
                                     @forelse ($targetAreas as $area)
                                         <div class="form-check">

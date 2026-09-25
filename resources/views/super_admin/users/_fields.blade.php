@@ -79,7 +79,7 @@
         <select name="municipality_id" class="form-select modern-input">
             <option value="">Select Municipality...</option>
             @foreach ($municipalities as $m)
-                <option value="{{ $m->id }}" @selected((string) old('municipality_id') === (string) $m->id)>{{ $m->name }} ({{ $m->kind }})</option>
+                <option value="{{ $m->id }}" @selected((string) old('municipality_id') === (string) $m->id)>{{ $m->name }}</option>
             @endforeach
         </select>
         <p class="mt-1 text-muted small mb-0">A valid municipality is required for LGU accounts.</p>

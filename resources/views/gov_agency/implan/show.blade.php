@@ -5,8 +5,20 @@
 @php
     $statusBadge = match ($implan->status) {
         'verified' => 'badge-success', 'ongoing' => 'badge-primary',
-        'not yet started' => 'badge-danger', default => 'badge-secondary',
+        'submitted' => 'badge-info', 'not yet started' => 'badge-danger', default => 'badge-secondary',
     };
+    $assignedAgencyIds = collect($implan->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId);
+    $sharedResponses = $implan->responses->whereIn('gov_agency_id', $assignedAgencyIds);
+    $visibleFiles = $implan->originalFiles
+        ->map(fn ($file) => ['file' => $file, 'agency' => null])
+        ->concat($sharedResponses->flatMap(fn ($agencyResponse) => $agencyResponse->files->map(
+            fn ($file) => ['file' => $file, 'agency' => $agencyResponse->govAgency]
+        )));
+    $visiblePhotos = $implan->originalPhotos
+        ->map(fn ($photo) => ['photo' => $photo, 'agency' => null])
+        ->concat($sharedResponses->flatMap(fn ($agencyResponse) => $agencyResponse->photos->map(
+            fn ($photo) => ['photo' => $photo, 'agency' => $agencyResponse->govAgency]
+        )));
 @endphp
 
 @push('styles')
@@ -57,6 +69,20 @@
         </div>
     @endif
 
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                <div><h5 class="mb-1">Official IMPLAN Format</h5><p class="text-muted mb-0">LGU baseline with attributed agency responses.</p></div>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()" data-print-implan><i class="mdi mdi-printer"></i> Print</button>
+            </div>
+            @include('implan._official_format', [
+                'implans' => collect([$implan->loadMissing('responses.govAgency')]),
+                'municipality' => $implan->lguUser?->municipality,
+                'areaNamesByImplan' => collect([$implan->id => $areaNames]),
+            ])
+        </div>
+    </div>
+
     <div class="row">
         {{-- LEFT: tabbed detail --}}
         <div class="col-md-8">
@@ -77,7 +103,7 @@
                             <div class="table-responsive">
                                 <table class="table">
                                     <thead>
-                                        <tr><th>Outcomes</th><th>Resources Needed</th><th>Support Needed</th><th>Duration</th></tr>
+                                        <tr><th>Expected Results/Outcome</th><th>Resources Needed<br>(Funding)</th><th>Support Needed</th><th>Duration</th></tr>
                                     </thead>
                                     <tbody>
                                         <tr class="wrap">
@@ -97,9 +123,11 @@
                                 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addFileModal">Add File</button>
                             </div>
                             <div class="agenda-files-list">
-                                @forelse ($implan->files as $file)
-                                    <div class="agenda-file-item">
-                                        <a href="{{ $file->pdf ? Storage::url($file->pdf) : '#' }}" target="_blank" class="file-name">{{ $file->file_name }}</a>
+                                @forelse ($visibleFiles as $item)
+                                    @php $file = $item['file']; @endphp
+                                    <div class="agenda-file-item" @if($item['agency']) data-agency-attachment="{{ $item['agency']->id }}" @endif>
+                                        <a href="{{ route('gov_agency.implan.files.show', [$implan, $file]) }}" target="_blank" class="file-name">{{ $file->file_name }}</a>
+                                        <span class="badge {{ $item['agency'] ? 'badge-info' : 'badge-secondary' }} ms-2">{{ $item['agency']?->acronym ?? 'LGU original' }}</span>
                                         <div class="file-link">{{ $file->pdf }}</div>
                                         <p class="file-description">{{ $file->description }}</p>
                                     </div>
@@ -114,13 +142,15 @@
                             <div class="d-flex justify-content-end mb-3">
                                 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addPhotoModal">Add Photo</button>
                             </div>
-                            @if ($implan->photos->isNotEmpty())
+                            @if ($visiblePhotos->isNotEmpty())
                                 <div class="row g-2">
-                                    @foreach ($implan->photos as $photo)
-                                        <div class="col-4 col-sm-3">
-                                            <a href="{{ Storage::url($photo->image) }}" target="_blank">
-                                                <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
+                                    @foreach ($visiblePhotos as $item)
+                                        @php $photo = $item['photo']; @endphp
+                                        <div class="col-4 col-sm-3" @if($item['agency']) data-agency-photo="{{ $item['agency']->id }}" @endif>
+                                            <a href="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" target="_blank">
+                                                <img src="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
                                             </a>
+                                            <div class="small text-center mt-1">{{ $item['agency']?->acronym ?? 'LGU original' }}</div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -189,63 +219,18 @@
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
-                    <h3 style="color:#35127d;font-weight:bold;">Refocus Implementation Plan</h3>
-                    <p class="text-muted">Update the implementation plan details</p>
+                    <h3 style="color:#35127d;font-weight:bold;">Update Agency Response</h3>
+                    <p class="text-muted">Update only your agency's Action Taken and Remarks.</p>
                     <form method="POST" action="{{ route('gov_agency.implan.update', $implan) }}">
                         @csrf @method('PUT')
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label">Issues or Concerned</label>
-                                <input type="text" class="form-control" value="{{ $implan->issues }}" readonly>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Program</label>
-                                <input type="text" name="program" class="form-control" value="{{ old('program', $implan->program) }}" placeholder="Enter Program">
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Target Beneficiary</label>
-                                <input type="text" name="beneficiaries" class="form-control" value="{{ old('beneficiaries', $implan->beneficiaries) }}" placeholder="Enter Target Beneficiary">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Type of Government Agency</label>
-                                <select class="form-control" name="type_gov">
-                                    <option value="">Select Agency Type</option>
-                                    <option value="NGA" @selected($implan->type_gov === 'NGA')>National Government Agency</option>
-                                    <option value="PGO" @selected($implan->type_gov === 'PGO')>Provincial Government Office</option>
-                                    <option value="Development Partner" @selected($implan->type_gov === 'Development Partner')>Development Partner</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Sources</label>
-                                <input type="text" name="sources" class="form-control" value="{{ old('sources', $implan->sources) }}" placeholder="If NGA">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Resources Needed</label>
-                                <input type="text" name="resources" class="form-control" value="{{ old('resources', $implan->resources) }}" placeholder="Php 0.00">
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Support Needed</label>
-                                <input type="text" name="support" class="form-control" value="{{ old('support', $implan->support) }}" placeholder="Enter Support Needed">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Duration</label>
-                                <input type="text" name="duration" class="form-control" value="{{ old('duration', $implan->duration) }}" placeholder="Enter Duration">
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Outcomes</label>
-                                <textarea name="outcome" class="form-control" rows="3" placeholder="Enter Outcomes">{{ old('outcome', $implan->outcome) }}</textarea>
+                                <label class="form-label">Action Taken</label>
+                                <textarea name="action_taken" class="form-control" rows="4" placeholder="Enter Action Taken">{{ old('action_taken', $response?->action_taken) }}</textarea>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Remarks</label>
-                                <textarea name="remarks" class="form-control" rows="3" placeholder="Enter Remarks">{{ old('remarks', $implan->remarks) }}</textarea>
+                                <textarea name="remarks" class="form-control" rows="4" placeholder="Enter Remarks">{{ old('remarks', $response?->remarks) }}</textarea>
                             </div>
                         </div>
                         <div class="modal-footer">

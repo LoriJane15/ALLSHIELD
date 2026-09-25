@@ -25,7 +25,13 @@ class UpdateUserRequest extends FormRequest
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'role' => ['required', Rule::in(['super_admin', 'admin', '39th_ib', 'gov_agency', 'lgu', 'mblrc', 'afp', 'pswdo', 'japic'])],
             'is_active' => ['required', 'boolean'],
-            'municipality_id' => ['nullable', 'required_if:role,lgu', 'exists:municipalities,id'],
+            'municipality_id' => [
+                'exclude_unless:role,lgu',
+                'nullable',
+                'required_if:role,lgu',
+                Rule::exists('municipalities', 'id')
+                    ->whereIn('name', config('shield.jurisdiction.municipalities')),
+            ],
             'gov_agency_id' => ['nullable', 'required_if:role,gov_agency', 'exists:gov_agencies,id'],
             'logo' => ['nullable', 'image', 'max:5120'],
         ];

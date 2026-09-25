@@ -42,7 +42,10 @@ class UserController extends Controller
         return view('super_admin.users.index', [
             'users' => $users,
             'roles' => config('shield.roles'),
-            'municipalities' => Municipality::orderBy('name')->get(),
+            'municipalities' => Municipality::query()
+                ->whereIn('name', config('shield.jurisdiction.municipalities'))
+                ->orderBy('name')
+                ->get(),
             'agencies' => GovAgency::orderBy('acronym')->get(),
             'stats' => $stats,
             'editingUser' => $editingUser,

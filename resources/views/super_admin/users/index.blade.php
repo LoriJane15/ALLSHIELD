@@ -282,19 +282,21 @@
                                 ];
                                 $avatarBg = $avatarGradients[abs(crc32($u->name)) % count($avatarGradients)];
                                 $initials = strtoupper(substr($u->name, 0, 2));
+                                $logoUrl = $u->logo
+                                    ? \Illuminate\Support\Facades\Storage::disk('public')->url($u->logo)
+                                    : null;
                             @endphp
                             <tr>
                                 {{-- User Profile --}}
                                 <td>
                                     <div class="d-flex align-items-center gap-3">
-                                        @if ($u->logo)
-                                            <img src="{{ asset('assets/'.$u->logo) }}"
-                                                 onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\'sa-avatar-initials\' style=\'background:{{ $avatarBg }}\'>{{ $initials }}</div>';"
+                                        @if ($logoUrl)
+                                            <img src="{{ $logoUrl }}"
+                                                 onerror="this.onerror=null;this.classList.add('d-none');this.nextElementSibling.classList.remove('d-none');"
                                                  alt="{{ $u->name }}" class="sa-avatar-img">
+                                            <div class="sa-avatar-initials d-none" style="background: {{ $avatarBg }};" aria-label="{{ $u->name }} initials">{{ $initials }}</div>
                                         @else
-                                            <div class="sa-avatar-initials" style="background: {{ $avatarBg }};">
-                                                {{ $initials }}
-                                            </div>
+                                            <div class="sa-avatar-initials" style="background: {{ $avatarBg }};" aria-label="{{ $u->name }} initials">{{ $initials }}</div>
                                         @endif
                                         <div>
                                             <div class="sa-user-name">{{ $u->name }}</div>
@@ -362,6 +364,7 @@
                                                 data-active="{{ $u->is_active ? '1' : '0' }}"
                                                 data-municipality="{{ $u->municipality_id }}"
                                                 data-agency="{{ $u->gov_agency_id }}"
+                                                data-logo="{{ $logoUrl }}"
                                                 data-action="{{ route('super_admin.users.update', $u) }}">
                                             <i class="mdi mdi-pencil"></i>
                                         </button>
@@ -536,7 +539,21 @@
             const fileDisplay = f.querySelector('.sa-file-name-display');
             const previewBox = f.querySelector('.sa-preview-box');
             if (fileDisplay) fileDisplay.style.display = 'none';
-            if (previewBox) previewBox.innerHTML = '<i class="mdi mdi-image-outline text-muted fs-4"></i>';
+            if (previewBox) {
+                previewBox.replaceChildren();
+
+                if (user.logo) {
+                    const image = document.createElement('img');
+                    image.src = user.logo;
+                    image.alt = `${user.name} profile image`;
+                    image.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                    previewBox.appendChild(image);
+                } else {
+                    const icon = document.createElement('i');
+                    icon.className = 'mdi mdi-image-outline text-muted fs-4';
+                    previewBox.appendChild(icon);
+                }
+            }
 
             syncRoleFields(f);
             new bootstrap.Modal(document.getElementById('editUserModal')).show();
@@ -555,6 +572,7 @@
                 active: @json((string) old('is_active', $editingUser->is_active ? '1' : '0')),
                 municipality: @json((string) old('municipality_id', $editingUser->municipality_id)),
                 agency: @json((string) old('gov_agency_id', $editingUser->gov_agency_id)),
+                logo: @json($editingUser->logo ? \Illuminate\Support\Facades\Storage::disk('public')->url($editingUser->logo) : ''),
             }));
         @elseif ($errors->any() && ! $errors->has('account_lifecycle') && ! $errors->has('is_active'))
             document.addEventListener('DOMContentLoaded', () => new bootstrap.Modal(document.getElementById('addUserModal')).show());

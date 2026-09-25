@@ -57,7 +57,7 @@
             </div>
             <div class="col-md-4">
                 <label class="mblrc-label">Age</label>
-                <input type="number" name="age" min="0" max="120" value="{{ $val('age') }}" placeholder="Enter Age" class="mblrc-input">
+                <input type="number" name="age" min="0" max="120" value="{{ $val('age') }}" placeholder="Calculated from birthdate" readonly aria-readonly="true" data-age-output class="mblrc-input mblrc-input-readonly">
             </div>
             <div class="col-md-4">
                 <label class="mblrc-label">Civil Status</label>
@@ -70,15 +70,60 @@
             </div>
             <div class="col-md-4">
                 <label class="mblrc-label">Birthday</label>
-                <input type="date" name="birthdate" value="{{ $val('birthdate') ? \Illuminate\Support\Carbon::parse($val('birthdate'))->toDateString() : '' }}" class="mblrc-input">
+                <input type="date" name="birthdate" value="{{ $val('birthdate') ? \Illuminate\Support\Carbon::parse($val('birthdate'))->toDateString() : '' }}" max="{{ now()->toDateString() }}" data-birthdate-input class="mblrc-input">
+                @error('birthdate') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
             </div>
             <div class="col-md-6">
                 <label class="mblrc-label">Contact Number</label>
-                <input type="text" name="contact_num" value="{{ $val('contact_num') }}" placeholder="09XXXXXXXXX" class="mblrc-input">
+                <input type="tel" name="contact_num" value="{{ $val('contact_num') }}" inputmode="numeric" maxlength="11" pattern="09[0-9]{9}" placeholder="09XXXXXXXXX" data-contact-number class="mblrc-input">
+                @error('contact_num') <p class="mt-1 text-danger small mb-0">{{ $message }}</p> @enderror
             </div>
         </div>
     </div>
 </div>
+
+@once
+    @push('scripts')
+        <script>
+        (function () {
+            const birthdate = document.querySelector('[data-birthdate-input]');
+            const age = document.querySelector('[data-age-output]');
+            const contact = document.querySelector('[data-contact-number]');
+
+            const calculateAge = () => {
+                if (!birthdate || !age || !birthdate.value) {
+                    if (age) age.value = '';
+                    return;
+                }
+
+                const [year, month, day] = birthdate.value.split('-').map(Number);
+                const today = new Date();
+                const birthday = new Date(year, month - 1, day);
+
+                if (Number.isNaN(birthday.getTime()) || birthday > today) {
+                    age.value = '';
+                    return;
+                }
+
+                let completedYears = today.getFullYear() - year;
+                const birthdayHasOccurred = today.getMonth() + 1 > month
+                    || (today.getMonth() + 1 === month && today.getDate() >= day);
+
+                if (!birthdayHasOccurred) completedYears--;
+                age.value = completedYears;
+            };
+
+            birthdate?.addEventListener('input', calculateAge);
+            birthdate?.addEventListener('change', calculateAge);
+            calculateAge();
+
+            contact?.addEventListener('input', () => {
+                contact.value = contact.value.replace(/\D/g, '').slice(0, 11);
+            });
+        })();
+        </script>
+    @endpush
+@endonce
 
 {{-- 2. Address & Geographic Location Card --}}
 <div class="mblrc-form-card">

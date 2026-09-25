@@ -55,8 +55,8 @@ class SubmitRcspPhaseRequest extends FormRequest
                 $validator->errors()->add('activity', 'Only a returned activity may be resubmitted.');
             }
 
-            if (! $this->hasFile('evidence') && ! $latest?->file) {
-                $validator->errors()->add('evidence', 'Supporting evidence is required.');
+            if ($this->input('conduct') === 'yes' && ! $this->hasFile('evidence') && ! $latest?->file) {
+                $validator->errors()->add('evidence', 'Evidence is required when the activity is marked as Conducted.');
             }
 
             $this->validateEvidenceSignature($validator);

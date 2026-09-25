@@ -149,6 +149,54 @@ class RcspLifecycleTest extends TestCase
         ]);
     }
 
+    public function test_mixed_conduct_phase_can_be_reviewed_and_advanced(): void
+    {
+        $activities = RcspActivity::where('rcsp_phase_id', $this->phases[0]->id)
+            ->orderBy('id')->get();
+        $notApplicableActivity = RcspActivity::create([
+            'rcsp_phase_id' => $this->phases[0]->id,
+            'rcsp_barangay_id' => $this->rb->id,
+            'created_by_user_id' => $this->lgu->id,
+            'description' => 'Activity C',
+            'normalized_title' => RcspActivity::normalizeTitle('Activity C'),
+        ]);
+
+        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activities[0]]), [
+            'conduct' => 'yes',
+            'evidence' => UploadedFile::fake()->image('conducted.png'),
+        ])->assertSessionHasNoErrors();
+        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activities[1]]), [
+            'conduct' => 'no',
+        ])->assertSessionHasNoErrors();
+        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $notApplicableActivity]), [
+            'conduct' => 'n/a',
+        ])->assertSessionHasNoErrors();
+
+        $forms = RcspForm::where('rcsp_barangay_id', $this->rb->id)
+            ->where('rcsp_phase_id', $this->phases[0]->id)->get();
+        $statuses = $forms->mapWithKeys(fn (RcspForm $form) => [$form->id => 'approved'])->all();
+        $remarks = $forms->mapWithKeys(fn (RcspForm $form) => [
+            $form->id => "Reviewed {$form->conduct} activity.",
+        ])->all();
+
+        $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->rb), [
+            'statuses' => $statuses,
+            'remarks' => $remarks,
+        ])->assertSessionHasNoErrors()->assertSessionHas('success', 'Review saved.');
+
+        $this->assertSame(3, RcspForm::where('rcsp_barangay_id', $this->rb->id)
+            ->where('status', 'approved')->count());
+        $this->assertSame(3, RcspFormReview::whereIn('rcsp_form_id', $forms->pluck('id'))->count());
+        $this->assertTrue($forms->every(fn (RcspForm $form) => $form->fresh()->remarks === "Reviewed {$form->conduct} activity."));
+
+        $this->actingAs($this->lgu)
+            ->post(route('lgu.monitoring.proceed', $this->rb))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, $this->rb->fresh()->current_phase);
+    }
+
     public function test_lgu_can_post_a_comment_on_a_submitted_form(): void
     {
         $this->submitPhaseZero();
@@ -236,5 +284,32 @@ class RcspLifecycleTest extends TestCase
             'status' => 'to be complied',
         ]);
         $this->assertSame(1, RcspFormReview::count());
+    }
+
+    public function test_returned_activity_can_replace_existing_evidence(): void
+    {
+        $activity = RcspActivity::where('rcsp_phase_id', $this->phases[0]->id)->firstOrFail();
+        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activity]), [
+            'conduct' => 'yes',
+            'evidence' => UploadedFile::fake()->image('first.png'),
+        ])->assertSessionHasNoErrors();
+        $first = RcspForm::firstOrFail();
+
+        $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->rb), [
+            'statuses' => [$first->id => 'to be complied'],
+            'remarks' => [$first->id => 'Replace the evidence.'],
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->rb, $activity]), [
+            'conduct' => 'yes',
+            'evidence' => UploadedFile::fake()->image('replacement.png'),
+        ])->assertSessionHasNoErrors();
+
+        $replacement = RcspForm::where('rcsp_activity_id', $activity->id)
+            ->where('submission_version', 2)->firstOrFail();
+        $this->assertNotSame($first->file, $replacement->file);
+        $this->assertSame('replacement.png', $replacement->original_filename);
+        Storage::disk('local')->assertExists(str_replace('private:', '', $first->file));
+        Storage::disk('local')->assertExists(str_replace('private:', '', $replacement->file));
     }
 }

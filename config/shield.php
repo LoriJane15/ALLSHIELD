@@ -10,6 +10,19 @@
 return [
     'jurisdiction' => [
         'province' => 'Davao del Sur',
+        // Canonical localities represented by the checked-in Davao del Sur map layers.
+        'municipalities' => [
+            'Bansalan',
+            'Digos City',
+            'Hagonoy',
+            'Kiblawan',
+            'Magsaysay',
+            'Malalag',
+            'Matanao',
+            'Padada',
+            'Santa Cruz',
+            'Sulop',
+        ],
     ],
     'shared_nav' => [
         ['label' => 'Messages', 'route' => 'chat.index', 'icon' => 'chat-bubble-left-right', 'skyicon' => 'icon-bubbles', 'active' => ['chat.*'], 'group' => 'Communication'],

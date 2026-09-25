@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Models\GovAgency;
 use App\Models\Municipality;
 use App\Models\User;
+use Database\Seeders\DavaoDelSurMunicipalitySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class SuperAdminProvisioningTest extends TestCase
@@ -66,7 +69,7 @@ class SuperAdminProvisioningTest extends TestCase
     public function test_every_explicitly_supported_role_is_accepted_and_scoped_server_side(): void
     {
         $superAdmin = User::factory()->role('super_admin')->create();
-        $municipality = Municipality::create(['name' => 'Supported Role Municipality']);
+        $municipality = Municipality::create(['name' => 'Sulop']);
         $agency = GovAgency::create(['name' => 'Supported Role Agency', 'acronym' => 'SRA']);
 
         foreach (self::SUPPORTED_ROLES as $index => $role) {
@@ -202,6 +205,7 @@ class SuperAdminProvisioningTest extends TestCase
     public function test_lgu_and_government_agency_roles_require_valid_assignments(): void
     {
         $superAdmin = User::factory()->role('super_admin')->create();
+        $demoMunicipality = Municipality::create(['name' => 'Demo Municipality']);
 
         $this->actingAs($superAdmin)
             ->post(route('super_admin.users.store'), $this->storePayload('lgu', [
@@ -213,6 +217,10 @@ class SuperAdminProvisioningTest extends TestCase
             'username' => 'lgu-invalid-scope',
             'municipality_id' => 999999,
         ]))->assertSessionHasErrors('municipality_id');
+        $this->post(route('super_admin.users.store'), $this->storePayload('lgu', [
+            'username' => 'lgu-outside-jurisdiction',
+            'municipality_id' => $demoMunicipality->id,
+        ]))->assertSessionHasErrors('municipality_id');
 
         $this->post(route('super_admin.users.store'), $this->storePayload('gov_agency', [
             'username' => 'agency-missing-scope',
@@ -223,9 +231,137 @@ class SuperAdminProvisioningTest extends TestCase
             'gov_agency_id' => 999999,
         ]))->assertSessionHasErrors('gov_agency_id');
 
-        foreach (['lgu-missing-scope', 'lgu-invalid-scope', 'agency-missing-scope', 'agency-invalid-scope'] as $username) {
+        foreach (['lgu-missing-scope', 'lgu-invalid-scope', 'lgu-outside-jurisdiction', 'agency-missing-scope', 'agency-invalid-scope'] as $username) {
             $this->assertDatabaseMissing('users', ['username' => $username]);
         }
+    }
+
+    public function test_lgu_municipality_options_use_the_davao_del_sur_lookup_only(): void
+    {
+        $this->seed(DavaoDelSurMunicipalitySeeder::class);
+        $this->seed(DavaoDelSurMunicipalitySeeder::class);
+        Municipality::create(['name' => 'Demo Municipality']);
+        $superAdmin = User::factory()->role('super_admin')->create();
+
+        $response = $this->actingAs($superAdmin)->get(route('super_admin.users.index'));
+
+        $response->assertOk();
+        $response->assertSee('data-role-field="lgu"', false);
+        foreach (config('shield.jurisdiction.municipalities') as $name) {
+            $response->assertSee('>'.$name.'</option>', false);
+        }
+        $response->assertDontSee('>Demo Municipality</option>', false);
+        $this->assertSame(
+            count(config('shield.jurisdiction.municipalities')),
+            Municipality::query()
+                ->whereIn('name', config('shield.jurisdiction.municipalities'))
+                ->count(),
+        );
+    }
+
+    public function test_lgu_municipality_assignment_persists_across_create_and_edit(): void
+    {
+        $superAdmin = User::factory()->role('super_admin')->create();
+        $sulop = Municipality::create(['name' => 'Sulop']);
+        $matanao = Municipality::create(['name' => 'Matanao']);
+
+        $this->actingAs($superAdmin)
+            ->post(route('super_admin.users.store'), $this->storePayload('lgu', [
+                'username' => 'scoped-lgu-user',
+                'municipality_id' => $sulop->id,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $user = User::query()->where('username', 'scoped-lgu-user')->sole();
+        $this->assertSame($sulop->id, $user->municipality_id);
+        $this->assertTrue($user->municipality->is($sulop));
+
+        $this->get(route('super_admin.users.index'))
+            ->assertOk()
+            ->assertSee('data-municipality="'.$sulop->id.'"', false);
+
+        $this->put(route('super_admin.users.update', $user), $this->updatePayload($user, [
+            'municipality_id' => $matanao->id,
+        ]))->assertSessionHasNoErrors();
+
+        $user->refresh();
+        $this->assertSame($matanao->id, $user->municipality_id);
+        $this->assertTrue($user->municipality->is($matanao));
+
+        $this->get(route('super_admin.users.index'))
+            ->assertOk()
+            ->assertSee('data-municipality="'.$matanao->id.'"', false);
+    }
+
+    public function test_lgu_full_name_and_public_profile_image_persist_and_render_across_create_and_edit(): void
+    {
+        Storage::fake('public');
+
+        $superAdmin = User::factory()->role('super_admin')->create();
+        $sulop = Municipality::create(['name' => 'Sulop']);
+
+        $this->actingAs($superAdmin)
+            ->post(route('super_admin.users.store'), $this->storePayload('lgu', [
+                'username' => 'lgu-sulop-profile',
+                'name' => 'Maria Sulop Officer',
+                'municipality_id' => $sulop->id,
+                'logo' => UploadedFile::fake()->image('sulop-officer.jpg'),
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $user = User::query()->where('username', 'lgu-sulop-profile')->sole();
+        $this->assertSame('Maria Sulop Officer', $user->name);
+        $this->assertSame($sulop->id, $user->municipality_id);
+        $this->assertNotNull($user->logo);
+        Storage::disk('public')->assertExists($user->logo);
+
+        $logoUrl = Storage::disk('public')->url($user->logo);
+        $this->get(route('super_admin.users.index'))
+            ->assertOk()
+            ->assertSee('Maria Sulop Officer')
+            ->assertSee('data-municipality="'.$sulop->id.'"', false)
+            ->assertSee('src="'.$logoUrl.'"', false)
+            ->assertSee('data-logo="'.$logoUrl.'"', false)
+            ->assertDontSee('assets/'.$user->logo, false);
+
+        $this->put(route('super_admin.users.update', $user), $this->updatePayload($user, [
+            'name' => 'Maria Updated Officer',
+        ]))->assertSessionHasNoErrors();
+
+        $user->refresh();
+        $this->assertSame('Maria Updated Officer', $user->name);
+        $this->assertSame($sulop->id, $user->municipality_id);
+        $this->assertNotNull($user->logo);
+        Storage::disk('public')->assertExists($user->logo);
+
+        $this->get(route('super_admin.users.index'))
+            ->assertOk()
+            ->assertSee('Maria Updated Officer')
+            ->assertSee('data-name="Maria Updated Officer"', false)
+            ->assertSee('data-logo="'.$logoUrl.'"', false);
+    }
+
+    public function test_lgu_without_a_profile_image_renders_the_existing_initials_fallback(): void
+    {
+        $superAdmin = User::factory()->role('super_admin')->create();
+        $sulop = Municipality::create(['name' => 'Sulop']);
+
+        $this->actingAs($superAdmin)
+            ->post(route('super_admin.users.store'), $this->storePayload('lgu', [
+                'username' => 'lgu-sulop-fallback',
+                'name' => 'Ana Santos',
+                'municipality_id' => $sulop->id,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $user = User::query()->where('username', 'lgu-sulop-fallback')->sole();
+        $this->assertNull($user->logo);
+
+        $this->get(route('super_admin.users.index'))
+            ->assertOk()
+            ->assertSee('Ana Santos')
+            ->assertSee('aria-label="Ana Santos initials">AN</div>', false)
+            ->assertSee('data-municipality="'.$sulop->id.'"', false);
     }
 
     public function test_changing_away_from_scoped_roles_clears_assignments(): void

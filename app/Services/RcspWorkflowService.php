@@ -94,100 +94,6 @@ class RcspWorkflowService
         DB::table('rcsp_activities')->insert($rows);
     }
 
-    public function createActivity(
-        RcspBarangay $barangay,
-        User $user,
-        string $title,
-        string $normalizedTitle
-    ): RcspActivity {
-        try {
-            return DB::transaction(function () use ($barangay, $user, $title, $normalizedTitle): RcspActivity {
-                $locked = RcspBarangay::whereKey($barangay->id)->lockForUpdate()->firstOrFail();
-                Gate::forUser($user)->authorize('createActivity', $locked);
-                $phase = $this->currentPhase($locked);
-
-                if (RcspActivity::where('rcsp_barangay_id', $locked->id)
-                    ->where('rcsp_phase_id', $phase->id)
-                    ->where('normalized_title', $normalizedTitle)->exists()) {
-                    throw ValidationException::withMessages([
-                        'title' => 'This activity title already exists in the current phase.',
-                    ]);
-                }
-
-                return RcspActivity::create([
-                    'rcsp_phase_id' => $phase->id,
-                    'rcsp_barangay_id' => $locked->id,
-                    'created_by_user_id' => $user->id,
-                    'description' => $title,
-                    'normalized_title' => $normalizedTitle,
-                ]);
-            });
-        } catch (QueryException $exception) {
-            if ($this->isActivityTitleConflict($exception)) {
-                throw ValidationException::withMessages([
-                    'title' => 'This activity title already exists in the current phase.',
-                ]);
-            }
-
-            throw $exception;
-        }
-    }
-
-    public function updateActivity(
-        RcspBarangay $barangay,
-        RcspActivity $activity,
-        User $user,
-        string $title,
-        string $normalizedTitle
-    ): void {
-        try {
-            DB::transaction(function () use ($barangay, $activity, $user, $title, $normalizedTitle): void {
-                $lockedBarangay = RcspBarangay::whereKey($barangay->id)->lockForUpdate()->firstOrFail();
-                $lockedActivity = RcspActivity::with('phase')->whereKey($activity->id)->lockForUpdate()->firstOrFail();
-                Gate::forUser($user)->authorize('updateActivity', [$lockedBarangay, $lockedActivity]);
-
-                if (RcspActivity::where('rcsp_barangay_id', $lockedBarangay->id)
-                    ->where('rcsp_phase_id', $lockedActivity->rcsp_phase_id)
-                    ->where('normalized_title', $normalizedTitle)
-                    ->whereKeyNot($lockedActivity->id)->exists()) {
-                    throw ValidationException::withMessages([
-                        'title' => 'This activity title already exists in the current phase.',
-                    ]);
-                }
-
-                $lockedActivity->update([
-                    'description' => $title,
-                    'normalized_title' => $normalizedTitle,
-                ]);
-            });
-        } catch (QueryException $exception) {
-            if ($this->isActivityTitleConflict($exception)) {
-                throw ValidationException::withMessages([
-                    'title' => 'This activity title already exists in the current phase.',
-                ]);
-            }
-
-            throw $exception;
-        }
-    }
-
-    public function deleteActivity(RcspBarangay $barangay, RcspActivity $activity, User $user): void
-    {
-        DB::transaction(function () use ($barangay, $activity, $user): void {
-            $lockedBarangay = RcspBarangay::whereKey($barangay->id)->lockForUpdate()->firstOrFail();
-            $lockedActivity = RcspActivity::with('phase')->whereKey($activity->id)->lockForUpdate()->firstOrFail();
-            Gate::forUser($user)->authorize('deleteActivity', [$lockedBarangay, $lockedActivity]);
-            if ($lockedActivity->forms()->exists()
-                || DB::table('rcsp_file_comments')->where('rcsp_activity_id', $lockedActivity->id)->exists()
-                || DB::table('rcsp_lgu_comments')->where('rcsp_activity_id', $lockedActivity->id)->exists()) {
-                throw ValidationException::withMessages([
-                    'activity' => 'An activity with submission or discussion history cannot be deleted.',
-                ]);
-            }
-            $lockedActivity->delete();
-        });
-    }
-
     public function submitActivity(
         RcspBarangay $barangay,
         RcspActivity $activity,
@@ -234,18 +140,20 @@ class RcspWorkflowService
                     $originalFilename = basename(str_replace('\\', '/', $evidence->getClientOriginalName()));
                     $detectedMimeType = $evidence->getMimeType();
                     $fileSizeBytes = $evidence->getSize();
-                } elseif (! $file) {
+                } elseif ($conduct === 'yes' && ! $file) {
                     throw ValidationException::withMessages([
-                        'evidence' => 'A new private evidence file is required for this submission.',
+                        'evidence' => 'Evidence is required when the activity is marked as Conducted.',
                     ]);
                 }
 
-                $path = str_starts_with($file, 'private:') ? substr($file, 8) : $file;
-                if (! $path || ! $this->evidenceExists(new RcspForm([
-                    'rcsp_barangay_id' => $lockedBarangay->id,
-                    'file' => $file,
-                ]))) {
-                    throw ValidationException::withMessages(['evidence' => 'The supporting evidence file is unavailable.']);
+                if ($file) {
+                    $path = str_starts_with($file, 'private:') ? substr($file, 8) : $file;
+                    if (! $path || ! $this->evidenceExists(new RcspForm([
+                        'rcsp_barangay_id' => $lockedBarangay->id,
+                        'file' => $file,
+                    ]))) {
+                        throw ValidationException::withMessages(['evidence' => 'The supporting evidence file is unavailable.']);
+                    }
                 }
 
                 $form = RcspForm::create([
@@ -309,7 +217,9 @@ class RcspWorkflowService
                         "statuses.$id" => 'Only the latest submitted activity version may be reviewed.',
                     ]);
                 }
-                if (! $this->evidenceExists($form)) {
+                if ($status === 'approved'
+                    && $form->conduct === 'yes'
+                    && ! $this->evidenceExists($form)) {
                     throw ValidationException::withMessages([
                         "statuses.$id" => 'The supporting evidence file is unavailable.',
                     ]);
@@ -355,9 +265,11 @@ class RcspWorkflowService
                 ->unique('rcsp_activity_id')->keyBy('rcsp_activity_id');
             foreach ($activities as $activity) {
                 $latest = $latestForms->get($activity->id);
-                if (! $latest || $latest->status !== 'approved' || ! $this->evidenceExists($latest)) {
+                if (! $latest
+                    || $latest->status !== 'approved'
+                    || ($latest->conduct === 'yes' && ! $this->evidenceExists($latest))) {
                     throw ValidationException::withMessages([
-                        'phase' => 'Every current-phase activity must have evidence and an approved latest submission.',
+                        'phase' => 'Every current-phase activity must have an approved latest submission, with evidence for Conducted activities.',
                     ]);
                 }
             }
@@ -400,14 +312,6 @@ class RcspWorkflowService
 
         return str_starts_with($path, "rcsp/{$form->rcsp_barangay_id}/")
             && Storage::disk($private ? 'local' : 'public')->exists($path);
-    }
-
-    private function isActivityTitleConflict(QueryException $exception): bool
-    {
-        $message = strtolower($exception->getMessage());
-
-        return str_contains($message, 'rcsp_activity_barangay_phase_title_unique')
-            || (str_contains($message, 'unique constraint') && str_contains($message, 'normalized_title'));
     }
 
     private function isBarangayConflict(QueryException $exception): bool

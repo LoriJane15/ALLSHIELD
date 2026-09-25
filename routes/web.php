@@ -67,8 +67,10 @@ Route::middleware(['auth', 'role:admin'])->prefix('katuparan')->name('admin.')->
     Route::get('/rcsp-form/{form}/file', [Admin\RcspReviewController::class, 'file'])->name('rcsp.file');
     Route::post('/rcsp-form/{form}/comment', [Admin\RcspReviewController::class, 'storeComment'])->name('rcsp.comment');
 
-    // IMPLAN verify + reassign
+    // IMPLAN municipality monitoring (read-only)
     Route::get('/implan', [Admin\ImplanController::class, 'index'])->name('implan.index');
+    Route::get('/implan/municipalities/{municipality}', [Admin\ImplanController::class, 'municipality'])->name('implan.municipality');
+    Route::get('/implan/municipalities/{municipality}/download', [Admin\ImplanController::class, 'download'])->name('implan.download');
     Route::get('/implan/{implan}', [Admin\ImplanController::class, 'show'])->name('implan.show');
     Route::post('/implan/{implan}/verify', [Admin\ImplanController::class, 'verify'])->name('implan.verify');
     Route::post('/implan/{implan}/reassign', [Admin\ImplanController::class, 'reassign'])->name('implan.reassign');
@@ -95,9 +97,6 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
 
     // Monitoring form (per barangay)
     Route::get('/rcsp/{rcspBarangay}/monitoring', [Lgu\MonitoringController::class, 'show'])->name('monitoring.show');
-    Route::post('/rcsp/{rcspBarangay}/activities', [Lgu\MonitoringController::class, 'storeActivity'])->name('activities.store');
-    Route::patch('/rcsp/{rcspBarangay}/activities/{activity}', [Lgu\MonitoringController::class, 'updateActivity'])->name('activities.update');
-    Route::delete('/rcsp/{rcspBarangay}/activities/{activity}', [Lgu\MonitoringController::class, 'destroyActivity'])->name('activities.destroy');
     Route::post('/rcsp/{rcspBarangay}/activities/{activity}/submit', [Lgu\MonitoringController::class, 'submit'])->name('monitoring.submit');
     Route::post('/rcsp/{rcspBarangay}/proceed', [Lgu\MonitoringController::class, 'proceed'])->name('monitoring.proceed');
     Route::get('/rcsp-form/{form}/file', [Lgu\MonitoringController::class, 'file'])->name('monitoring.file');
@@ -109,17 +108,22 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
     // IMPLAN
     Route::get('/implan', [Lgu\ImplanController::class, 'index'])->name('implan.index');
     Route::post('/implan', [Lgu\ImplanController::class, 'store'])->name('implan.store');
+    Route::get('/implan/official', [Lgu\ImplanController::class, 'official'])->name('implan.official');
+    Route::get('/implan/official/download', [Lgu\ImplanController::class, 'download'])->name('implan.download');
     Route::get('/implan/{implan}', [Lgu\ImplanController::class, 'show'])->name('implan.show');
     Route::put('/implan/{implan}', [Lgu\ImplanController::class, 'update'])->name('implan.update');
     Route::put('/implan/{implan}/implementation', [Lgu\ImplanController::class, 'updateImplementation'])->name('implan.implementation');
     Route::post('/implan/{implan}/agenda', [Lgu\ImplanController::class, 'uploadAgenda'])->name('implan.agenda');
-    Route::post('/implan/{implan}/verify', [Lgu\ImplanController::class, 'verify'])->name('implan.verify');
+    Route::post('/implan/{implan}/submit', [Lgu\ImplanController::class, 'submit'])->name('implan.submit');
     Route::delete('/implan/{implan}', [Lgu\ImplanController::class, 'destroy'])->name('implan.destroy');
 });
 
 Route::middleware(['auth', 'role:gov_agency'])->prefix('agency')->name('gov_agency.')->group(function () {
     Route::get('/', [GovAgency\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/implan', [GovAgency\ImplanController::class, 'index'])->name('implan.index');
+    Route::get('/implan/municipalities/{municipality}', [GovAgency\ImplanController::class, 'municipality'])->name('implan.municipality');
+    Route::get('/implan/{implan}/files/{file}', [GovAgency\ImplanController::class, 'viewFile'])->name('implan.files.show');
+    Route::get('/implan/{implan}/photos/{photo}', [GovAgency\ImplanController::class, 'viewPhoto'])->name('implan.photos.show');
     Route::get('/implan/{implan}', [GovAgency\ImplanController::class, 'show'])->name('implan.show');
     Route::post('/implan/{implan}/respond', [GovAgency\ImplanController::class, 'respond'])->name('implan.respond');
     Route::put('/implan/{implan}', [GovAgency\ImplanController::class, 'update'])->name('implan.update');
@@ -145,6 +149,7 @@ Route::middleware(['auth', 'role:mblrc'])->prefix('mblrc')->name('mblrc.')->grou
 
     // Profile widget actions
     Route::put('/former-rebels/{formerRebel}/program-status', [Mblrc\ProfileActionController::class, 'updateProgramStatus'])->name('fr.program-status.update');
+    Route::post('/former-rebels/{formerRebel}/geocode', [Mblrc\ProfileActionController::class, 'geocode'])->name('fr.location.geocode');
     Route::post('/former-rebels/{formerRebel}/location', [Mblrc\ProfileActionController::class, 'saveLocation'])->name('fr.location.save');
     Route::get('/former-rebels/{formerRebel}/location-history', [Mblrc\ProfileActionController::class, 'locationHistory'])->name('fr.location.history');
     Route::post('/former-rebels/{formerRebel}/skills', [Mblrc\ProfileActionController::class, 'storeSkill'])->name('fr.skills.store');

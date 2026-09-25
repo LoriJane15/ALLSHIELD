@@ -5,10 +5,15 @@ namespace App\Http\Controllers\Lgu;
 use App\Http\Controllers\Controller;
 use App\Models\GovAgency;
 use App\Models\Implementation;
+use App\Models\Municipality;
 use App\Models\RcspBarangay;
+use App\Services\ImplanWorkbookExporter;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ImplanController extends Controller
 {
@@ -20,8 +25,8 @@ class ImplanController extends Controller
         $counts = [
             'total' => Implementation::where('lgu_user_id', auth()->id())->count(),
             'not_started' => Implementation::where('lgu_user_id', auth()->id())->where('status', 'not yet started')->count(),
+            'submitted' => Implementation::where('lgu_user_id', auth()->id())->where('status', 'submitted')->count(),
             'ongoing' => Implementation::where('lgu_user_id', auth()->id())->where('status', 'ongoing')->count(),
-            'verification' => Implementation::where('lgu_user_id', auth()->id())->where('status', 'for verification')->count(),
             'verified' => Implementation::where('lgu_user_id', auth()->id())->where('status', 'verified')->count(),
         ];
 
@@ -52,7 +57,11 @@ class ImplanController extends Controller
     public function show(Implementation $implan): View
     {
         $this->authorizeOwner($implan);
-        $implan->load('files', 'photos');
+        $implan->load([
+            'files.agencyResponse.govAgency',
+            'photos.agencyResponse.govAgency',
+            'responses.govAgency', 'responses.files', 'responses.photos',
+        ]);
 
         return view('lgu.implan.show', [
             'implan' => $implan,
@@ -60,6 +69,24 @@ class ImplanController extends Controller
             'agencyNames' => GovAgency::whereIn('id', $implan->agencies ?? [])->pluck('acronym'),
             'agenciesById' => GovAgency::all()->keyBy('id'),
         ]);
+    }
+
+    public function official(): View
+    {
+        $municipality = auth()->user()->municipality;
+        abort_unless($municipality, 404, 'No municipality is assigned to this LGU account.');
+
+        $implans = $this->submittedMunicipalityImplans($municipality);
+
+        return view('lgu.implan.official', $this->officialViewData($municipality, $implans));
+    }
+
+    public function download(ImplanWorkbookExporter $exporter): StreamedResponse
+    {
+        $municipality = auth()->user()->municipality;
+        abort_unless($municipality, 404, 'No municipality is assigned to this LGU account.');
+
+        return $exporter->download($municipality, $this->submittedMunicipalityImplans($municipality));
     }
 
     public function update(Request $request, Implementation $implan): RedirectResponse
@@ -80,7 +107,6 @@ class ImplanController extends Controller
     public function updateImplementation(Request $request, Implementation $implan): RedirectResponse
     {
         $this->authorizeOwner($implan);
-
         $implan->update($request->validate([
             'program' => ['nullable', 'string'],
             'beneficiaries' => ['nullable', 'string'],
@@ -96,7 +122,6 @@ class ImplanController extends Controller
     public function uploadAgenda(Request $request, Implementation $implan): RedirectResponse
     {
         $this->authorizeOwner($implan);
-
         $request->validate([
             'file_name' => ['required', 'string', 'max:250'],
             'description' => ['nullable', 'string'],
@@ -104,7 +129,7 @@ class ImplanController extends Controller
         ]);
 
         $path = $request->file('pdf')->store('implan/agenda', 'public');
-        $implan->files()->create([
+        $implan->originalFiles()->create([
             'file_name' => $request->file_name,
             'description' => $request->description,
             'pdf' => $path,
@@ -113,12 +138,14 @@ class ImplanController extends Controller
         return back()->with('success', 'Agenda file uploaded.');
     }
 
-    public function verify(Implementation $implan): RedirectResponse
+    public function submit(Implementation $implan): RedirectResponse
     {
         $this->authorizeOwner($implan);
-        $implan->update(['status' => 'for verification']);
+        abort_if(empty($implan->agencies), 422, 'Select at least one responsible agency before submitting.');
 
-        return back()->with('success', 'Sent for verification.');
+        $implan->update(['status' => 'submitted']);
+
+        return back()->with('success', 'IMPLAN submitted directly to the responsible agencies.');
     }
 
     public function destroy(Implementation $implan): RedirectResponse
@@ -136,12 +163,14 @@ class ImplanController extends Controller
             'issues' => ['required', 'string'],
             'target_areas' => ['nullable', 'array'],
             'target_areas.*' => ['integer', 'exists:rcsp_barangays,id'],
+            'beneficiaries' => ['nullable', 'string'],
+            'outcome' => ['nullable', 'string'],
             'agencies' => ['nullable', 'array'],
-            'agencies.*' => ['integer', 'exists:gov_agencies,id'],
+            'agencies.*' => ['integer', 'distinct', 'exists:gov_agencies,id'],
         ]);
     }
 
-    private function targetAreas()
+    private function targetAreas(): Collection
     {
         return RcspBarangay::with('barangay')
             ->when(auth()->user()->municipality_id, fn ($q) => $q->where('municipality_id', auth()->user()->municipality_id))
@@ -149,14 +178,41 @@ class ImplanController extends Controller
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->barangay?->name ?? "Barangay #{$r->barangay_id}"]);
     }
 
-    private function areaNames(array $ids)
+    private function areaNames(array $ids): Collection
     {
         return RcspBarangay::with('barangay')->whereIn('id', $ids)->get()
             ->map(fn ($r) => $r->barangay?->name ?? "Barangay #{$r->barangay_id}");
+    }
+
+    private function submittedMunicipalityImplans(Municipality $municipality): EloquentCollection
+    {
+        return Implementation::query()
+            ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
+            ->where('status', '!=', 'not yet started')
+            ->with([
+                'lguUser.municipality',
+                'responses.govAgency', 'responses.files', 'responses.photos',
+            ])
+            ->oldest('uploaded_at')
+            ->oldest('id')
+            ->get();
+    }
+
+    private function officialViewData(Municipality $municipality, EloquentCollection $implans): array
+    {
+        return [
+            'municipality' => $municipality,
+            'implans' => $implans,
+            'agenciesById' => GovAgency::all()->keyBy('id'),
+            'areaNamesByImplan' => $implans->mapWithKeys(fn (Implementation $implan) => [
+                $implan->id => $this->areaNames($implan->target_areas ?? []),
+            ]),
+        ];
     }
 
     private function authorizeOwner(Implementation $implan): void
     {
         abort_unless($implan->lgu_user_id === auth()->id(), 403);
     }
+
 }

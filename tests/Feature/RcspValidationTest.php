@@ -12,6 +12,7 @@ use App\Models\RcspPhase;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -51,7 +52,9 @@ class RcspValidationTest extends TestCase
     {
         $route = route('lgu.monitoring.submit', [$this->record, $this->activity]);
         $this->actingAs($this->lgu)->post($route, ['conduct' => 'maybe'])->assertSessionHasErrors('conduct');
-        $this->actingAs($this->lgu)->post($route, ['conduct' => 'yes'])->assertSessionHasErrors('evidence');
+        $this->actingAs($this->lgu)->post($route, ['conduct' => 'yes'])->assertSessionHasErrors([
+            'evidence' => 'Evidence is required when the activity is marked as Conducted.',
+        ]);
         $this->actingAs($this->lgu)->post($route, [
             'conduct' => 'yes',
             'phase_id' => $this->phase->id,
@@ -66,6 +69,48 @@ class RcspValidationTest extends TestCase
         $this->actingAs($this->lgu)
             ->post(route('lgu.monitoring.submit', [$this->record, $future]), ['conduct' => 'yes'])
             ->assertForbidden();
+    }
+
+    public function test_not_conducted_and_not_applicable_submit_without_evidence(): void
+    {
+        $notApplicable = RcspActivity::create([
+            'rcsp_phase_id' => $this->phase->id,
+            'rcsp_barangay_id' => $this->record->id,
+            'created_by_user_id' => $this->lgu->id,
+            'description' => 'DEMO: Not applicable',
+            'normalized_title' => 'demo: not applicable',
+        ]);
+
+        $this->actingAs($this->lgu)
+            ->post(route('lgu.monitoring.submit', [$this->record, $this->activity]), ['conduct' => 'no'])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($this->lgu)
+            ->post(route('lgu.monitoring.submit', [$this->record, $notApplicable]), ['conduct' => 'n/a'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('rcsp_forms', [
+            'rcsp_activity_id' => $this->activity->id,
+            'conduct' => 'no',
+            'file' => null,
+            'status' => 'submitted',
+        ]);
+        $this->assertDatabaseHas('rcsp_forms', [
+            'rcsp_activity_id' => $notApplicable->id,
+            'conduct' => 'n/a',
+            'file' => null,
+            'status' => 'submitted',
+        ]);
+    }
+
+    public function test_monitoring_form_explains_when_conducted_evidence_is_required(): void
+    {
+        $this->actingAs($this->lgu)
+            ->get(route('lgu.monitoring.show', $this->record))
+            ->assertOk()
+            ->assertSeeText('Evidence is required when the activity is marked as Conducted.')
+            ->assertSee('class="text-danger d-none mt-1 evidence-required-message"', false)
+            ->assertSee("option.value === 'yes'", false)
+            ->assertDontSeeText('Evidence is required for every conduct choice');
     }
 
     public function test_activity_mismatch_and_duplicate_barangay_are_rejected(): void
@@ -96,6 +141,93 @@ class RcspValidationTest extends TestCase
         $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->record), [
             'statuses' => [$form->id => 'to be complied'], 'remarks' => [$form->id => '   '],
         ])->assertSessionHasErrors("remarks.{$form->id}");
+    }
+
+    public function test_approval_requires_available_evidence_only_for_conducted_activities(): void
+    {
+        $conductedWithoutEvidence = RcspForm::create([
+            'lgu_user_id' => $this->lgu->id,
+            'rcsp_barangay_id' => $this->record->id,
+            'rcsp_phase_id' => $this->phase->id,
+            'rcsp_activity_id' => $this->activity->id,
+            'submission_version' => 1,
+            'conduct' => 'yes',
+            'status' => 'submitted',
+        ]);
+
+        $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->record), [
+            'statuses' => [$conductedWithoutEvidence->id => 'approved'],
+        ])->assertSessionHasErrors([
+            "statuses.{$conductedWithoutEvidence->id}" => 'Supporting evidence is required before approval.',
+        ]);
+
+        $conductedWithoutEvidence->update([
+            'file' => "private:rcsp/{$this->record->id}/missing.png",
+        ]);
+
+        $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->record), [
+            'statuses' => [$conductedWithoutEvidence->id => 'approved'],
+        ])->assertSessionHasErrors([
+            "statuses.{$conductedWithoutEvidence->id}" => 'The supporting evidence file is unavailable.',
+        ]);
+
+        $this->assertSame('submitted', $conductedWithoutEvidence->fresh()->status);
+    }
+
+    public function test_not_conducted_and_not_applicable_can_be_approved_without_evidence(): void
+    {
+        $notApplicableActivity = RcspActivity::create([
+            'rcsp_phase_id' => $this->phase->id,
+            'rcsp_barangay_id' => $this->record->id,
+            'created_by_user_id' => $this->lgu->id,
+            'description' => 'DEMO: Review not applicable',
+            'normalized_title' => 'demo: review not applicable',
+        ]);
+        $notConducted = RcspForm::create([
+            'lgu_user_id' => $this->lgu->id,
+            'rcsp_barangay_id' => $this->record->id,
+            'rcsp_phase_id' => $this->phase->id,
+            'rcsp_activity_id' => $this->activity->id,
+            'submission_version' => 1,
+            'conduct' => 'no',
+            'status' => 'submitted',
+        ]);
+        $notApplicable = RcspForm::create([
+            'lgu_user_id' => $this->lgu->id,
+            'rcsp_barangay_id' => $this->record->id,
+            'rcsp_phase_id' => $this->phase->id,
+            'rcsp_activity_id' => $notApplicableActivity->id,
+            'submission_version' => 1,
+            'conduct' => 'n/a',
+            'status' => 'submitted',
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.rcsp.review', $this->record), [
+            'statuses' => [
+                $notConducted->id => 'approved',
+                $notApplicable->id => 'approved',
+            ],
+            'remarks' => [
+                $notConducted->id => 'Not conducted as reported.',
+                $notApplicable->id => 'Not applicable to this barangay.',
+            ],
+        ]);
+
+        $response->assertSessionHasNoErrors()->assertSessionHas('success', 'Review saved.');
+        $this->assertSame('approved', $notConducted->fresh()->status);
+        $this->assertSame('Not conducted as reported.', $notConducted->fresh()->remarks);
+        $this->assertSame('approved', $notApplicable->fresh()->status);
+        $this->assertSame('Not applicable to this barangay.', $notApplicable->fresh()->remarks);
+        $this->assertDatabaseHas('rcsp_form_reviews', [
+            'rcsp_form_id' => $notConducted->id,
+            'status' => 'approved',
+            'remarks' => 'Not conducted as reported.',
+        ]);
+        $this->assertDatabaseHas('rcsp_form_reviews', [
+            'rcsp_form_id' => $notApplicable->id,
+            'status' => 'approved',
+            'remarks' => 'Not applicable to this barangay.',
+        ]);
     }
 
     public function test_review_audit_is_saved_and_resubmission_preserves_the_reviewed_version(): void
@@ -137,32 +269,28 @@ class RcspValidationTest extends TestCase
         $this->assertSame(1, RcspForm::where('rcsp_activity_id', $this->activity->id)->count());
     }
 
-    public function test_activity_titles_are_scoped_normalized_and_immutable_after_submission(): void
+    public function test_activity_definition_endpoints_are_unavailable_and_cannot_be_bypassed(): void
     {
-        $this->actingAs($this->lgu)->post(route('lgu.activities.store', $this->record), [
-            'title' => '  Community   Dialogue  ',
-        ])->assertSessionHasNoErrors();
-        $created = RcspActivity::where('description', 'Community   Dialogue')->firstOrFail();
-        $this->assertSame('community dialogue', $created->normalized_title);
+        $this->assertFalse(Route::has('lgu.activities.store'));
+        $this->assertFalse(Route::has('lgu.activities.update'));
+        $this->assertFalse(Route::has('lgu.activities.destroy'));
 
-        $this->actingAs($this->lgu)->post(route('lgu.activities.store', $this->record), [
-            'title' => 'community dialogue',
-        ])->assertSessionHasErrors('title');
-        $this->actingAs($this->lgu)->post(route('lgu.activities.store', $this->record), [
-            'title' => 'Allowed title', 'created_by_user_id' => $this->admin->id,
-        ])->assertSessionHasErrors('request');
+        $collectionUrl = "/lgu/rcsp/{$this->record->id}/activities";
+        $activityUrl = "{$collectionUrl}/{$this->activity->id}";
+        $originalTitle = $this->activity->description;
 
-        $otherCreator = User::factory()->lgu($this->lgu->municipality_id)->create();
-        $this->actingAs($otherCreator)
-            ->patch(route('lgu.activities.update', [$this->record, $created]), ['title' => 'Hijacked'])
-            ->assertForbidden();
-
-        $this->actingAs($this->lgu)->post(route('lgu.monitoring.submit', [$this->record, $created]), [
-            'conduct' => 'n/a', 'evidence' => UploadedFile::fake()->image('required-for-na.png'),
-        ])->assertSessionHasNoErrors();
         $this->actingAs($this->lgu)
-            ->delete(route('lgu.activities.destroy', [$this->record, $created]))
-            ->assertForbidden();
+            ->post($collectionUrl, ['title' => 'Arbitrary activity'])
+            ->assertNotFound();
+        $this->actingAs($this->lgu)
+            ->patch($activityUrl, ['title' => 'Renamed activity'])
+            ->assertNotFound();
+        $this->actingAs($this->lgu)
+            ->delete($activityUrl)
+            ->assertNotFound();
+
+        $this->assertSame(1, $this->record->activities()->count());
+        $this->assertSame($originalTitle, $this->activity->fresh()->description);
     }
 
     public function test_disguised_upload_and_effective_runtime_limit_are_enforced(): void

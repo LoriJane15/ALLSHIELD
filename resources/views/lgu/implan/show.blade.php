@@ -5,7 +5,8 @@
 @php
     $statusBadge = match ($implan->status) {
         'verified' => 'badge-success', 'ongoing' => 'badge-primary',
-        'for verification' => 'badge-info', 'not yet started' => 'badge-danger', default => 'badge-secondary',
+        'submitted' => 'badge-info', 'for verification' => 'badge-info',
+        'not yet started' => 'badge-danger', default => 'badge-secondary',
     };
 @endphp
 
@@ -32,15 +33,29 @@
         </div>
         <div class="col-4 col-xl-4">
             <div class="justify-content-end d-flex gap-2">
-                @if (! in_array($implan->status, ['for verification', 'verified']))
-                    <form method="POST" action="{{ route('lgu.implan.verify', $implan) }}"
-                          data-confirm="Send this IMPLAN for verification?" data-confirm-title="Submit for verification" data-confirm-action="Send" data-confirm-danger="false">
+                @if ($implan->status === 'not yet started')
+                    <form method="POST" action="{{ route('lgu.implan.submit', $implan) }}"
+                          data-confirm="Submit this IMPLAN directly to its responsible agencies?" data-confirm-title="Submit IMPLAN" data-confirm-action="Submit" data-confirm-danger="false">
                         @csrf
-                        <button class="btn btn-sm btn-success"><i class="mdi mdi-send"></i> Send for verification</button>
+                        <button class="btn btn-sm btn-success"><i class="mdi mdi-send"></i> Submit to Responsible Agencies</button>
                     </form>
                 @endif
                 <a href="{{ route('lgu.implan.index') }}" class="btn btn-sm btn-light bg-white">Back</a>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                <div><h5 class="mb-1">Official IMPLAN Format</h5><p class="text-muted mb-0">LGU original and responsible-agency responses.</p></div>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()" data-print-implan><i class="mdi mdi-printer"></i> Print</button>
+            </div>
+            @include('implan._official_format', [
+                'implans' => collect([$implan]),
+                'municipality' => $implan->lguUser?->municipality,
+                'areaNamesByImplan' => collect([$implan->id => $areaNames]),
+            ])
         </div>
     </div>
 
@@ -64,7 +79,7 @@
                             <div class="table-responsive">
                                 <table class="table">
                                     <thead>
-                                        <tr><th>Outcomes</th><th>Resources Needed</th><th>Support Needed</th><th>Duration</th></tr>
+                                        <tr><th>Expected Results/Outcome</th><th>Resources Needed<br>(Funding)</th><th>Support Needed</th><th>Duration</th></tr>
                                     </thead>
                                     <tbody>
                                         <tr class="wrap">
@@ -86,6 +101,7 @@
                             @forelse ($implan->files as $file)
                                 <div class="agenda-file-item">
                                     <a href="{{ $file->pdf ? Storage::url($file->pdf) : '#' }}" target="_blank" class="file-name">{{ $file->file_name }}</a>
+                                    @if ($file->agencyResponse)<span class="badge badge-info ms-2">{{ $file->agencyResponse->govAgency?->acronym }}</span>@else<span class="badge badge-secondary ms-2">LGU original</span>@endif
                                     <p class="file-description">{{ $file->description }}</p>
                                 </div>
                             @empty
@@ -102,6 +118,7 @@
                                             <a href="{{ Storage::url($photo->image) }}" target="_blank">
                                                 <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
                                             </a>
+                                            <div class="small text-center mt-1">{{ $photo->agencyResponse?->govAgency?->acronym ?? 'LGU original' }}</div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -176,21 +193,21 @@
                         @csrf @method('PUT')
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label">Issues or Concerned</label>
+                                <label class="form-label">Issues and Concerns to be Addressed</label>
                                 <input type="text" class="form-control" value="{{ $implan->issues }}" readonly>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Program</label>
+                                <label class="form-label">Program/Project/Activity</label>
                                 <input type="text" name="program" class="form-control" value="{{ old('program', $implan->program) }}">
                             </div>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label">Target Beneficiary</label>
+                                <label class="form-label">Target Beneficiaries</label>
                                 <input type="text" name="beneficiaries" class="form-control" value="{{ old('beneficiaries', $implan->beneficiaries) }}">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Resources Needed</label>
+                                <label class="form-label">Resources Needed (Funding)</label>
                                 <input type="text" name="resources" class="form-control" value="{{ old('resources', $implan->resources) }}" placeholder="Php 0.00">
                             </div>
                         </div>
@@ -205,7 +222,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Outcomes</label>
+                            <label class="form-label">Expected Results/Outcome</label>
                             <textarea name="outcome" class="form-control" rows="3">{{ old('outcome', $implan->outcome) }}</textarea>
                         </div>
                         <div class="modal-footer">

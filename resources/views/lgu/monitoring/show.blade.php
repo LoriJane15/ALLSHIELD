@@ -126,24 +126,6 @@
             <p class="mt-2 font-weight-bold mb-0">RCSP monitoring completed for this barangay.</p>
         </div></div>
     @else
-        @can('createActivity', $rcspBarangay)
-            <div class="card mb-3">
-                <div class="card-body">
-                    <form method="POST" action="{{ route('lgu.activities.store', $rcspBarangay) }}" class="row g-2 align-items-end">
-                        @csrf
-                        <div class="col-md-10">
-                            <label for="activity-title" class="form-label">New activity title</label>
-                            <input id="activity-title" type="text" name="title" value="{{ old('title') }}"
-                                   maxlength="255" required class="form-control" autocomplete="off">
-                        </div>
-                        <div class="col-md-2 d-grid">
-                            <button type="submit" class="btn btn-primary">Add Activity</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        @endcan
-
         <div class="card">
             <div class="card-body pb-2">
                 <div class="table-responsive">
@@ -171,21 +153,6 @@
                                                   action="{{ route('lgu.monitoring.submit', [$rcspBarangay, $activity]) }}"
                                                   enctype="multipart/form-data">@csrf</form>
                                             <div>{{ $activity->description }}</div>
-                                            @can('updateActivity', [$rcspBarangay, $activity])
-                                                <form method="POST" action="{{ route('lgu.activities.update', [$rcspBarangay, $activity]) }}"
-                                                      class="d-flex gap-1 mt-2">
-                                                    @csrf @method('PATCH')
-                                                    <input type="text" name="title" value="{{ $activity->description }}"
-                                                           maxlength="255" required class="form-control form-control-sm">
-                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Correct</button>
-                                                </form>
-                                                <form method="POST" action="{{ route('lgu.activities.destroy', [$rcspBarangay, $activity]) }}"
-                                                      class="mt-1" data-confirm="Delete this activity?"
-                                                      data-confirm-title="Confirm delete" data-confirm-action="Delete">
-                                                    @csrf @method('DELETE')
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                                                </form>
-                                            @endcan
                                         </td>
                                         <td>
                                             <div class="conduct-options">
@@ -204,12 +171,17 @@
                                                 <label class="file-drop">
                                                      <input type="file" name="evidence" form="{{ $submissionFormId }}"
                                                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="file-input" hidden
-                                                            @required(! $form)>
+                                                            data-has-existing-evidence="{{ filled($form?->file) ? 'true' : 'false' }}"
+                                                            aria-describedby="evidence-requirement-{{ $activity->id }}">
                                                     <i class="mdi mdi-cloud-upload-outline file-drop-icon"></i>
                                                     <span class="file-drop-text">{{ $form ? 'Replace evidence (optional)' : 'Click to upload evidence' }}</span>
                                                     <span class="file-name"></span>
                                                 </label>
-                                                <small class="text-muted d-block mt-1">PDF, JPG, PNG, DOC or DOCX · max {{ $maxEvidenceMegabytes }} MB. Evidence is required for every conduct choice, including N/A.</small>
+                                                <small id="evidence-requirement-{{ $activity->id }}"
+                                                       class="text-danger d-none mt-1 evidence-required-message" role="status" aria-live="polite">
+                                                    Evidence is required when the activity is marked as Conducted.
+                                                </small>
+                                                <small class="text-muted d-block mt-1">PDF, JPG, PNG, DOC or DOCX · max {{ $maxEvidenceMegabytes }} MB.</small>
                                             @else
                                                 <span class="badge bg-secondary">Submission locked</span>
                                             @endif
@@ -249,7 +221,7 @@
                                         </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="6" class="text-center text-muted py-4">No activities in this phase. Add an activity before submitting or advancing.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No official activities are available for this phase.</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -324,6 +296,16 @@
 @push('scripts')
 <script>
     document.querySelectorAll('.file-drop .file-input').forEach((input) => {
+        const formId = input.getAttribute('form');
+        const conductOptions = document.querySelectorAll(`input[name="conduct"][form="${formId}"]`);
+        const requirement = document.getElementById(input.getAttribute('aria-describedby'));
+        const hasExistingEvidence = input.dataset.hasExistingEvidence === 'true';
+        const syncEvidenceRequirement = () => {
+            const conducted = Array.from(conductOptions).some((option) => option.checked && option.value === 'yes');
+            const evidenceMissing = ! hasExistingEvidence && input.files.length === 0;
+            requirement.classList.toggle('d-none', ! conducted || ! evidenceMissing);
+        };
+
         input.addEventListener('change', function () {
             const drop = this.closest('.file-drop');
             const nameEl = drop.querySelector('.file-name');
@@ -337,7 +319,10 @@
                 textEl.textContent = 'Click to upload evidence';
                 nameEl.textContent = '';
             }
+            syncEvidenceRequirement();
         });
+        conductOptions.forEach((option) => option.addEventListener('change', syncEvidenceRequirement));
+        syncEvidenceRequirement();
     });
 </script>
 @endpush

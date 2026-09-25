@@ -5,10 +5,8 @@ namespace App\Http\Controllers\Lgu;
 use App\Events\RcspCommentPosted;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Rcsp\AdvanceRcspPhaseRequest;
-use App\Http\Requests\Rcsp\StoreRcspActivityRequest;
 use App\Http\Requests\Rcsp\StoreRcspCommentRequest;
 use App\Http\Requests\Rcsp\SubmitRcspPhaseRequest;
-use App\Http\Requests\Rcsp\UpdateRcspActivityRequest;
 use App\Models\RcspActivity;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
@@ -19,8 +17,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * RCSP phased monitoring form. A barangay progresses through 6 phases (0-5);
@@ -63,48 +61,6 @@ class MonitoringController extends Controller
             'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'approvedForms',
             'maxEvidenceMegabytes'
         ));
-    }
-
-    public function storeActivity(
-        StoreRcspActivityRequest $request,
-        RcspBarangay $rcspBarangay,
-        RcspWorkflowService $workflow
-    ): RedirectResponse {
-        $workflow->createActivity(
-            $rcspBarangay,
-            $request->user(),
-            $request->title(),
-            $request->normalizedTitle()
-        );
-
-        return back()->with('success', 'RCSP activity created.');
-    }
-
-    public function updateActivity(
-        UpdateRcspActivityRequest $request,
-        RcspBarangay $rcspBarangay,
-        RcspActivity $activity,
-        RcspWorkflowService $workflow
-    ): RedirectResponse {
-        $workflow->updateActivity(
-            $rcspBarangay,
-            $activity,
-            $request->user(),
-            $request->title(),
-            $request->normalizedTitle()
-        );
-
-        return back()->with('success', 'RCSP activity title updated.');
-    }
-
-    public function destroyActivity(
-        RcspBarangay $rcspBarangay,
-        RcspActivity $activity,
-        RcspWorkflowService $workflow
-    ): RedirectResponse {
-        $workflow->deleteActivity($rcspBarangay, $activity, request()->user());
-
-        return back()->with('success', 'RCSP activity deleted.');
     }
 
     public function submit(
@@ -171,7 +127,7 @@ class MonitoringController extends Controller
         ]);
     }
 
-    public function evidence(RcspForm $form): BinaryFileResponse
+    public function evidence(RcspForm $form): StreamedResponse
     {
         Gate::authorize('viewEvidence', $form);
         abort_if(! $form->file || str_contains($form->file, '..') || str_contains($form->file, '\\')
@@ -183,16 +139,23 @@ class MonitoringController extends Controller
         abort_unless($path && $disk->exists($path), 404);
         $filename = preg_replace('/[\x00-\x1F\x7F]/u', '', basename(str_replace('\\', '/',
             $form->original_filename ?: $path))) ?: 'evidence';
-        $mime = $form->detected_mime_type ?: $disk->mimeType($path) ?: 'application/octet-stream';
-        $disposition = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png'], true)
+        $mime = strtolower(trim(explode(';', (string) ($form->detected_mime_type
+            ?: $disk->mimeType($path) ?: 'application/octet-stream'), 2)[0]));
+        $disposition = in_array($mime, [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+        ], true)
             ? ResponseHeaderBag::DISPOSITION_INLINE
             : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
-        $response = response()->file($disk->path($path), ['Content-Type' => $mime]);
-        $response->setContentDisposition($disposition, $filename);
-        $response->headers->set('Cache-Control', 'private, no-store, no-cache, max-age=0');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('X-Content-Type-Options', 'nosniff');
 
-        return $response;
+        return $disk->response($path, $filename, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'private, no-store, no-cache, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ], $disposition);
     }
 }

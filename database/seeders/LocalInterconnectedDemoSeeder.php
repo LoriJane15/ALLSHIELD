@@ -17,6 +17,7 @@ use App\Models\FrSkill;
 use App\Models\GovAgency;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Implementation;
+use App\Models\ImplementationPlan;
 use App\Models\ImplementationTagging;
 use App\Models\JapicCertificationProcessing;
 use App\Models\MapBarangay;
@@ -145,10 +146,19 @@ class LocalInterconnectedDemoSeeder extends Seeder
             ]);
         }
 
+        $implementationPlan = ImplementationPlan::firstOrCreate([
+            'lgu_user_id' => $lgu->id,
+            'title' => 'DEMO Community Livelihood and Access Plan',
+        ], [
+            'status' => 'for verification',
+            'submitted_at' => now()->subDays(12)->toDateString(),
+        ]);
+
         $implementation = Implementation::updateOrCreate([
             'lgu_user_id' => $lgu->id,
             'program' => 'DEMO Community Livelihood and Access Plan',
         ], [
+            'implementation_plan_id' => $implementationPlan->id,
             'uploaded_at' => now()->subDays(12)->toDateString(),
             'issues' => 'DEMO: Limited access to livelihood resources and transport.',
             'target_areas' => [$barangays['In-Progress']->id, $barangays['Completed']->id],

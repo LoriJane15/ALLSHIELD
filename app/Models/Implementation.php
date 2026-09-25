@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Implementation extends Model
 {
     protected $fillable = [
-        'lgu_user_id', 'uploaded_at', 'issues', 'program', 'target_areas', 'agencies',
+        'implementation_plan_id', 'lgu_user_id', 'uploaded_at', 'issues', 'program', 'target_areas', 'agencies',
         'beneficiaries', 'outcome', 'resources', 'support', 'duration', 'status',
         'type_gov', 'sources', 'remarks', 'tagging',
     ];
@@ -28,14 +28,29 @@ class Implementation extends Model
         return $this->belongsTo(User::class, 'lgu_user_id');
     }
 
+    public function implementationPlan(): BelongsTo
+    {
+        return $this->belongsTo(ImplementationPlan::class);
+    }
+
     public function files(): HasMany
     {
         return $this->hasMany(ImplementationFile::class);
     }
 
+    public function originalFiles(): HasMany
+    {
+        return $this->hasMany(ImplementationFile::class)->whereNull('agency_implan_response_id');
+    }
+
     public function photos(): HasMany
     {
         return $this->hasMany(ImplementationPhoto::class);
+    }
+
+    public function originalPhotos(): HasMany
+    {
+        return $this->hasMany(ImplementationPhoto::class)->whereNull('agency_implan_response_id');
     }
 
     public function responses(): HasMany

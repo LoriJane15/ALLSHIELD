@@ -26,7 +26,7 @@ return new class extends Migration
             $table->text('resources')->nullable();
             $table->text('support')->nullable();
             $table->text('duration')->nullable();
-            $table->enum('status', ['not yet started', 'ongoing', 'verified', 'for verification'])
+            $table->enum('status', ['not yet started', 'submitted', 'ongoing', 'verified', 'for verification'])
                 ->default('not yet started');
             $table->enum('type_gov', ['NGA', 'PGO', 'Development Partner'])->nullable();
             $table->string('sources')->nullable();

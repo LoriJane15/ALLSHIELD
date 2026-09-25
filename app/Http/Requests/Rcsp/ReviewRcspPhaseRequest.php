@@ -66,7 +66,9 @@ class ReviewRcspPhaseRequest extends FormRequest
                     $validator->errors()->add("statuses.{$form->id}", 'Only the latest submitted activity version may be reviewed.');
                 }
                 $submittedStatuses = (array) $this->input('statuses', []);
-                if (! $form->file && (($submittedStatuses[$form->id] ?? null) === 'approved')) {
+                if ($form->conduct === 'yes'
+                    && ! $form->file
+                    && (($submittedStatuses[$form->id] ?? null) === 'approved')) {
                     $validator->errors()->add("statuses.{$form->id}", 'Supporting evidence is required before approval.');
                 }
             }

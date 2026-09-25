@@ -13,7 +13,8 @@ class DashboardController extends Controller
     {
         $agencyId = auth()->user()->gov_agency_id;
 
-        $assigned = Implementation::whereJsonContains('agencies', $agencyId);
+        $assigned = Implementation::whereJsonContains('agencies', $agencyId)
+            ->where('status', '!=', 'not yet started');
 
         $acceptedIds = AgencyImplanResponse::where('gov_agency_id', $agencyId)
             ->where('response_status', 'accepted')->pluck('implementation_id');

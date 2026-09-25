@@ -16,7 +16,7 @@
 @endphp
 
 @push('styles')
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="{{ asset('assets/vendors/leaflet/leaflet.css') }}" />
 <link rel="stylesheet" href="{{ asset('assets/css/mblrc-dashboard.css') }}">
 <style>
     .fr-avatar { width: 72px; height: 72px; object-fit: cover; }
@@ -127,13 +127,15 @@
 <div class="mblrc-dashboard-container" id="frProfile"
      data-fr-id="{{ $fr->id }}"
      data-program-status="{{ route('mblrc.fr.program-status.update', $fr) }}"
+     data-location-geocode="{{ route('mblrc.fr.location.geocode', $fr) }}"
      data-location-save="{{ route('mblrc.fr.location.save', $fr) }}"
      data-location-history="{{ route('mblrc.fr.location.history', $fr) }}"
      data-skills-store="{{ route('mblrc.fr.skills.store', $fr) }}"
      data-skills-suggest="{{ route('mblrc.fr.skills.suggestions') }}"
      data-assistance-store="{{ route('mblrc.fr.assistance.store', $fr) }}"
      data-education-store="{{ route('mblrc.fr.education.update', $fr) }}"
-     data-lat="{{ $fr->latitude }}" data-lng="{{ $fr->longitude }}">
+     data-lat="{{ $fr->latitude }}" data-lng="{{ $fr->longitude }}"
+     data-has-saved-location="{{ $fr->latitude !== null && $fr->longitude !== null ? '1' : '0' }}">
 
     {{-- Modern Hero Banner (SHIELD Brand Design) --}}
     <div class="mblrc-hero mb-4">
@@ -673,21 +675,36 @@
                         </div>
                     </div>
                     <span class="badge" style="background: #eef2ff; color: #312e81; font-weight: 700; border-radius: 8px; padding: 0.4rem 0.8rem; border: 1px solid #c7d2fe;">
-                        <i class="mdi mdi-map-marker mr-1"></i> Click map to pin location
+                        <i class="mdi mdi-map-search mr-1"></i> Enter the placement address to locate it on the map
                     </span>
                 </div>
                 <div class="mblrc-form-card-body">
-                    <div id="frLocationMap"></div>
-                    <form data-location-form class="mt-3 p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-9">
-                                <label class="mblrc-label">Placement Address & Landmarks</label>
-                                <input name="placement_address" value="{{ $fr->placement_address }}" placeholder="Enter placement address or landmark details" class="mblrc-input" required>
+                    <form data-location-form class="p-3 rounded-3" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                        <div class="row g-3">
+                            <div class="col-md-7">
+                                <label class="mblrc-label">Placement Address</label>
+                                <input name="placement_address" value="{{ $fr->placement_address }}" placeholder="Enter placement address" class="mblrc-input" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="mblrc-label">Landmark <span class="text-muted font-weight-normal">(optional)</span></label>
+                                <input name="landmark" value="" placeholder="Near New Opon Elementary School" class="mblrc-input">
+                            </div>
+                            <div class="col-12">
+                                <div data-location-status class="small text-muted" role="status" aria-live="polite">
+                                    @if ($fr->latitude !== null && $fr->longitude !== null)
+                                        Saved location: {{ $fr->placement_address ?: 'Coordinates available' }}
+                                    @else
+                                        Locating the saved residential address&hellip;
+                                    @endif
+                                </div>
                             </div>
                             <input name="latitude" type="hidden" value="{{ $fr->latitude }}">
                             <input name="longitude" type="hidden" value="{{ $fr->longitude }}">
-                            <div class="col-md-3">
-                                <button class="btn w-100" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.65rem 1rem;">
+                            <div class="col-12">
+                                <div id="frLocationMap"></div>
+                            </div>
+                            <div class="col-12 text-end">
+                                <button type="submit" data-location-save-button class="btn" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 10px; padding: 0.65rem 1.4rem;">
                                     <i class="mdi mdi-content-save mr-1"></i> Save Location
                                 </button>
                             </div>
@@ -702,10 +719,8 @@
 @endsection
 
 @push('scripts')
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
-    const DAVAO_SUR = [6.7497, 125.3572];
     const root = document.getElementById('frProfile');
     if (!root) return;
 
@@ -738,9 +753,8 @@
         if (r.success) location.reload();
     });
 
-    initLocationMap(root);
-    initSkills(root);
     initAssistance(root);
+    initLocationHistory(root);
 
     // Education / work
     root.querySelector('[data-education-form]')?.addEventListener('submit', async (e) => {
@@ -753,67 +767,7 @@
         if (r.success) location.reload();
     });
 
-    const pinIcon = L.divIcon({
-        className: 'mblrc-pin-wrapper',
-        html: `
-            <div style="
-                position: relative;
-                width: 32px;
-                height: 32px;
-                background: #312e81;
-                border: 2.5px solid #ffffff;
-                border-radius: 50% 50% 50% 0;
-                transform: rotate(-45deg);
-                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            ">
-                <svg style="transform: rotate(45deg); width: 15px; height: 15px; fill: #ffffff;" viewBox="0 0 24 24">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                </svg>
-            </div>
-        `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
-    });
-
-    function initLocationMap(root) {
-        const mapEl = document.getElementById('frLocationMap');
-        if (!mapEl) return;
-        const lat = parseFloat(root.dataset.lat) || DAVAO_SUR[0];
-        const lng = parseFloat(root.dataset.lng) || DAVAO_SUR[1];
-        const map = L.map(mapEl).setView([lat, lng], root.dataset.lat ? 14 : 10);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap', maxZoom: 19,
-        }).addTo(map);
-        // Tab is hidden on load — fix tile sizing when shown.
-        document.querySelector('a[href="#tab-geotag"]')?.addEventListener('shown.bs.tab', () => map.invalidateSize());
-
-        const form = root.querySelector('[data-location-form]');
-        let marker = root.dataset.lat ? L.marker([lat, lng], { icon: pinIcon }).addTo(map) : null;
-
-        map.on('click', (e) => {
-            const { lat, lng } = e.latlng;
-            if (marker) marker.setLatLng(e.latlng);
-            else marker = L.marker(e.latlng, { icon: pinIcon }).addTo(map);
-            form.latitude.value = lat.toFixed(8);
-            form.longitude.value = lng.toFixed(8);
-        });
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!form.latitude.value) return alert('Click the map to set a location first.');
-            const r = await postJson(root.dataset.locationSave, {
-                placement_address: form.placement_address.value,
-                latitude: form.latitude.value,
-                longitude: form.longitude.value,
-            });
-            if (r.success) location.reload();
-        });
-
-        // History
+    function initLocationHistory(root) {
         fetch(root.dataset.locationHistory, { headers: { Accept: 'application/json' } })
             .then((r) => r.json())
             .then((rows) => {
@@ -874,4 +828,3 @@
 })();
 </script>
 @endpush
-

@@ -17,6 +17,7 @@ use App\Models\PswdoEnrollment;
 use App\Models\PswdoEnrollmentDocument;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
+use App\Models\User;
 use App\Policies\ChatConversationPolicy;
 use App\Policies\Ib39CdrDocumentVersionPolicy;
 use App\Policies\Ib39CdrProcessingPolicy;
@@ -35,6 +36,7 @@ use App\Services\ChatUnreadService;
 use App\Services\LockedIb39FeaReadiness;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -69,11 +71,43 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(RcspForm::class, RcspFormPolicy::class);
         View::composer(['layouts.skydash-h', 'layouts.skydash-v'], function ($view): void {
             $user = auth()->user();
-            $view->with('chatUnread', $user
-                ? app(ChatUnreadService::class)->summary($user)
-                : ['total' => 0, 'total_text' => '0', 'conversations' => []]);
+            $notificationUnreadCount = $user
+                ? $user->unreadNotifications()->count()
+                : 0;
+
+            $view->with([
+                'chatUnread' => $user
+                    ? app(ChatUnreadService::class)->summary($user)
+                    : ['total' => 0, 'total_text' => '0', 'conversations' => []],
+                'topbarProfileImage' => $this->accountImageUrl($user),
+                'notificationUnreadCount' => $notificationUnreadCount,
+                'notificationDestination' => $user
+                    ? route($user->homeRoute()).($user->hasRole('japic') ? '#notifications-heading' : '')
+                    : '#',
+            ]);
         });
         // SkyDash uses Bootstrap — render paginator links with Bootstrap markup.
         Paginator::useBootstrapFive();
+    }
+
+    private function accountImageUrl(?User $user): ?string
+    {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->hasRole('gov_agency') && $user->govAgency?->profile) {
+            return asset('assets/logoAgency/'.$user->govAgency->profile);
+        }
+
+        if (! $user->logo) {
+            return null;
+        }
+
+        if (Storage::disk('public')->exists($user->logo)) {
+            return Storage::disk('public')->url($user->logo);
+        }
+
+        return asset('assets/'.ltrim($user->logo, '/'));
     }
 }
