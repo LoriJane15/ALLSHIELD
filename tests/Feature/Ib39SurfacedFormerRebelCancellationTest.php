@@ -173,14 +173,13 @@ class Ib39SurfacedFormerRebelCancellationTest extends TestCase
         $cdrVersionId = $this->cdrVersion($record);
         $cdr->forceFill([
             'status' => 'Completed',
-            'current_final_version_id' => $cdrVersionId,
             'completed_at' => now(),
             'completed_by' => $actor->id,
         ])->save();
         $received = now()->subDay();
         $processing = JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $record->id,
-            'triggering_cdr_document_version_id' => $cdrVersionId,
+            'triggering_cdr_final_document_id' => $cdrVersionId,
             'status' => JapicCertificationStatus::Completed,
             'received_at' => $received,
             'due_at' => $received->copy()->addDays(14),
@@ -202,7 +201,7 @@ class Ib39SurfacedFormerRebelCancellationTest extends TestCase
         $this->assertSame('JAPIC Certified', $record->cancellation()->sole()->previous_overall_status);
         $this->assertSame('Cancelled', $record->fresh()->load([
             'cancellation',
-            'cdrProcessing.currentFinalVersion',
+            'cdrProcessing.finalDocument',
             'japicCertificationProcessing.currentFinalVersion',
         ])->overall_case_status);
         $this->assertSame(JapicCertificationStatus::Completed, $processing->fresh()->status);
@@ -284,7 +283,7 @@ class Ib39SurfacedFormerRebelCancellationTest extends TestCase
 
         return JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $record->id,
-            'triggering_cdr_document_version_id' => $this->cdrVersion($record),
+            'triggering_cdr_final_document_id' => $this->cdrVersion($record),
             'status' => $status, 'received_at' => $received, 'due_at' => $received->copy()->addDays(14),
             'completed_at' => $status === JapicCertificationStatus::Completed ? now() : null, 'lock_version' => 0,
         ]);
@@ -294,8 +293,8 @@ class Ib39SurfacedFormerRebelCancellationTest extends TestCase
     {
         $actor = User::factory()->role('39th_ib')->create();
 
-        return DB::table('ib39_cdr_document_versions')->insertGetId([
-            'cdr_processing_id' => $record->cdrProcessing()->value('id'), 'version_number' => 1,
+        return DB::table('ib39_cdr_final_documents')->insertGetId([
+            'cdr_processing_id' => $record->cdrProcessing()->value('id'),
             'source_type' => 'generated', 'storage_path' => 'private/cdr/final.pdf', 'original_filename' => 'final.pdf',
             'mime_type' => 'application/pdf', 'size_bytes' => 123, 'sha256' => str_repeat('b', 64),
             'created_by' => $actor->id, 'finalized_at' => now(), 'created_at' => now(), 'updated_at' => now(),

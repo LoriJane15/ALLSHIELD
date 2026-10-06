@@ -7,7 +7,7 @@ use App\Enums\Ib39CdrPhotoType;
 use App\Enums\Ib39CdrStatus;
 use App\Enums\Ib39FrCategory;
 use App\Models\Barangay;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39CdrProcessing;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Municipality;
@@ -31,24 +31,24 @@ class Ib39CdrDomainTest extends TestCase
             'ib39_cdr_processings',
             'ib39_cdr_forms',
             'ib39_cdr_status_histories',
-            'ib39_cdr_document_versions',
             'ib39_cdr_photos',
             'ib39_cdr_photo_versions',
         ] as $table) {
             $this->assertTrue(Schema::hasTable($table));
         }
+        $this->assertTrue(Schema::hasTable('ib39_cdr_final_documents'));
+        $this->assertFalse(Schema::hasTable('ib39_cdr_document_versions'));
 
         $this->assertTrue(Schema::hasColumns('ib39_cdr_processings', [
             'ib39_surfaced_former_rebel_id', 'status', 'started_at', 'due_at',
-            'completed_at', 'completed_by', 'current_final_version_id', 'remarks',
+            'completed_at', 'completed_by', 'remarks',
             'delay_reason',
         ]));
         $this->assertTrue(Schema::hasColumns('ib39_cdr_forms', [
             'cdr_processing_id', 'schema_version', 'content', 'last_edited_by',
         ]));
-        $this->assertTrue(Schema::hasColumns('ib39_cdr_document_versions', [
-            'cdr_processing_id', 'version_number', 'source_type', 'replaces_version_id',
-            'replacement_reason', 'storage_path', 'original_filename', 'mime_type',
+        $this->assertTrue(Schema::hasColumns('ib39_cdr_final_documents', [
+            'cdr_processing_id', 'source_type', 'storage_path', 'original_filename', 'mime_type',
             'size_bytes', 'sha256', 'content_schema_version', 'content_snapshot',
             'created_by', 'finalized_at',
         ]));
@@ -57,20 +57,16 @@ class Ib39CdrDomainTest extends TestCase
         $this->assertTrue($processingIndexes->contains(
             fn (array $index) => $index['unique'] && $index['columns'] === ['ib39_surfaced_former_rebel_id']
         ));
-        $versionIndexes = collect(Schema::getIndexes('ib39_cdr_document_versions'));
-        $this->assertTrue($versionIndexes->contains(
-            fn (array $index) => $index['unique'] && $index['columns'] === ['cdr_processing_id', 'version_number']
+        $finalIndexes = collect(Schema::getIndexes('ib39_cdr_final_documents'));
+        $this->assertTrue($finalIndexes->contains(
+            fn (array $index) => $index['unique'] && $index['columns'] === ['cdr_processing_id']
         ));
 
-        $processingForeignKeys = collect(Schema::getForeignKeys('ib39_cdr_processings'));
+        $processingForeignKeys = collect(Schema::getForeignKeys('ib39_cdr_final_documents'));
         $this->assertTrue($processingForeignKeys->contains(
-            fn (array $key) => $key['columns'] === ['ib39_surfaced_former_rebel_id']
-                && $key['foreign_table'] === 'ib39_surfaced_former_rebels'
+            fn (array $key) => $key['columns'] === ['cdr_processing_id']
+                && $key['foreign_table'] === 'ib39_cdr_processings'
                 && $key['on_delete'] === 'restrict'
-        ));
-        $this->assertTrue($processingForeignKeys->contains(
-            fn (array $key) => $key['columns'] === ['current_final_version_id']
-                && $key['foreign_table'] === 'ib39_cdr_document_versions'
         ));
     }
 
@@ -98,8 +94,8 @@ class Ib39CdrDomainTest extends TestCase
         }
 
         $this->expectException(QueryException::class);
-        DB::table('ib39_cdr_document_versions')->insert([
-            ...$this->versionAttributes($processing),
+        DB::table('ib39_cdr_final_documents')->insert([
+            ...$this->finalDocumentAttributes($processing),
             'source_type' => 'uncontrolled',
         ]);
     }
@@ -126,7 +122,7 @@ class Ib39CdrDomainTest extends TestCase
             $this->assertNull($processing->due_at);
             $this->assertNull($processing->completed_at);
             $this->assertNull($processing->completed_by);
-            $this->assertNull($processing->current_final_version_id);
+            $this->assertNull($processing->finalDocument);
             $this->assertNull($processing->remarks);
             $this->assertNull($processing->delay_reason);
             $this->assertNull($processing->form->content);
@@ -237,41 +233,13 @@ class Ib39CdrDomainTest extends TestCase
         }
     }
 
-    public function test_document_version_numbers_are_unique_within_a_cdr(): void
+    public function test_one_final_document_per_cdr_is_enforced_by_unique_constraint(): void
     {
         $processing = $this->processing();
-        $processing->documentVersions()->create($this->versionAttributes($processing));
+        $processing->finalDocument()->create($this->finalDocumentAttributes($processing));
 
         $this->expectException(QueryException::class);
-        $processing->documentVersions()->create($this->versionAttributes($processing));
-    }
-
-    public function test_replacement_requires_a_reason_and_a_version_from_the_same_cdr(): void
-    {
-        $processing = $this->processing();
-        $first = $processing->documentVersions()->create($this->versionAttributes($processing));
-
-        try {
-            $processing->documentVersions()->create([
-                ...$this->versionAttributes($processing),
-                'version_number' => 2,
-                'replaces_version_id' => $first->id,
-                'replacement_reason' => null,
-            ]);
-            $this->fail('A replacement without a reason was created.');
-        } catch (QueryException) {
-            $this->assertDatabaseCount('ib39_cdr_document_versions', 1);
-        }
-
-        $replacement = $processing->documentVersions()->create([
-            ...$this->versionAttributes($processing),
-            'version_number' => 2,
-            'replaces_version_id' => $first->id,
-            'replacement_reason' => 'Synthetic correction reason.',
-        ]);
-
-        $this->assertTrue($replacement->replacesVersion->is($first));
-        $this->assertTrue($first->replacementVersions->contains($replacement));
+        $processing->finalDocument()->create($this->finalDocumentAttributes($processing));
     }
 
     public function test_model_relationships_enum_datetime_and_encrypted_content_casts_work(): void
@@ -283,8 +251,8 @@ class Ib39CdrDomainTest extends TestCase
             'content' => ['assessment' => 'Synthetic classified draft text'],
             'last_edited_by' => $editor->id,
         ]);
-        $version = $processing->documentVersions()->create([
-            ...$this->versionAttributes($processing),
+        $version = $processing->finalDocument()->create([
+            ...$this->finalDocumentAttributes($processing),
             'content_snapshot' => ['assessment' => 'Synthetic immutable snapshot'],
             'content_schema_version' => 1,
         ]);
@@ -293,7 +261,6 @@ class Ib39CdrDomainTest extends TestCase
         ]);
         $photoVersion = $photo->versions()->create($this->photoVersionAttributes());
         $photo->update(['current_photo_version_id' => $photoVersion->id]);
-        $processing->update(['current_final_version_id' => $version->id]);
 
         $this->assertTrue($processing->surfacedFormerRebel->is($processing->surfacedFormerRebel));
         $this->assertTrue($processing->surfacedFormerRebel->cdrProcessing->is($processing));
@@ -301,22 +268,22 @@ class Ib39CdrDomainTest extends TestCase
         $this->assertSame(['assessment' => 'Synthetic classified draft text'], $form->fresh()->content);
         $this->assertSame(Ib39CdrDocumentSource::Generated, $version->source_type);
         $this->assertSame(['assessment' => 'Synthetic immutable snapshot'], $version->content_snapshot);
-        $this->assertTrue($processing->fresh()->currentFinalVersion->is($version));
+        $this->assertTrue($processing->fresh()->finalDocument->is($version));
         $this->assertTrue($photo->fresh()->currentVersion->is($photoVersion));
 
         $rawFormContent = DB::table('ib39_cdr_forms')->where('id', $form->id)->value('content');
-        $rawSnapshot = DB::table('ib39_cdr_document_versions')->where('id', $version->id)->value('content_snapshot');
+        $rawSnapshot = DB::table('ib39_cdr_final_documents')->where('id', $version->id)->value('content_snapshot');
         $this->assertStringNotContainsString('Synthetic classified draft text', $rawFormContent);
         $this->assertStringNotContainsString('Synthetic immutable snapshot', $rawSnapshot);
         $this->assertArrayNotHasKey('storage_path', $version->toArray());
         $this->assertArrayNotHasKey('storage_path', $photoVersion->toArray());
     }
 
-    public function test_status_history_document_versions_and_photo_versions_are_immutable_through_models(): void
+    public function test_status_history_final_documents_and_photo_versions_are_immutable_through_models(): void
     {
         $processing = $this->processing();
         $history = $processing->statusHistories()->sole();
-        $document = $processing->documentVersions()->create($this->versionAttributes($processing));
+        $document = $processing->finalDocument()->create($this->finalDocumentAttributes($processing));
         $photo = $processing->photos()->create(['photo_type' => Ib39CdrPhotoType::FrPhoto]);
         $photoVersion = $photo->versions()->create($this->photoVersionAttributes());
 
@@ -324,7 +291,7 @@ class Ib39CdrDomainTest extends TestCase
             try {
                 $immutable->forceFill(match (true) {
                     $immutable instanceof Ib39CdrStatusHistory => ['event' => 'changed'],
-                    $immutable instanceof Ib39CdrDocumentVersion => ['original_filename' => 'changed.pdf'],
+                    $immutable instanceof Ib39CdrFinalDocument => ['original_filename' => 'changed.pdf'],
                     default => ['original_filename' => 'changed.jpg'],
                 });
                 $immutable->save();
@@ -384,11 +351,10 @@ class Ib39CdrDomainTest extends TestCase
         $migration->backfillExistingSurfacedFormerRebels();
     }
 
-    private function versionAttributes(Ib39CdrProcessing $processing): array
+    private function finalDocumentAttributes(Ib39CdrProcessing $processing): array
     {
         return [
             'cdr_processing_id' => $processing->id,
-            'version_number' => 1,
             'source_type' => Ib39CdrDocumentSource::Generated,
             'storage_path' => 'ib39/cdr/synthetic/final.html',
             'original_filename' => 'synthetic-cdr.html',

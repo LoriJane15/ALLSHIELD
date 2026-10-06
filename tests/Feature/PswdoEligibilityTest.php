@@ -13,6 +13,7 @@ use App\Services\Ib39SurfacedFormerRebelService;
 use App\Services\JapicCertificationDocumentService;
 use App\Services\PswdoEligibilityService;
 use App\Services\PswdoEnrollmentIntakeService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ class PswdoEligibilityTest extends TestCase
 
     public function test_both_completed_owned_finals_are_required_and_intake_is_idempotent(): void
     {
-        [$record, $cdrVersion, $japicVersion] = $this->eligibleRecord();
+        [$record, , $japicVersion] = $this->eligibleRecord();
         $eligibility = app(PswdoEligibilityService::class);
         $intake = app(PswdoEnrollmentIntakeService::class);
 
@@ -35,31 +36,36 @@ class PswdoEligibilityTest extends TestCase
         $this->assertSame($first->id, $second->id);
         $this->assertDatabaseCount('pswdo_enrollments', 1);
 
-        $record->cdrProcessing->update(['current_final_version_id' => null]);
-        $this->assertFalse($eligibility->isEligible($record->fresh()));
-        $record->cdrProcessing->update(['current_final_version_id' => $cdrVersion->id]);
         $record->japicCertificationProcessing->forceFill(['current_final_version_id' => null])->save();
         $this->assertFalse($eligibility->isEligible($record->fresh()));
         $record->japicCertificationProcessing->forceFill(['current_final_version_id' => $japicVersion->id])->save();
         $this->assertTrue($eligibility->isEligible($record->fresh()));
     }
 
+    public function test_completed_cdr_without_a_final_document_is_ineligible(): void
+    {
+        $actor = User::factory()->role('39th_ib')->create();
+        $record = app(Ib39SurfacedFormerRebelService::class)->create([
+            'first_name' => 'Missing', 'last_name' => 'Final', 'category' => Ib39FrCategory::RegularMember->value,
+            'municipality_id' => Municipality::query()->create(['name' => 'Missing Final '.uniqid()])->id,
+            'surfaced_at' => '2026-09-01', 'possessed_firearms' => false,
+        ], $actor);
+        $record->cdrProcessing->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id]);
+
+        $this->assertFalse(app(PswdoEligibilityService::class)->isEligible($record->fresh()));
+    }
+
     public function test_invalid_cross_processing_final_ownership_is_rejected(): void
     {
         [$record] = $this->eligibleRecord();
-        [$other, $otherCdrVersion, $otherJapicVersion] = $this->eligibleRecord();
+        [$other, , $otherJapicVersion] = $this->eligibleRecord();
         $eligibility = app(PswdoEligibilityService::class);
 
-        foreach ([
-            fn () => $record->cdrProcessing->update(['current_final_version_id' => $otherCdrVersion->id]),
-            fn () => $record->japicCertificationProcessing->forceFill(['current_final_version_id' => $otherJapicVersion->id])->save(),
-        ] as $attack) {
-            try {
-                $attack();
-                $this->fail('A cross-processing final ownership substitution was accepted.');
-            } catch (\Throwable $exception) {
-                $this->assertMatchesRegularExpression('/belongs to another|Invalid JAPIC current document/', $exception->getMessage());
-            }
+        try {
+            $record->japicCertificationProcessing->forceFill(['current_final_version_id' => $otherJapicVersion->id])->save();
+            $this->fail('A cross-processing certification final ownership substitution was accepted.');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Invalid JAPIC current document', $exception->getMessage());
         }
         $this->assertTrue($eligibility->isEligible($record->fresh()));
         $this->assertNotSame($record->id, $other->id);
@@ -74,6 +80,35 @@ class PswdoEligibilityTest extends TestCase
         $this->actingAs($pswdo)->get(route('pswdo.dashboard'))->assertOk();
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.index'))->assertOk();
         $this->assertDatabaseCount('pswdo_enrollments', 0);
+    }
+
+    public function test_eligible_pswdo_viewer_can_open_official_cdr_workspace_but_cannot_download(): void
+    {
+        Storage::fake('local');
+        [$record] = $this->eligibleRecord();
+        app(PswdoEnrollmentIntakeService::class)->receiveEligible($record->id);
+        $pswdo = User::factory()->role('pswdo')->create();
+        $cdr = $record->cdrProcessing;
+        Storage::disk('local')->put($cdr->finalDocument->getRawOriginal('storage_path'), "%PDF-1.4\npswdo cdr\n%%EOF");
+
+        $this->actingAs($pswdo)->get(route('cdr.workspace', $cdr))
+            ->assertOk()
+            ->assertSee('Final CDR')
+            ->assertSee('src="'.route('cdr.documents.preview', ['cdr' => $cdr, 'file' => 1]).'#toolbar=0&amp;navpanes=0"', false)
+            ->assertDontSee('CDR Document Preview')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertDontSee('name="content[assessment]"', false)
+            ->assertDontSee('Download CDR')
+            ->assertDontSee('Print Document');
+        $this->actingAs($pswdo)->get(route('cdr.documents.preview', $cdr))
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+        $this->actingAs($pswdo)->get(route('pswdo.cdr.documents.download', $cdr))->assertForbidden();
+        $this->actingAs($pswdo)->get(route('ib39.cdr.edit', $cdr))->assertForbidden();
+        $this->actingAs($pswdo)->post(route('cdr.comments.store', $cdr), ['text' => 'PSWDO review'])
+            ->assertRedirect();
+        $this->actingAs($pswdo)->get(route('cdr.workspace', $cdr))->assertOk()->assertSee('PSWDO review');
     }
 
     public function test_japic_completion_automatically_creates_one_enrollment_in_the_same_flow(): void
@@ -107,14 +142,14 @@ class PswdoEligibilityTest extends TestCase
             'municipality_id' => $municipality->id, 'surfaced_at' => '2026-09-01', 'possessed_firearms' => $firearms,
         ], $ib39)->load('cdrProcessing');
         $cdr = $record->cdrProcessing;
-        $cdrVersion = $cdr->documentVersions()->create([
-            'version_number' => 1, 'source_type' => 'uploaded', 'storage_path' => "ib39/cdr/{$cdr->id}/final.pdf",
+        $cdrVersion = $cdr->finalDocument()->create([
+            'source_type' => 'uploaded', 'storage_path' => "ib39/cdr/{$cdr->id}/final.pdf",
             'original_filename' => 'cdr.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20,
             'sha256' => hash('sha256', uniqid('cdr', true)), 'created_by' => $ib39->id, 'finalized_at' => now(),
         ]);
-        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $ib39->id, 'current_final_version_id' => $cdrVersion->id]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $ib39->id]);
         $processing = JapicCertificationProcessing::query()->forceCreate([
-            'ib39_surfaced_former_rebel_id' => $record->id, 'triggering_cdr_document_version_id' => $cdrVersion->id,
+            'ib39_surfaced_former_rebel_id' => $record->id, 'triggering_cdr_final_document_id' => $cdrVersion->id,
             'status' => JapicCertificationStatus::Completed, 'received_at' => now(), 'due_at' => now()->addDays(14),
             'completed_at' => now(), 'completed_by' => $japic->id, 'lock_version' => 1,
         ]);

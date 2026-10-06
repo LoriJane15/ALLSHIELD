@@ -106,6 +106,79 @@ class Ib39RecordSurfacedFormerRebelTest extends TestCase
         $this->assertSame('FR001', AuditLog::query()->sole()->new_values['reference_number']);
     }
 
+    public function test_firearms_yes_and_no_render_after_save_on_dashboard_list_and_profile(): void
+    {
+        $actor = $this->ib39User();
+        $records = [];
+
+        foreach ([
+            ['value' => '1', 'first_name' => 'Firearms Yes', 'expected' => true, 'badge' => 'bg-danger text-white'],
+            ['value' => '0', 'first_name' => 'Firearms No', 'expected' => false, 'badge' => 'bg-secondary text-white'],
+        ] as $case) {
+            $response = $this->actingAs($actor)->post(route('ib39.fr-profiles.store'), [
+                ...$this->validPayload(),
+                'first_name' => $case['first_name'],
+                'possessed_firearms' => $case['value'],
+            ]);
+
+            $record = Ib39SurfacedFormerRebel::query()
+                ->where('first_name', $case['first_name'])
+                ->sole();
+            $records[] = $record;
+
+            $response->assertRedirect(route('ib39.dashboard'))
+                ->assertSessionHas('surfaced_fr_modal', function (array $modalData) use ($case, $record): bool {
+                    $expectedKeys = ['id', 'reference_number', 'name', 'category', 'surfaced_at', 'area', 'firearms'];
+
+                    return array_diff($expectedKeys, array_keys($modalData)) === []
+                        && $modalData['id'] === $record->id
+                        && $modalData['firearms'] === $case['expected'];
+                });
+
+            $this->assertSame($case['expected'], $record->possessed_firearms);
+
+            $this->actingAs($actor)
+                ->get(route('ib39.dashboard'))
+                ->assertOk()
+                ->assertSeeInOrder([
+                    '<span class="text-muted small">Firearms</span>',
+                    $case['badge'],
+                ], false);
+
+            $this->actingAs($actor)
+                ->get(route('ib39.fr-profiles.show', $record))
+                ->assertOk()
+                ->assertSee('Possessed firearms')
+                ->assertSee($case['expected'] ? 'badge-pill-yes' : 'badge-pill-no', false);
+        }
+
+        $this->actingAs($actor)
+            ->get(route('ib39.fr-profiles.index'))
+            ->assertOk()
+            ->assertSee($records[0]->display_name)
+            ->assertSee($records[1]->display_name);
+    }
+
+    public function test_dashboard_modal_tolerates_legacy_payload_without_firearms_key(): void
+    {
+        $this->actingAs($this->ib39User())
+            ->withSession([
+                'surfaced_fr_modal' => [
+                    'id' => 1,
+                    'reference_number' => 'FR001',
+                    'name' => 'Legacy Record',
+                    'category' => Ib39FrCategory::MilisyaNgBayan->value,
+                    'area' => 'Legacy Area',
+                ],
+            ])
+            ->get(route('ib39.dashboard'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<span class="text-muted small">Firearms</span>',
+                'bg-secondary text-white',
+            ], false);
+    }
+
     public function test_submitted_server_owned_unapproved_identity_and_forwarding_fields_are_rejected(): void
     {
         $payload = $this->validPayload();

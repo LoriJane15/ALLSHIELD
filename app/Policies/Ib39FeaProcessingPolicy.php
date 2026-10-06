@@ -19,6 +19,11 @@ class Ib39FeaProcessingPolicy
             && $processing->surfacedFormerRebel()->exists();
     }
 
+    public function comment(User $user, Ib39FeaProcessing $processing): bool
+    {
+        return $this->view($user, $processing);
+    }
+
     public function completeDocument(User $user, Ib39FeaProcessing $processing): bool
     {
         return false;

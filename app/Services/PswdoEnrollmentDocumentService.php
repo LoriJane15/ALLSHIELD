@@ -57,7 +57,7 @@ class PswdoEnrollmentDocumentService
                 $locked = PswdoEnrollment::query()->with([
                     'documents',
                     'surfacedFormerRebel.cancellation',
-                    'surfacedFormerRebel.cdrProcessing.currentFinalVersion',
+                    'surfacedFormerRebel.cdrProcessing.finalDocument',
                     'surfacedFormerRebel.japicCertificationProcessing.currentFinalVersion',
                 ])->lockForUpdate()->findOrFail($enrollment->id);
                 $this->assertActor($locked, $actor);

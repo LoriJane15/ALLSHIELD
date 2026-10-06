@@ -2,10 +2,10 @@
 
 namespace App\Policies;
 
+use App\Enums\Ib39FeaDocumentStatus;
 use App\Models\Ib39FeaDocumentVersion;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
-use App\Services\PswdoEligibilityService;
 
 class Ib39FeaDocumentVersionPolicy
 {
@@ -29,12 +29,18 @@ class Ib39FeaDocumentVersionPolicy
             return $version->processing()->whereHas('surfacedFormerRebel')->exists();
         }
 
+        $version->loadMissing('document');
+        if ($version->document?->status !== Ib39FeaDocumentStatus::Completed
+            || $version->document->current_final_version_id !== $version->id) {
+            return false;
+        }
+
         if ($user->hasRole('pswdo')) {
             $version->loadMissing('processing.surfacedFormerRebel.pswdoEnrollment');
             $record = $version->processing?->surfacedFormerRebel;
 
             return $record?->pswdoEnrollment !== null
-                && app(PswdoEligibilityService::class)->isEligible($record);
+                && $user->can('view', $record->pswdoEnrollment);
         }
 
         if (! $user->hasRole('japic')) {

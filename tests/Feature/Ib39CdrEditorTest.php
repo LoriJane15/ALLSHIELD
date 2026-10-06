@@ -6,12 +6,13 @@ use App\Enums\Ib39CdrPhotoType;
 use App\Enums\Ib39CdrStatus;
 use App\Enums\Ib39FrCategory;
 use App\Models\Barangay;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39CdrPhotoVersion;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Municipality;
 use App\Models\User;
 use App\Services\Ib39SurfacedFormerRebelService;
+use App\Support\OfficialDocumentPdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -62,8 +63,7 @@ class Ib39CdrEditorTest extends TestCase
             ['PUT', route('ib39.cdr.update', $cdr)],
             ['GET', route('ib39.cdr.preview', $cdr)],
             ['GET', route('ib39.cdr.print', $cdr)],
-            ['GET', route('ib39.cdr.finalization.review', $cdr)],
-            ['POST', route('ib39.cdr.finalize', $cdr)],
+            ['GET', route('ib39.cdr.download', $cdr)],
             ['POST', route('ib39.cdr.photos.store', $cdr)],
             ['GET', route('ib39.cdr.photos.show', $version)],
         ];
@@ -103,7 +103,7 @@ class Ib39CdrEditorTest extends TestCase
         $this->assertTrue($startedAt->equalTo($cdr->started_at));
         $this->assertNull($cdr->completed_at);
         $this->assertSame(2, $cdr->statusHistories()->count());
-        $this->assertDatabaseCount('ib39_cdr_document_versions', 0);
+        $this->assertDatabaseCount('ib39_cdr_final_documents', 0);
     }
 
     public function test_structured_repeatable_content_signatories_are_saved_encrypted_without_changing_fr_profile(): void
@@ -210,10 +210,29 @@ class Ib39CdrEditorTest extends TestCase
         $preview = $this->actingAs($this->actor)->get(route('ib39.cdr.preview', $cdr))->assertOk()
             ->assertSeeInOrder($expectedOrder)->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)->assertDontSee('<script>alert(1)</script>', false)
             ->assertSee('C O N F I D E N T I A L')->assertSee('39TH INFANTRY (SMASH’EM) BATTALION, 10ID, PA')->assertSee('Honor. Patriotism. Duty')
-            ->assertSee('@page{size:A4', false);
+            ->assertSee('@page{size:A4', false)
+            ->assertSee('Back to CDR Workspace')
+            ->assertSee('Print')
+            ->assertSee('Download')
+            ->assertDontSee('name="content[assessment]"', false);
         $this->assertStringContainsString('no-store', $preview->headers->get('Cache-Control'));
         $this->actingAs($this->actor)->get(route('ib39.cdr.print', $cdr))->assertOk()
             ->assertSee('DRAFT — NOT FINAL')->assertSee('window.print()', false);
+    }
+
+    public function test_draft_download_generates_the_saved_official_cdr_as_a_pdf(): void
+    {
+        $cdr = $this->record->cdrProcessing;
+        $this->actingAs($this->actor)->put(route('ib39.cdr.update', $cdr), [
+            'content' => ['assessment' => 'Generated PDF assessment'],
+        ])->assertRedirect();
+
+        $download = $this->actingAs($this->actor)->get(route('ib39.cdr.download', $cdr))->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+
+        $this->assertStringStartsWith('%PDF-', $download->getContent());
+        $this->assertStringContainsString('attachment;', $download->headers->get('Content-Disposition'));
     }
 
     public function test_photo_validation_rejects_disallowed_type_non_image_and_oversized_file(): void
@@ -272,7 +291,12 @@ class Ib39CdrEditorTest extends TestCase
         $this->actingAs(User::factory()->role('lgu')->create())->get(route('ib39.cdr.photos.show', $versions->last()))->assertForbidden();
 
         $editor = $this->actingAs($this->actor)->get(route('ib39.cdr.edit', $cdr))->assertOk();
-        $editor->assertDontSee($versions->last()->storage_path, false);
+        $editor->assertDontSee($versions->last()->storage_path, false)
+            ->assertSee(route('ib39.cdr.photos.show', $versions->last()))
+            ->assertSee('Choose Replacement Image')
+            ->assertSee('persistSelectedPhoto(this)', false)
+            ->assertDontSee('Save FR Photo')
+            ->assertDontSee('Replace FR Photo');
         $preview = $this->actingAs($this->actor)->get(route('ib39.cdr.preview', $cdr))->assertOk()
             ->assertDontSee('Whole-body with firearm')
             ->assertDontSee('Half-body without firearm')
@@ -280,8 +304,19 @@ class Ib39CdrEditorTest extends TestCase
         $this->assertSame(1, substr_count($preview->getContent(), route('ib39.cdr.photos.show', $versions->last())));
         $this->assertMatchesRegularExpression('/<section class="cover">.*'.preg_quote(route('ib39.cdr.photos.show', $versions->last()), '/').'.*<\/section>/s', $preview->getContent());
         $this->assertStringNotContainsString('FR Photo', substr($preview->getContent(), strpos($preview->getContent(), '<section class="signatures">')));
+        $persistedPhoto = Storage::disk('local')->get($versions->last()->storage_path);
+        $this->mock(OfficialDocumentPdf::class, function ($mock) use ($persistedPhoto): void {
+            $mock->shouldReceive('render')->once()->withArgs(function (string $html) use ($persistedPhoto): bool {
+                return str_contains($html, 'DRAFT')
+                    && str_contains($html, 'data:image/png;base64,'.base64_encode($persistedPhoto));
+            })->andReturn('%PDF-1.4 generated CDR draft');
+        });
+        $download = $this->actingAs($this->actor)->get(route('ib39.cdr.download', $cdr))->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-1.4', $download->getContent());
+
         $this->assertSame(Ib39CdrStatus::Ongoing, $cdr->fresh()->status);
-        $this->assertDatabaseCount('ib39_cdr_document_versions', 0);
+        $this->assertDatabaseCount('ib39_cdr_final_documents', 0);
     }
 
     public function test_workspace_link_is_on_profile_and_stage_four_does_not_create_external_workflows(): void
@@ -296,7 +331,7 @@ class Ib39CdrEditorTest extends TestCase
         foreach ($counts as $table => $count) {
             $this->assertSame($count, DB::table($table)->count());
         }
-        $this->assertSame(0, Ib39CdrDocumentVersion::query()->count());
+        $this->assertSame(0, Ib39CdrFinalDocument::query()->count());
     }
 
     private function fakePng(string $name, ?int $kilobytes = null): UploadedFile

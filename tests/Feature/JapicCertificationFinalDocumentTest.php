@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\JapicCertificationEvent;
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Services\JapicCertificationDocumentService;
@@ -37,7 +37,7 @@ class JapicCertificationFinalDocumentTest extends TestCase
         [$processing, $japic] = $this->context(JapicCertificationStatus::Pending);
 
         $this->actingAs($japic)->post(route('japic.certifications.final-document.upload', $processing), $this->payload($processing))
-            ->assertRedirect(route('japic.certifications.show', $processing));
+            ->assertRedirect(route('japic.certifications.workspace', $processing));
 
         $completed = $processing->fresh();
         $version = $completed->currentFinalVersion;
@@ -205,21 +205,132 @@ class JapicCertificationFinalDocumentTest extends TestCase
         $completed = $processing->fresh();
         $version = $completed->currentFinalVersion;
 
-        $preview = $this->actingAs($japic)->get(route('japic.certifications.document-versions.preview', [$completed, $version]))
+        $this->actingAs($japic)->get(route('japic.certifications.document-versions.preview', [$completed, $version]))
+            ->assertOk()
+            ->assertSee('Actual uploaded JAPIC certification')
+            ->assertSee('Print')
+            ->assertSee('Download')
+            ->assertSee(route('japic.certifications.document-versions.preview', [$completed, $version, 'file' => 1]));
+        $preview = $this->actingAs($japic)->get(route('japic.certifications.document-versions.preview', [$completed, $version, 'file' => 1]))
             ->assertOk()->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('Content-Disposition', 'inline; filename="final-signed.pdf"')
-            ->assertHeader('X-Content-Type-Options', 'nosniff');
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN');
         $this->assertStringContainsString('no-store', $preview->headers->get('Cache-Control'));
         $this->actingAs($japic)->get(route('japic.certifications.document-versions.download', [$completed, $version]))
-            ->assertOk()->assertDownload('final-signed.pdf');
+            ->assertOk()->assertDownload('final-signed.pdf')->assertHeader('X-Frame-Options', 'DENY');
         $this->assertDatabaseHas('audit_logs', ['action' => 'japic_certification_final_previewed', 'entity_id' => $version->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'japic_certification_final_downloaded', 'entity_id' => $version->id]);
 
         [$other] = $this->context(JapicCertificationStatus::Pending);
         $this->actingAs($japic)->get(route('japic.certifications.document-versions.preview', [$other, $version]))->assertNotFound();
-        $html = $this->actingAs($japic)->get(route('japic.certifications.show', $completed))->assertOk()->getContent();
+        $profile = $this->actingAs($japic)->get(route('japic.certifications.show', $completed))->assertOk()->getContent();
+        $this->assertStringContainsString('Final Certification', $profile);
+        $this->assertStringContainsString('Available', $profile);
+        $this->assertStringNotContainsString('<iframe', $profile);
+        $html = $this->actingAs($japic)->get(route('japic.certifications.workspace', $completed))->assertOk()->getContent();
+        $this->assertStringContainsString('Final File Uploaded', $html);
+        $this->assertStringContainsString('final-signed.pdf', $html);
+        $this->assertStringContainsString($japic->name, $html);
+        $this->assertStringContainsString('JAPIC', $html);
+        $this->assertStringContainsString('datetime=', $html);
+        $this->assertStringContainsString('Uploaded Final Certification', $html);
+        $this->assertStringContainsString('View Uploaded Certification', $html);
+        $this->assertStringContainsString(route('japic.certifications.document-versions.preview', [$completed, $version]), $html);
+        $this->assertStringContainsString('Completed / Read-only', $html);
+        $this->assertStringContainsString('fieldset disabled aria-label="Completed JAPIC certification content"', $html);
+        $this->assertStringContainsString('name="certificate[narrative_values][fr_name]"', $html);
+        $this->assertStringContainsString('Comments &amp; Remarks', $html);
+        $this->assertStringContainsString('Document History', $html);
+        $this->assertStringNotContainsString('Upload Final Signed Certification', $html);
+        $this->assertStringNotContainsString('Start Draft', $html);
+        $this->assertStringNotContainsString('Save Draft', $html);
+        $this->assertStringNotContainsString('id="japicAutoSaveStatus"', $html);
+        $this->assertStringNotContainsString('Final certification version 1', $html);
+        $this->assertStringNotContainsString('Official JAPIC certification draft preview', $html);
         $this->assertStringNotContainsString($version->getRawOriginal('storage_path'), $html);
         $this->assertStringNotContainsString('payload', $html);
+    }
+
+    public function test_uploaded_final_takes_priority_over_a_saved_draft_in_the_read_only_workspace(): void
+    {
+        [$processing, $japic] = $this->context(JapicCertificationStatus::Drafting);
+        $this->actingAs($japic)->post(route('japic.certifications.final-document.upload', $processing), $this->payload($processing))
+            ->assertRedirect(route('japic.certifications.workspace', $processing));
+        $completed = $processing->fresh();
+        $version = $completed->currentFinalVersion;
+        $viewer = User::factory()->role('39th_ib')->create();
+
+        $this->actingAs($viewer)->get(route('japic.certifications.workspace', $completed))->assertOk()
+            ->assertSee('Uploaded final JAPIC certification')
+            ->assertSee(route('japic.certifications.document-versions.preview', [$completed, $version, 'file' => 1]))
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertDontSee('Official JAPIC certification draft preview')
+            ->assertDontSee('name="certificate[narrative_values][fr_name]"', false)
+            ->assertDontSee('Save Draft')
+            ->assertDontSee('Upload Final Signed Certification');
+        $this->actingAs($viewer)->put(route('japic.certifications.draft.update', $completed), [])->assertForbidden();
+        $this->actingAs($viewer)->post(route('japic.certifications.final-document.upload', $completed), [])->assertForbidden();
+        $this->actingAs($viewer)->post(route('japic.certifications.submit-for-signing', $completed), [])->assertForbidden();
+    }
+
+    public function test_completed_responsible_processor_keeps_the_saved_draft_visible_read_only(): void
+    {
+        [$processing, $japic] = $this->context(JapicCertificationStatus::Drafting);
+        $processing->histories()->create([
+            'actor_id' => $japic->id,
+            'from_status' => JapicCertificationStatus::Pending,
+            'to_status' => JapicCertificationStatus::Drafting,
+            'event' => JapicCertificationEvent::Started,
+            'metadata' => ['revision' => 1],
+            'occurred_at' => now()->subMinutes(2),
+        ]);
+        $processing->histories()->create([
+            'actor_id' => $japic->id,
+            'from_status' => JapicCertificationStatus::Drafting,
+            'to_status' => JapicCertificationStatus::Drafting,
+            'event' => JapicCertificationEvent::DraftSaved,
+            'metadata' => ['revision' => 2],
+            'occurred_at' => now()->subMinute(),
+        ]);
+        $this->actingAs($japic)->post(route('japic.certifications.final-document.upload', $processing), $this->payload($processing))
+            ->assertRedirect(route('japic.certifications.workspace', $processing));
+        $completed = $processing->fresh();
+
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $completed))
+            ->assertOk()
+            ->assertSee('Uploaded Final Certification')
+            ->assertSee('View Uploaded Certification')
+            ->assertSee('Final Place')
+            ->assertSee('value="FINAL-CONTROL-'.$completed->id.'"', false)
+            ->assertSee('fieldset disabled aria-label="Completed JAPIC certification content"', false)
+            ->assertSee('Completed / Read-only')
+            ->assertSee('Preview Draft')
+            ->assertSee('Certification Photograph')
+            ->assertSee('No certification photograph is available.')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertSeeInOrder(['Draft Created', 'Draft Updated', 'Final File Uploaded'])
+            ->assertSee('Revision 2')
+            ->assertSee('final-signed.pdf')
+            ->assertSee('Version 1')
+            ->assertSee($japic->name)
+            ->assertSee('JAPIC')
+            ->assertSee('datetime=', false)
+            ->assertDontSee('id="japicAutoSaveStatus"', false)
+            ->assertDontSee('Save Draft')
+            ->assertDontSee('id="certification-photo"', false)
+            ->assertDontSee('name="document"', false);
+
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $completed))
+            ->assertOk()
+            ->assertSee('Final Place')
+            ->assertSee('>Print</button>', false)
+            ->assertSee('>Download</a>', false);
+
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $completed), [])->assertForbidden();
+        $this->actingAs($japic)->post(route('japic.certifications.final-document.upload', $completed), [])->assertForbidden();
     }
 
     public function test_document_versions_are_immutable(): void
@@ -327,9 +438,8 @@ class JapicCertificationFinalDocumentTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $cdrVersion = Ib39CdrDocumentVersion::query()->forceCreate([
+        $cdrVersion = Ib39CdrFinalDocument::query()->forceCreate([
             'cdr_processing_id' => $cdr,
-            'version_number' => 1,
             'source_type' => 'generated',
             'storage_path' => 'generated/final-source',
             'original_filename' => 'source.html',
@@ -341,11 +451,10 @@ class JapicCertificationFinalDocumentTest extends TestCase
             'created_by' => $ib39->id,
             'finalized_at' => now(),
         ]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $cdrVersion->id]);
         $lockVersion = $status === JapicCertificationStatus::Pending ? 0 : ($status === JapicCertificationStatus::Drafting ? 1 : 2);
         $processing = JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $fr,
-            'triggering_cdr_document_version_id' => $cdrVersion->id,
+            'triggering_cdr_final_document_id' => $cdrVersion->id,
             'status' => $status,
             'received_at' => now(),
             'due_at' => now()->addDays(14),

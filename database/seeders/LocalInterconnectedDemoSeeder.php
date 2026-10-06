@@ -257,9 +257,8 @@ class LocalInterconnectedDemoSeeder extends Seeder
                     'completed_by' => $ib39Officer->id,
                 ]);
 
-                if (! $cdr->current_final_version_id) {
-                    $cdrVersion = $cdr->documentVersions()->create([
-                        'version_number' => 1,
+                if (! $cdr->finalDocument()->exists()) {
+                    $cdrFinal = $cdr->finalDocument()->create([
                         'source_type' => 'uploaded',
                         'storage_path' => "ib39/cdr/{$cdr->id}/final.pdf",
                         'original_filename' => "CDR_{$surfacedFr->reference_number}.pdf",
@@ -269,14 +268,13 @@ class LocalInterconnectedDemoSeeder extends Seeder
                         'created_by' => $ib39Officer->id,
                         'finalized_at' => now()->subMonths(1),
                     ]);
-                    $cdr->update(['current_final_version_id' => $cdrVersion->id]);
                 }
 
                 // Create Completed JAPIC Certification
                 $japic = $surfacedFr->japicCertificationProcessing ?: JapicCertificationProcessing::firstOrCreate(
                     ['ib39_surfaced_former_rebel_id' => $surfacedFr->id],
                     [
-                        'triggering_cdr_document_version_id' => $cdr->current_final_version_id,
+                        'triggering_cdr_final_document_id' => $cdr->finalDocument()->value('id'),
                         'status' => 'Completed',
                         'received_at' => now()->subMonths(1),
                         'due_at' => now()->subMonths(1)->addDays(14),

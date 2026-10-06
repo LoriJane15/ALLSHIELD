@@ -11,7 +11,7 @@ class ChatMessageDocumentReference extends Model
     public const UPDATED_AT = null;
 
     protected $fillable = [
-        'ib39_cdr_document_version_id',
+        'ib39_cdr_final_document_id',
         'japic_certification_document_version_id',
         'pswdo_enrollment_document_id',
         'ib39_fea_document_version_id',
@@ -28,9 +28,9 @@ class ChatMessageDocumentReference extends Model
         return $this->belongsTo(ChatMessage::class, 'chat_message_id');
     }
 
-    public function cdrDocumentVersion(): BelongsTo
+    public function cdrFinalDocument(): BelongsTo
     {
-        return $this->belongsTo(Ib39CdrDocumentVersion::class, 'ib39_cdr_document_version_id');
+        return $this->belongsTo(Ib39CdrFinalDocument::class, 'ib39_cdr_final_document_id');
     }
 
     public function japicDocumentVersion(): BelongsTo

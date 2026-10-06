@@ -22,8 +22,7 @@ class JapicCertificationIntakeService
 
             if ($surfacedFr->cancellation()->exists()
                 || $locked->status !== Ib39CdrStatus::Completed
-                || $locked->current_final_version_id === null
-                || ! $locked->documentVersions()->whereKey($locked->current_final_version_id)->exists()) {
+                || ! $locked->finalDocument()->exists()) {
                 return null;
             }
 
@@ -35,14 +34,14 @@ class JapicCertificationIntakeService
                 return $existing;
             }
 
-            $receivedAt = $locked->completed_at ?? $locked->currentFinalVersion()->value('finalized_at');
+            $receivedAt = $locked->completed_at ?? $locked->finalDocument()->value('finalized_at');
             if ($receivedAt === null) {
                 return null;
             }
 
             $attributes = [
                 'status' => JapicCertificationStatus::Pending,
-                'triggering_cdr_document_version_id' => $locked->current_final_version_id,
+                'triggering_cdr_final_document_id' => $locked->finalDocument()->value('id'),
                 'received_at' => $receivedAt,
                 'due_at' => $receivedAt->copy()->addDays(14),
                 'lock_version' => 0,

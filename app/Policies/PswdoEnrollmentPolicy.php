@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\PswdoEnrollment;
 use App\Models\User;
 use App\Services\PswdoEligibilityService;
@@ -26,8 +27,30 @@ class PswdoEnrollmentPolicy
             && $this->eligibility->isEligible($enrollment->surfacedFormerRebel);
     }
 
+    public function comment(User $user, PswdoEnrollment $enrollment): bool
+    {
+        return $this->view($user, $enrollment);
+    }
+
     public function uploadDocument(User $user, PswdoEnrollment $enrollment): bool
     {
         return $this->view($user, $enrollment);
+    }
+
+    public function editDraft(
+        User $user,
+        PswdoEnrollment $enrollment,
+        PswdoEnrollmentDocumentType $documentType = PswdoEnrollmentDocumentType::EclipEnrollmentForm,
+    ): bool {
+        if (! $this->view($user, $enrollment)) {
+            return false;
+        }
+
+        $enrollment->loadMissing('documents');
+
+        return ! $enrollment->documents->contains(
+            fn ($document): bool => $document->document_type === $documentType
+                && $document->isConfirmedFinal()
+        );
     }
 }

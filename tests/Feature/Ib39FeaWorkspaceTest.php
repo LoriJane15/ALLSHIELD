@@ -8,6 +8,7 @@ use App\Models\Municipality;
 use App\Models\User;
 use App\Services\Ib39SurfacedFormerRebelService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class Ib39FeaWorkspaceTest extends TestCase
@@ -63,6 +64,14 @@ class Ib39FeaWorkspaceTest extends TestCase
         $response = $this->actingAs($actor)->get(route('ib39.fea.show', $processing))->assertOk();
 
         $response->assertSee('Pending')
+            ->assertDontSee('FR Summary')
+            ->assertDontSee('Document Requirements')
+            ->assertSee('class="doc-nav-list" role="tablist"', false)
+            ->assertDontSee('data-form="tir"', false)
+            ->assertDontSee('data-form="cvif"', false)
+            ->assertDontSee('data-form="ptis-main"', false)
+            ->assertDontSee('data-form="justification"', false)
+            ->assertSeeInOrder(['Document Checklist', '<main class="process-workspace-main">', 'Preview', 'Comments &amp; Remarks', 'Document History'], false)
             ->assertSee('Technical Inspection Report')
             ->assertSee('Cost Valuation of Inventoried Firearms')
             ->assertSee('Property Turn-In Slip')
@@ -70,8 +79,13 @@ class Ib39FeaWorkspaceTest extends TestCase
             ->assertSee('Photograph of the firearm')
             ->assertSee('Photograph of the FR with the firearm')
             ->assertSee('FEA processing is unavailable until the required PSWDO enrollment forms are completed.')
-            ->assertSee('Preview Saved Draft')
-            ->assertSee('View Upload History')
+            ->assertSee('Preview')
+            ->assertDontSee('Preview Saved Draft')
+            ->assertDontSee('View Upload History')
+            ->assertDontSee('No document history recorded.')
+            ->assertDontSee('class="metadata-grid"', false)
+            ->assertDontSee('class="document-history"', false)
+            ->assertDontSee('Document File')
             ->assertDontSee('Open Official Form Editor')
             ->assertDontSee('Start Preliminary Work')
             ->assertDontSee('Update Preliminary Work')
@@ -91,6 +105,32 @@ class Ib39FeaWorkspaceTest extends TestCase
             ->assertDontSee('type="file"', false)
             ->assertDontSee('type="button" disabled', false);
         $this->assertSame(6, $processing->documents()->count());
+        foreach ($processing->documents as $document) {
+            $response->assertSee('data-fea-tab-target="document-pane-'.$document->id.'"', false)
+                ->assertSee('id="document-pane-'.$document->id.'" role="tabpanel"', false);
+        }
+    }
+
+    public function test_workspace_reuses_eligibility_and_loaded_fr_across_document_controls(): void
+    {
+        $processing = $this->processing();
+        $actor = User::factory()->role('39th_ib')->create();
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = $query->sql;
+        });
+
+        $this->actingAs($actor)->get(route('ib39.fea.show', $processing))
+            ->assertOk()
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History');
+
+        $eligibilityQueries = array_filter($queries, fn (string $sql): bool => str_contains($sql, 'ib39_cdr_processings')
+            && str_contains($sql, 'japic_certification_processings'));
+        $directFrLoads = array_filter($queries, fn (string $sql): bool => str_starts_with($sql, 'select * from "ib39_surfaced_former_rebels" where'));
+
+        $this->assertCount(1, $eligibilityQueries);
+        $this->assertLessThanOrEqual(1, count($directFrLoads));
     }
 
     public function test_soft_deleted_parent_is_absent_from_queue_and_workspace_is_denied(): void

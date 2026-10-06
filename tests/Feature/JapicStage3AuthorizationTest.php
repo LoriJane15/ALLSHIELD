@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Support\JapicCertificationDraftSchema;
@@ -15,15 +15,16 @@ class JapicStage3AuthorizationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_route_inventory_has_only_the_six_approved_stage_three_routes_and_methods(): void
+    public function test_route_inventory_includes_only_the_approved_certification_comment_mutation(): void
     {
         $routes = collect(app('router')->getRoutes()->getRoutes())->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'japic.'));
-        $this->assertCount(26, $routes);
-        $this->assertCount(21, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
+        $this->assertCount(28, $routes);
+        $this->assertCount(22, $routes->filter(fn ($route) => $route->methods() === ['GET', 'HEAD']));
         $this->assertCount(1, $routes->filter(fn ($route) => $route->methods() === ['PUT']));
-        $this->assertCount(4, $routes->filter(fn ($route) => $route->methods() === ['POST']));
+        $this->assertCount(5, $routes->filter(fn ($route) => $route->methods() === ['POST']));
+        $this->assertSame(['POST'], $routes->first(fn ($route) => $route->getName() === 'japic.certifications.comments.store')->methods());
         $this->assertSame([], $routes->filter(fn ($route) => array_intersect($route->methods(), ['DELETE', 'PATCH']))->values()->all());
-        foreach (['japic.certifications.records.cdr', 'japic.certifications.records.fea', 'japic.certifications.records.assistance', 'japic.certifications.records.certification', 'japic.certifications.history',
+        foreach (['japic.certifications.workspace', 'japic.certifications.records.cdr', 'japic.certifications.records.fea', 'japic.certifications.records.assistance', 'japic.certifications.records.certification', 'japic.certifications.history',
             'japic.certifications.document-versions.preview', 'japic.certifications.document-versions.download',
             'japic.pswdo-enrollment-documents.preview', 'japic.pswdo-enrollment-documents.download'] as $name) {
             $this->assertSame(['GET', 'HEAD'], $routes->first(fn ($route) => $route->getName() === $name)->methods());
@@ -45,12 +46,15 @@ class JapicStage3AuthorizationTest extends TestCase
         }
     }
 
-    public function test_editing_is_locked_after_for_signing(): void
+    public function test_for_signing_remains_editable_but_cannot_be_resubmitted_implicitly(): void
     {
         [$processing, $owner] = $this->processing();
         $processing->forceFill(['status' => JapicCertificationStatus::ForSigning])->save();
-        $this->actingAs($owner)->get(route('japic.certifications.draft.edit', $processing))->assertForbidden();
-        $this->actingAs($owner)->put(route('japic.certifications.draft.update', $processing), [])->assertForbidden();
+        $this->actingAs($owner)->get(route('japic.certifications.draft.edit', $processing))->assertOk()
+            ->assertSee('Save Draft')
+            ->assertSee('Preview Draft');
+        $this->actingAs($owner)->put(route('japic.certifications.draft.update', $processing), [])
+            ->assertSessionHasErrors(['control_number', 'revision', 'lock_version']);
         $this->actingAs($owner)->post(route('japic.certifications.submit-for-signing', $processing), [])->assertForbidden();
     }
 
@@ -78,10 +82,10 @@ class JapicStage3AuthorizationTest extends TestCase
         $fr = DB::table('ib39_surfaced_former_rebels')->insertGetId(['reference_number' => 'FR-AUTH', 'first_name' => 'Auth', 'last_name' => 'Subject', 'category' => 'Regular Member',
             'province' => 'Davao del Sur', 'municipality_id' => $municipality, 'surfaced_at' => '2026-08-01', 'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = Ib39CdrDocumentVersion::query()->forceCreate(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'generated/auth', 'original_filename' => 'auth.html',
+        $version = Ib39CdrFinalDocument::query()->forceCreate(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'generated/auth', 'original_filename' => 'auth.html',
             'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => str_repeat('e', 64), 'content_schema_version' => 2, 'content_snapshot' => ['content' => []], 'created_by' => $actor->id, 'finalized_at' => now()]);
 
-        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version->id,
+        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version->id,
             'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]), $owner];
     }
 }

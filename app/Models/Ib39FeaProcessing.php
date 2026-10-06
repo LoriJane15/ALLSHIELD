@@ -29,6 +29,11 @@ class Ib39FeaProcessing extends Model
         return $this->hasMany(Ib39FeaProcessingHistory::class, 'fea_processing_id');
     }
 
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Ib39FeaProcessingComment::class, 'ib39_fea_processing_id');
+    }
+
     public function overallStatus(): Ib39FeaOverallStatus
     {
         $record = $this->surfacedFormerRebel;

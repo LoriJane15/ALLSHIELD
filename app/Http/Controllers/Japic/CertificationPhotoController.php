@@ -27,7 +27,7 @@ class CertificationPhotoController extends Controller
             $request->user(),
         );
 
-        return redirect()->route('japic.certifications.draft.edit', $processing)
+        return redirect()->route('japic.certifications.workspace', $processing)
             ->with('status', 'Certification photograph saved as an immutable draft revision.');
     }
 

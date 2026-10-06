@@ -39,11 +39,11 @@ class JapicCertificationDraftSchema
 
     public function sourceSnapshot(JapicCertificationProcessing $processing): array
     {
-        $processing->loadMissing(['surfacedFormerRebel.municipality', 'surfacedFormerRebel.barangay', 'triggeringCdrDocumentVersion.processing']);
+        $processing->loadMissing(['surfacedFormerRebel.municipality', 'surfacedFormerRebel.barangay', 'triggeringCdrFinalDocument.processing']);
         $fr = $processing->surfacedFormerRebel;
-        $version = $processing->triggeringCdrDocumentVersion;
-        abort_unless($version && $version->processing?->ib39_surfaced_former_rebel_id === $fr->id, 409, 'The authoritative CDR source is unavailable.');
-        $snapshot = $version->content_snapshot ?? [];
+        $document = $processing->triggeringCdrFinalDocument;
+        abort_unless($document && $document->processing?->ib39_surfaced_former_rebel_id === $fr->id, 409, 'The authoritative CDR source is unavailable.');
+        $snapshot = $document->content_snapshot ?? [];
         $content = $snapshot['content'] ?? [];
         $gender = $this->clean($content['gender'] ?? null);
         $areas = collect($content['posting_areas'] ?? [])->pluck('place')->map(fn ($value) => $this->clean($value))->filter()->unique()->values()->all();
@@ -52,7 +52,7 @@ class JapicCertificationDraftSchema
         return [
             'fr_id' => $fr->id,
             'fr_reference' => $fr->reference_number,
-            'triggering_cdr_document_version_id' => $version->id,
+            'triggering_cdr_final_document_id' => $document->id,
             'subject_photo_version_id' => isset($snapshot['fr_photo_version_id']) ? (int) $snapshot['fr_photo_version_id'] : null,
             'subject_name' => $fr->display_name,
             'alias' => $this->clean($content['alias'] ?? null),
@@ -114,7 +114,7 @@ class JapicCertificationDraftSchema
             self::VERSION => $this->normalize(
                 ['certificate' => $payload['certificate'] ?? []],
                 $payload['source_snapshot'] ?? [],
-                data_get($payload, 'certificate.control_number', $controlNumber),
+                filled($controlNumber) ? $controlNumber : data_get($payload, 'certificate.control_number'),
                 $this->integerOrNull(data_get($payload, 'certificate.photo_version_id')),
             ),
             self::LEGACY_VERSION => $this->fromLegacy($payload, $controlNumber),

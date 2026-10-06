@@ -21,6 +21,7 @@ class SaveCertificationDraftRequest extends FormRequest
 
     public function rules(): array
     {
+        $personnelFieldRule = $this->expectsJson() ? 'nullable' : 'required';
         $rules = [
             'revision' => ['required', 'integer', 'min:0'], 'lock_version' => ['required', 'integer', 'min:0'],
             'control_number' => ['required', 'string', 'max:100'], 'delay_reason' => ['nullable', 'string', 'max:2000'],
@@ -39,8 +40,8 @@ class SaveCertificationDraftRequest extends FormRequest
         foreach (['prepared_by', 'attested_by'] as $section) {
             $rules["certificate.{$section}"] = ['required', 'array', 'list', 'min:1', 'max:'.JapicCertificationDraftSchema::MAX_PERSONNEL_ROWS];
             $rules["certificate.{$section}.*"] = ['required', 'array:full_name,rank'];
-            $rules["certificate.{$section}.*.full_name"] = ['required', 'string', 'max:255'];
-            $rules["certificate.{$section}.*.rank"] = ['required', 'string', 'max:100'];
+            $rules["certificate.{$section}.*.full_name"] = [$personnelFieldRule, 'string', 'max:255'];
+            $rules["certificate.{$section}.*.rank"] = [$personnelFieldRule, 'string', 'max:100'];
         }
 
         return $rules;

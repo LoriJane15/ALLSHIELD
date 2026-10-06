@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use App\Contracts\Ib39FeaReadiness;
 use App\Models\ChatConversation;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39CdrProcessing;
 use App\Models\Ib39FeaDocument;
 use App\Models\Ib39FeaDocumentVersion;
@@ -17,9 +17,8 @@ use App\Models\PswdoEnrollment;
 use App\Models\PswdoEnrollmentDocument;
 use App\Models\RcspBarangay;
 use App\Models\RcspForm;
-use App\Models\User;
 use App\Policies\ChatConversationPolicy;
-use App\Policies\Ib39CdrDocumentVersionPolicy;
+use App\Policies\Ib39CdrFinalDocumentPolicy;
 use App\Policies\Ib39CdrProcessingPolicy;
 use App\Policies\Ib39FeaDocumentPolicy;
 use App\Policies\Ib39FeaDocumentVersionPolicy;
@@ -36,7 +35,6 @@ use App\Services\ChatUnreadService;
 use App\Services\LockedIb39FeaReadiness;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -63,7 +61,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(PswdoEnrollment::class, PswdoEnrollmentPolicy::class);
         Gate::policy(PswdoEnrollmentDocument::class, PswdoEnrollmentDocumentPolicy::class);
         Gate::policy(Ib39CdrProcessing::class, Ib39CdrProcessingPolicy::class);
-        Gate::policy(Ib39CdrDocumentVersion::class, Ib39CdrDocumentVersionPolicy::class);
+        Gate::policy(Ib39CdrFinalDocument::class, Ib39CdrFinalDocumentPolicy::class);
         Gate::policy(Ib39FeaProcessing::class, Ib39FeaProcessingPolicy::class);
         Gate::policy(Ib39FeaDocument::class, Ib39FeaDocumentPolicy::class);
         Gate::policy(Ib39FeaDocumentVersion::class, Ib39FeaDocumentVersionPolicy::class);
@@ -79,7 +77,7 @@ class AppServiceProvider extends ServiceProvider
                 'chatUnread' => $user
                     ? app(ChatUnreadService::class)->summary($user)
                     : ['total' => 0, 'total_text' => '0', 'conversations' => []],
-                'topbarProfileImage' => $this->accountImageUrl($user),
+                'topbarProfileImage' => $user?->profileImageUrl(),
                 'notificationUnreadCount' => $notificationUnreadCount,
                 'notificationDestination' => $user
                     ? route($user->homeRoute()).($user->hasRole('japic') ? '#notifications-heading' : '')
@@ -88,26 +86,5 @@ class AppServiceProvider extends ServiceProvider
         });
         // SkyDash uses Bootstrap — render paginator links with Bootstrap markup.
         Paginator::useBootstrapFive();
-    }
-
-    private function accountImageUrl(?User $user): ?string
-    {
-        if (! $user) {
-            return null;
-        }
-
-        if ($user->hasRole('gov_agency') && $user->govAgency?->profile) {
-            return asset('assets/logoAgency/'.$user->govAgency->profile);
-        }
-
-        if (! $user->logo) {
-            return null;
-        }
-
-        if (Storage::disk('public')->exists($user->logo)) {
-            return Storage::disk('public')->url($user->logo);
-        }
-
-        return asset('assets/'.ltrim($user->logo, '/'));
     }
 }

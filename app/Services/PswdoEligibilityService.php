@@ -19,9 +19,8 @@ class PswdoEligibilityService
         return $query->whereDoesntHave('cancellation')
             ->whereHas('cdrProcessing', fn (Builder $cdr) => $cdr
                 ->where('status', Ib39CdrStatus::Completed->value)
-                ->whereNotNull('current_final_version_id')
-                ->whereHas('currentFinalVersion', fn (Builder $version) => $version
-                    ->whereColumn('ib39_cdr_document_versions.cdr_processing_id', 'ib39_cdr_processings.id')))
+                ->whereHas('finalDocument', fn (Builder $document) => $document
+                    ->whereColumn('ib39_cdr_final_documents.cdr_processing_id', 'ib39_cdr_processings.id')))
             ->whereHas('japicCertificationProcessing', fn (Builder $japic) => $japic
                 ->where('status', JapicCertificationStatus::Completed->value)
                 ->whereNotNull('current_final_version_id')

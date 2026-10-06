@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\JapicCertificationStatus;
 use App\Models\JapicCertificationDraft;
 use App\Models\JapicCertificationPhotoVersion;
 use App\Models\JapicCertificationProcessing;
@@ -105,7 +104,7 @@ class JapicCertificationPhotoService
 
     private function assertEditable(JapicCertificationProcessing $processing): void
     {
-        if (! in_array($processing->status, [JapicCertificationStatus::Pending, JapicCertificationStatus::Drafting], true)) {
+        if (! $processing->status->isActive()) {
             throw ValidationException::withMessages(['photo' => 'This certification photograph is not available for editing.']);
         }
     }

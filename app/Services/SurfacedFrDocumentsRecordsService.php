@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Enums\Ib39CdrDocumentSource;
+use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\Ib39SurfacedFormerRebel;
 use DateTimeInterface;
@@ -46,13 +46,13 @@ class SurfacedFrDocumentsRecordsService
     {
         $this->assertCdrLoaded($record);
         $cdr = $record->cdrProcessing;
-        $final = $record->hasCompletedCdrWithCurrentFinalDocument() ? $cdr->currentFinalVersion : null;
+        $final = $record->hasCompletedCdrWithCurrentFinalDocument() ? $cdr->finalDocument : null;
 
         return [
             'cdrStatus' => $cdr?->status->value ?? 'Not Available',
             'cdr' => $cdr,
             'finalCdr' => $final,
-            'canDownload' => $final?->source_type === Ib39CdrDocumentSource::Uploaded,
+            'canDownload' => $final !== null,
             'date' => $this->date($cdr?->completed_at, 'Completed', $final?->finalized_at, 'Finalized'),
         ];
     }
@@ -71,7 +71,7 @@ class SurfacedFrDocumentsRecordsService
         return collect(PswdoEnrollmentDocumentType::cases())
             ->map(function (PswdoEnrollmentDocumentType $type) use ($enrollment, $previewUrl, $downloadUrl): ?array {
                 $document = $enrollment->documents->firstWhere('document_type', $type);
-                if (! $document) {
+                if (! $document || ! $document->isConfirmedFinal()) {
                     return null;
                 }
 
@@ -95,17 +95,24 @@ class SurfacedFrDocumentsRecordsService
         }
 
         return $this->availableFeaDocuments($record)->map(function ($document) use ($fea, $previewUrl, $downloadUrl): array {
-            $versions = collect([
-                $document->currentFinalVersion,
-                $document->currentDraftVersion,
-                $document->currentSupportingPhotoVersion,
-                $document->currentSurrenderedPhotoVersion,
-            ])->filter()->map(fn ($version): array => [
+            $versions = collect([$document->currentFinalVersion])->filter()->map(fn ($version): array => [
                 'label' => $version->slot->label(),
                 'date' => $this->date($version->created_at, 'Uploaded'),
                 'previewUrl' => $previewUrl($fea, $document, $version),
                 'downloadUrl' => $downloadUrl($fea, $document, $version),
             ])->values();
+
+            if ($document->status === Ib39FeaDocumentStatus::Completed
+                && $versions->isEmpty()
+                && $document->document_type->hasDraftEditor()
+                && $document->draft_data !== null) {
+                $versions->push([
+                    'label' => 'Official Draft Preview',
+                    'date' => $this->date($document->draft_saved_at, 'Saved'),
+                    'previewUrl' => $previewUrl($fea, $document, null),
+                    'downloadUrl' => null,
+                ]);
+            }
 
             return [
                 'label' => $document->document_type->label(),
@@ -148,10 +155,7 @@ class SurfacedFrDocumentsRecordsService
 
     private function availableFeaDocuments(Ib39SurfacedFormerRebel $record): Collection
     {
-        return $record->feaProcessing?->documents->filter(fn ($document): bool => $document->currentDraftVersion !== null
-            || $document->currentFinalVersion !== null
-            || $document->currentSupportingPhotoVersion !== null
-            || $document->currentSurrenderedPhotoVersion !== null)->values() ?? collect();
+        return $record->feaProcessing?->documents->filter(fn ($document): bool => $document->status === Ib39FeaDocumentStatus::Completed)->values() ?? collect();
     }
 
     private function assertRelationsLoaded(Ib39SurfacedFormerRebel $record): void
@@ -166,7 +170,7 @@ class SurfacedFrDocumentsRecordsService
     {
         $this->assertLoaded($record, 'cdrProcessing');
         if ($record->cdrProcessing) {
-            $this->assertLoaded($record->cdrProcessing, 'currentFinalVersion');
+            $this->assertLoaded($record->cdrProcessing, 'finalDocument');
         }
     }
 

@@ -1,6 +1,6 @@
 @extends('layouts.skydash-v')
-@section('title', 'Edit CDR Draft')
-@section('heading', 'Edit Custodial Debriefing Report Draft')
+@section('title', $readOnly ? 'View CDR' : 'Edit CDR Draft')
+@section('heading', $readOnly ? 'Custodial Debriefing Report' : 'Edit Custodial Debriefing Report Draft')
 
 @push('styles')
 <style>
@@ -134,47 +134,6 @@
         border-radius: 9999px;
         font-size: 0.75rem;
         font-weight: 750;
-    }
-
-    .hero-actions {
-        display: flex;
-        align-items: center;
-        gap: 0.65rem;
-        flex-wrap: wrap;
-    }
-    .hero-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.45rem;
-        padding: 0.65rem 1.25rem;
-        border-radius: 10px;
-        font-size: 0.8125rem;
-        font-weight: 750;
-        text-decoration: none !important;
-        transition: all 0.2s ease;
-        cursor: pointer;
-    }
-    .hero-btn-glass {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.22);
-        color: #fff;
-    }
-    .hero-btn-glass:hover {
-        background: rgba(255, 255, 255, 0.22);
-        color: #fff;
-        transform: translateY(-1px);
-    }
-    .hero-btn-white {
-        background: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.9);
-        color: #1e1b4b;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-    }
-    .hero-btn-white:hover {
-        background: #eef2ff;
-        color: #4338ca;
-        transform: translateY(-1px);
     }
 
     .editor-card {
@@ -394,28 +353,6 @@
         color: #312e81;
         border-color: #312e81;
     }
-    .btn-save-photo {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        background: #4338ca;
-        border: 1.5px solid #4338ca;
-        color: #fff;
-        font-size: 0.84rem;
-        font-weight: 700;
-        padding: 0.65rem 1.45rem;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25);
-    }
-    .btn-save-photo:hover {
-        background: #312e81;
-        border-color: #312e81;
-        color: #fff;
-        box-shadow: 0 6px 16px rgba(49, 46, 129, 0.3);
-    }
     .selected-photo-feedback {
         display: none;
         align-items: center;
@@ -509,30 +446,29 @@
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        color: #fff;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
         font-size: 0.78rem;
         font-weight: 650;
         padding: 0.35rem 0.9rem;
         border-radius: 9999px;
-        backdrop-filter: blur(4px);
         transition: all 0.2s ease;
     }
     .autosave-status-pill.saving {
-        background: rgba(245, 158, 11, 0.25);
-        border-color: rgba(245, 158, 11, 0.5);
-        color: #fef3c7;
+        background: #fffbeb;
+        border-color: #fde68a;
+        color: #92400e;
     }
     .autosave-status-pill.unsaved {
-        background: rgba(239, 68, 68, 0.2);
-        border-color: rgba(239, 68, 68, 0.4);
-        color: #fee2e2;
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #9a3412;
     }
     .autosave-status-pill.saved {
-        background: rgba(34, 197, 94, 0.2);
-        border-color: rgba(34, 197, 94, 0.4);
-        color: #dcfce7;
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
     }
     .spin-icon {
         display: inline-block;
@@ -685,6 +621,57 @@
         transform: translateY(-1px);
     }
 
+    .cdr-workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+        gap: 1.5rem;
+        align-items: start;
+    }
+    .cdr-drafting-main {
+        min-width: 0;
+    }
+    .cdr-uploaded-preview {
+        width: 100%;
+        min-height: 70vh;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
+    }
+    .cdr-uploaded-preview-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 80vh;
+        object-fit: contain;
+    }
+    .cdr-final-actions {
+        align-items: center;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        padding: 1rem 1.15rem;
+    }
+    .cdr-draft-toolbar {
+        align-items: center;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        padding: .8rem 1rem;
+    }
+    @media(max-width:1199px){
+        .cdr-workspace-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
     @media(max-width:991px){
         .cdr-step-pills {
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -701,12 +688,10 @@
             flex-direction: column;
             align-items: flex-start;
         }
-        .hero-actions {
-            width: 100%;
-        }
-        .hero-btn {
-            flex: 1;
-            width: 100%;
+        .cdr-draft-toolbar {
+            align-items: stretch;
+            flex-direction: column;
+            gap: .75rem;
         }
         .editor-card-body {
             padding: 1.25rem;
@@ -720,6 +705,7 @@
         }
     }
 </style>
+@include('components.processing-workspace.styles')
 @endpush
 
 
@@ -727,10 +713,11 @@
 <div class="cdr-editor-container">
     {{-- Top Navigation & History --}}
     <div class="module-nav-top">
-        <a href="{{ route('ib39.cdr.show', $cdr) }}" class="module-back-link">
+        <a href="{{ ($viewerPreview ?? false) ? url()->previous() : route('ib39.fr-profiles.show', $cdr->surfacedFormerRebel) }}" class="module-back-link">
             <i class="mdi mdi-arrow-left"></i>
-            <span>Back to CDR Workspace</span>
+            <span>{{ ($viewerPreview ?? false) ? 'Back' : 'Back to FR Profile' }}</span>
         </a>
+        @unless($viewerPreview ?? false)
         <ol class="module-breadcrumb" aria-label="Breadcrumb">
             <li><a href="{{ route('ib39.dashboard') }}">Dashboard</a></li>
             <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
@@ -738,10 +725,9 @@
             <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
             <li><a href="{{ route('ib39.fr-profiles.show', $cdr->surfacedFormerRebel) }}">{{ $cdr->surfacedFormerRebel->reference_number }}</a></li>
             <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
-            <li><a href="{{ route('ib39.cdr.show', $cdr) }}">CDR Workspace</a></li>
-            <li class="separator"><i class="mdi mdi-chevron-right"></i></li>
-            <li class="active" aria-current="page">Edit Draft</li>
+            <li class="active" aria-current="page">CDR Drafting Workspace</li>
         </ol>
+        @endunless
     </div>
 
     @if(session('status'))
@@ -773,7 +759,7 @@
                     <i class="mdi mdi-pencil" aria-hidden="true"></i>
                 </div>
                 <div>
-                    <div class="hero-eyebrow mb-1">Custodial Debriefing Report · Draft Editor</div>
+                    <div class="hero-eyebrow mb-1">Custodial Debriefing Report</div>
                     <h1 class="mb-1">{{ $cdr->surfacedFormerRebel->reference_number }}</h1>
                     <p>
                         <span>Status: <strong class="text-white">{{ $cdr->status->value }}</strong></span>
@@ -782,25 +768,10 @@
                     </p>
                 </div>
             </div>
-            <div class="hero-actions">
-                <div class="autosave-status-pill" id="autoSaveIndicator">
-                    <i class="mdi mdi-cloud-check" id="autoSaveIcon"></i>
-                    <span id="autoSaveText">All changes saved</span>
-                </div>
-                <a class="hero-btn hero-btn-glass" href="{{ route('ib39.cdr.preview', $cdr) }}" target="_blank" rel="noopener">
-                    <i class="mdi mdi-eye"></i>
-                    <span>Preview</span>
-                </a>
-                <a class="hero-btn hero-btn-white" href="{{ route('ib39.cdr.show', $cdr) }}">
-                    <i class="mdi mdi-file-document-box-outline"></i>
-                    <span>Workspace</span>
-                </a>
-            </div>
         </div>
     </header>
 
     @php
-        $draft = old('content', array_replace($defaultContent, $cdr->form?->content ?? []));
         $photoSlot = $cdr->photos->first(fn ($photo) => $photo->photo_type === \App\Enums\Ib39CdrPhotoType::FrPhoto);
         $stepMap = [
             'cover' => 1,
@@ -840,6 +811,69 @@
             'signatories' => 6,
         ];
     @endphp
+
+    <div class="cdr-workspace-grid">
+        <main class="cdr-drafting-main">
+
+    @if($viewerPreview ?? false)
+        <section class="cdr-final-actions" aria-label="Official CDR preview">
+            <div>
+                <strong class="d-block text-dark">{{ $uploadedFinalPreviewUrl ? 'Final CDR' : 'CDR Document Preview' }}</strong>
+                @unless($uploadedFinalPreviewUrl)
+                    <small class="text-muted">Official formatted CDR content · read only</small>
+                @endunless
+            </div>
+        </section>
+        @if($uploadedFinalPreviewUrl)
+            @if(!$cdr->finalDocument || $cdr->finalDocument->mime_type === 'application/pdf' || $cdr->finalDocument->source_type === \App\Enums\Ib39CdrDocumentSource::Generated)
+                <iframe class="cdr-uploaded-preview" src="{{ $uploadedFinalPreviewUrl }}#toolbar=0&amp;navpanes=0" title="Final CDR" loading="lazy"></iframe>
+            @else
+                <div class="cdr-uploaded-preview">
+                    <img class="cdr-uploaded-preview-image" src="{{ $uploadedFinalPreviewUrl }}" alt="Final CDR">
+                </div>
+            @endif
+        @else
+            <p class="text-muted">The completed CDR has no saved final document. Please report this record.</p>
+        @endif
+    @else
+
+    <section class="cdr-final-actions" aria-label="Final CDR document actions">
+        <div>
+            <strong class="d-block text-dark">{{ $cdr->finalDocument ? 'Uploaded Final CDR' : 'Upload CDR' }}</strong>
+            <small class="text-muted">{{ $cdr->finalDocument ? 'Final file has already been uploaded.' : 'Upload the single final CDR when it is ready.' }}</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if($cdr->finalDocument)
+                <a class="btn btn-primary btn-sm" href="{{ route('ib39.cdr.documents.preview', $cdr) }}" target="_blank" rel="noopener"><i class="mdi mdi-eye mr-1"></i> {{ $cdr->finalDocument->source_type === \App\Enums\Ib39CdrDocumentSource::Uploaded ? 'View Uploaded CDR' : 'View Completed CDR' }}</a>
+            @else
+                @can('uploadFinal', $cdr)
+                    <form method="POST" action="{{ route('ib39.cdr.documents.upload', $cdr) }}" enctype="multipart/form-data" class="d-flex flex-wrap align-items-center gap-2">
+                        @csrf
+                        <input class="form-control form-control-sm" type="file" name="document" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+                        <label class="mb-0 small"><input type="checkbox" name="confirmed" value="1" required> Confirm final CDR</label>
+                        <button class="btn btn-primary btn-sm" type="submit"><i class="mdi mdi-upload mr-1"></i> Upload CDR</button>
+                    </form>
+                @endcan
+            @endif
+        </div>
+    </section>
+
+    <section class="cdr-draft-toolbar" aria-label="CDR drafting controls">
+        @if($readOnly)
+            <div class="autosave-status-pill saved">
+                <i class="mdi mdi-lock-outline"></i>
+                <span>Completed / Read-only</span>
+            </div>
+        @else
+            <div class="autosave-status-pill saved" id="autoSaveIndicator" aria-live="polite">
+                <i class="mdi mdi-cloud-check" id="autoSaveIcon"></i>
+                <span id="autoSaveText">All changes saved</span>
+            </div>
+        @endif
+        <a class="btn btn-outline-primary btn-sm" href="{{ route('ib39.cdr.preview', $cdr) }}" target="_blank" rel="noopener">
+            <i class="mdi mdi-eye mr-1"></i> Preview Draft
+        </a>
+    </section>
 
     {{-- Interactive Step-by-Step Wizard Navigator --}}
     <div class="cdr-step-nav-bar" id="cdrStepNav">
@@ -885,14 +919,19 @@
     </div>
 
     {{-- FR Photo Separate Form --}}
-    <form id="fr-photo-upload" method="POST" enctype="multipart/form-data" action="{{ route('ib39.cdr.photos.store', $cdr) }}">
-        @csrf
-    </form>
+    @unless($readOnly)
+        <form id="fr-photo-upload" method="POST" enctype="multipart/form-data" action="{{ route('ib39.cdr.photos.store', $cdr) }}">
+            @csrf
+        </form>
+    @endunless
 
     {{-- Main CDR Structured Draft Form --}}
-    <form method="POST" action="{{ route('ib39.cdr.update', $cdr) }}" id="cdrDraftForm">
+    <form @unless($readOnly) method="POST" action="{{ route('ib39.cdr.update', $cdr) }}" @endunless id="cdrDraftForm" data-read-only="{{ $readOnly ? 'true' : 'false' }}">
+        @unless($readOnly)
         @csrf
         @method('PUT')
+        @endunless
+        @if($readOnly)<fieldset class="cdr-read-only-fields" disabled aria-label="Completed CDR content">@endif
 
         @foreach($orderedBlocks as [$kind, $key])
             @if($kind === 'section')
@@ -946,7 +985,7 @@
                                                     @endforeach
                                                 </datalist>
                                             @elseif(in_array($field['type'], ['textarea', 'narrative']))
-                                                @if($field['type'] === 'narrative')
+                                                @if($field['type'] === 'narrative' && ! $readOnly)
                                                     <div class="format-toolbar">
                                                         <button type="button" class="format-btn" data-format="bold">
                                                             <i class="mdi mdi-format-bold"></i> Bold
@@ -1000,17 +1039,15 @@
                                         <span class="photo-spec-pill"><i class="mdi mdi-shield-check"></i> Official Record</span>
                                     </div>
 
+                                    @unless($readOnly)
                                     <div class="photo-actions-row">
-                                        <input form="fr-photo-upload" id="fr-photo" type="file" name="photo" accept="image/jpeg,image/png" required class="d-none" onchange="previewSelectedPhoto(this)">
+                                        <input form="fr-photo-upload" id="fr-photo" type="file" name="photo" accept="image/jpeg,image/png" required class="d-none" onchange="persistSelectedPhoto(this)">
                                         <label for="fr-photo" class="btn-choose-photo">
                                             <i class="mdi mdi-image-plus"></i>
                                             <span id="btnChoosePhotoText">{{ $photoSlot?->currentVersion ? 'Choose Replacement Image...' : 'Choose Photo File...' }}</span>
                                         </label>
-                                        <button form="fr-photo-upload" class="btn-save-photo" type="submit">
-                                            <i class="mdi mdi-cloud-upload"></i>
-                                            <span>{{ $photoSlot?->currentVersion ? 'Replace' : 'Save' }} FR Photo</span>
-                                        </button>
                                     </div>
+                                    @endunless
 
                                     <div id="photoSelectionFeedback" class="selected-photo-feedback">
                                         <i class="mdi mdi-check-circle"></i>
@@ -1055,7 +1092,7 @@
                                             @foreach($section['columns'] as $label)
                                                 <th>{{ $label }}</th>
                                             @endforeach
-                                            <th style="width: 90px; text-align: center;">Action</th>
+                                            @unless($readOnly)<th style="width: 90px; text-align: center;">Action</th>@endunless
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1096,26 +1133,28 @@
                                                         @endif
                                                     </td>
                                                 @endforeach
-                                                <td style="text-align: center;">
+                                                @unless($readOnly)<td style="text-align: center;">
                                                     <button type="button" class="btn-remove-table-row" data-remove-row>
                                                         <i class="mdi mdi-delete-outline"></i> Remove
                                                     </button>
-                                                </td>
+                                                </td>@endunless
                                             </tr>
                                         @endforeach
                                     </tbody>
                                 </table>
                             </div>
-                            <button type="button" class="btn-add-table-row" data-add-row>
+                            @unless($readOnly)<button type="button" class="btn-add-table-row" data-add-row>
                                 <i class="mdi mdi-plus-circle-outline"></i>
                                 <span>Add row to {{ $section['label'] }}</span>
-                            </button>
+                            </button>@endunless
                         </div>
                     </div>
                 </fieldset>
             @endif
         @endforeach
+        @if($readOnly)</fieldset>@endif
 
+        @unless($readOnly)
         {{-- Bottom Floating Action Bar --}}
         <div class="editor-action-footer">
             <div class="d-flex align-items-center gap-2">
@@ -1127,22 +1166,30 @@
                 </button>
             </div>
             <div class="d-flex align-items-center gap-3">
-                <div class="text-muted font-size-xs d-none d-md-flex align-items-center" id="autoSaveBottomIndicator">
-                    <i class="mdi mdi-cloud-check text-success mr-1"></i>
-                    <span id="autoSaveBottomText">All changes saved</span>
-                </div>
-                <button class="btn-save-draft" type="submit" id="btnManualSaveDraft">
+                <button class="btn-save-draft" type="submit" id="btnManualSaveDraft" name="save_intent" value="manual">
                     <i class="mdi mdi-content-save"></i>
-                    <span>Save draft</span>
+                    <span>Save Draft</span>
                 </button>
             </div>
         </div>
+        @endunless
     </form>
+    @endif
+        </main>
+
+        @include('components.processing-workspace.sidebar', ['sidebarId' => 'cdr', 'comments' => $cdr->comments, 'events' => $workspaceEvents, 'commentAction' => route('cdr.comments.store', $cdr), 'canComment' => Gate::allows('comment', $cdr)])
+    </div>
 </div>
 @endsection
 
 @push('scripts')
 <script>
+document.querySelectorAll('.process-comment-list').forEach(function(thread) {
+    thread.scrollTop = thread.scrollHeight;
+});
+
+@unless($viewerPreview ?? false)
+
 /* ==========================================================================
    Step-by-Step Wizard Navigation Controller
    ========================================================================== */
@@ -1361,7 +1408,7 @@ document.querySelectorAll('[data-format]').forEach(function(b){
     };
 });
 
-function previewSelectedPhoto(input) {
+function persistSelectedPhoto(input) {
     if (input.files && input.files[0]) {
         var file = input.files[0];
         var sizeKb = Math.round(file.size / 1024);
@@ -1372,7 +1419,7 @@ function previewSelectedPhoto(input) {
         var img = document.getElementById('frPhotoImg');
         var box = document.getElementById('frPhotoBox');
 
-        if (filenameSpan) filenameSpan.textContent = file.name + ' (' + sizeKb + ' KB) ready to upload';
+        if (filenameSpan) filenameSpan.textContent = file.name + ' (' + sizeKb + ' KB) uploading...';
         if (feedback) feedback.style.display = 'inline-flex';
         if (chooseText) chooseText.textContent = 'Change selected photo...';
 
@@ -1382,13 +1429,30 @@ function previewSelectedPhoto(input) {
             if (placeholder) placeholder.classList.add('d-none');
             if (box) box.classList.add('has-photo');
         }
+
+        if (input.form) {
+            if (typeof input.form.requestSubmit === 'function') {
+                input.form.requestSubmit();
+            } else {
+                input.form.submit();
+            }
+        }
     }
 }
 
 /* ==========================================================================
    Auto-Save Draft Engine (Local Storage + Asynchronous Background Sync)
    ========================================================================== */
+@if($readOnly)
+function scheduleAutoSave() {}
+@else
 var draftForm = document.getElementById('cdrDraftForm');
+var isReadOnlyWorkspace = draftForm && draftForm.dataset.readOnly === 'true';
+if (isReadOnlyWorkspace) {
+    draftForm.querySelectorAll('input, select, textarea, button').forEach(function(control) {
+        control.disabled = true;
+    });
+}
 var autoSaveTimer = null;
 var isFormDirty = false;
 var isAutoSaving = false;
@@ -1397,7 +1461,6 @@ var cdrStorageKey = 'shield_cdr_backup_{{ $cdr->id }}';
 var autoSaveIndicator = document.getElementById('autoSaveIndicator');
 var autoSaveIcon = document.getElementById('autoSaveIcon');
 var autoSaveText = document.getElementById('autoSaveText');
-var autoSaveBottomText = document.getElementById('autoSaveBottomText');
 
 function setAutoSaveStatus(status, message) {
     if (!autoSaveIndicator) return;
@@ -1407,22 +1470,18 @@ function setAutoSaveStatus(status, message) {
         autoSaveIndicator.classList.add('saving');
         if (autoSaveIcon) autoSaveIcon.className = 'mdi mdi-loading spin-icon';
         if (autoSaveText) autoSaveText.textContent = message || 'Saving draft...';
-        if (autoSaveBottomText) autoSaveBottomText.textContent = 'Saving draft in background...';
     } else if (status === 'unsaved') {
         autoSaveIndicator.classList.add('unsaved');
         if (autoSaveIcon) autoSaveIcon.className = 'mdi mdi-clock-alert-outline';
         if (autoSaveText) autoSaveText.textContent = message || 'Unsaved changes';
-        if (autoSaveBottomText) autoSaveBottomText.textContent = 'Unsaved changes';
     } else if (status === 'saved') {
         autoSaveIndicator.classList.add('saved');
         if (autoSaveIcon) autoSaveIcon.className = 'mdi mdi-cloud-check';
         if (autoSaveText) autoSaveText.textContent = message || 'All changes saved';
-        if (autoSaveBottomText) autoSaveBottomText.textContent = message || 'Draft automatically saved';
     } else if (status === 'local') {
         autoSaveIndicator.classList.add('saved');
         if (autoSaveIcon) autoSaveIcon.className = 'mdi mdi-content-save';
         if (autoSaveText) autoSaveText.textContent = message || 'Saved to browser cache';
-        if (autoSaveBottomText) autoSaveBottomText.textContent = 'Saved to browser cache';
     }
 }
 
@@ -1486,7 +1545,7 @@ function scheduleAutoSave(delay) {
     autoSaveTimer = setTimeout(performAutoSave, delay || 2000);
 }
 
-if (draftForm) {
+if (draftForm && !isReadOnlyWorkspace) {
     draftForm.addEventListener('input', function() {
         scheduleAutoSave(2000);
     });
@@ -1520,5 +1579,7 @@ window.addEventListener('beforeunload', function(e) {
         return 'You have unsaved changes in your CDR draft.';
     }
 });
+@endif
+@endunless
 </script>
 @endpush

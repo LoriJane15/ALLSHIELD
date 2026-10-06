@@ -5,16 +5,15 @@ namespace App\Models;
 use App\Enums\Ib39CdrDocumentSource;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use LogicException;
 
-class Ib39CdrDocumentVersion extends Model
+class Ib39CdrFinalDocument extends Model
 {
+    protected $hidden = ['storage_path', 'sha256'];
+
     protected $fillable = [
-        'version_number',
+        'cdr_processing_id',
         'source_type',
-        'replaces_version_id',
-        'replacement_reason',
         'storage_path',
         'original_filename',
         'mime_type',
@@ -26,27 +25,21 @@ class Ib39CdrDocumentVersion extends Model
         'finalized_at',
     ];
 
-    protected $hidden = [
-        'storage_path',
-        'content_snapshot',
-    ];
-
     protected function casts(): array
     {
         return [
-            'version_number' => 'integer',
             'source_type' => Ib39CdrDocumentSource::class,
             'size_bytes' => 'integer',
             'content_schema_version' => 'integer',
             'content_snapshot' => 'encrypted:array',
-            'finalized_at' => 'datetime',
+            'finalized_at' => 'immutable_datetime',
         ];
     }
 
     protected static function booted(): void
     {
-        static::updating(fn () => throw new LogicException('CDR document versions are immutable.'));
-        static::deleting(fn () => throw new LogicException('CDR document versions are immutable.'));
+        static::updating(fn () => throw new LogicException('Final CDR documents are immutable.'));
+        static::deleting(fn () => throw new LogicException('Final CDR documents are immutable.'));
     }
 
     public function processing(): BelongsTo
@@ -57,15 +50,5 @@ class Ib39CdrDocumentVersion extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function replacesVersion(): BelongsTo
-    {
-        return $this->belongsTo(self::class, 'replaces_version_id');
-    }
-
-    public function replacementVersions(): HasMany
-    {
-        return $this->hasMany(self::class, 'replaces_version_id');
     }
 }

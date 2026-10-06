@@ -71,8 +71,6 @@
 
         @if (session('success'))
             <div class="editor-flash editor-flash-ok">{{ session('success') }}</div>
-        @elseif (session('error'))
-            <div class="editor-flash editor-flash-err">{{ session('error') }}</div>
         @endif
 
         <div class="editor-status" id="editorStatus"></div>
@@ -168,7 +166,6 @@
         box-shadow: 0 3px 12px rgba(0,0,0,.2);
     }
     .editor-flash-ok  { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
-    .editor-flash-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 </style>
 @endpush
 

@@ -11,7 +11,7 @@ use App\Enums\JapicCertificationStatus;
 use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\FormerRebel;
 use App\Models\FrProgramStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationDocumentVersion;
 use App\Models\JapicCertificationProcessing;
@@ -74,30 +74,24 @@ class SurfacedFrProgressTimelineTest extends TestCase
         [$other, $otherIb39] = $this->record(false);
         $foreignCdrFinal = $this->completeCdr($other, $otherIb39);
 
-        try {
-            $record->cdrProcessing()->update([
-                'status' => Ib39CdrStatus::Completed,
-                'current_final_version_id' => $foreignCdrFinal->id,
-                'completed_at' => now(),
-                'completed_by' => $ib39->id,
-            ]);
-            $this->fail('The database accepted a foreign-owned CDR final document.');
-        } catch (QueryException) {
-            $this->assertTrue(true);
-        }
-
-        $loadedWithForeignCdr = $this->loadedRecord($record);
-        $loadedWithForeignCdr->cdrProcessing->forceFill(['status' => Ib39CdrStatus::Completed]);
-        $loadedWithForeignCdr->cdrProcessing->setRelation('currentFinalVersion', $foreignCdrFinal);
-        $foreignCdrTimeline = app(SurfacedFrProgressTimelineService::class)->timeline($loadedWithForeignCdr);
-        $this->assertSame('Unavailable', $this->phase($foreignCdrTimeline, 'cdr')['status']);
-
-        $ownCdrFinal = $record->cdrProcessing->documentVersions()->create($this->cdrDocumentAttributes($ib39));
         $record->cdrProcessing()->update([
             'status' => Ib39CdrStatus::Completed,
             'completed_at' => now(),
             'completed_by' => $ib39->id,
-            'current_final_version_id' => $ownCdrFinal->id,
+        ]);
+        $this->assertNull($record->cdrProcessing->fresh()->finalDocument);
+
+        $loadedWithForeignCdr = $this->loadedRecord($record);
+        $loadedWithForeignCdr->cdrProcessing->forceFill(['status' => Ib39CdrStatus::Completed]);
+        $loadedWithForeignCdr->cdrProcessing->setRelation('finalDocument', $foreignCdrFinal);
+        $foreignCdrTimeline = app(SurfacedFrProgressTimelineService::class)->timeline($loadedWithForeignCdr);
+        $this->assertSame('Unavailable', $this->phase($foreignCdrTimeline, 'cdr')['status']);
+
+        $ownCdrFinal = $record->cdrProcessing->finalDocument()->create($this->cdrDocumentAttributes($ib39));
+        $record->cdrProcessing()->update([
+            'status' => Ib39CdrStatus::Completed,
+            'completed_at' => now(),
+            'completed_by' => $ib39->id,
         ]);
         $japic = User::factory()->role('japic')->create();
         $otherJapic = User::factory()->role('japic')->create();
@@ -175,7 +169,6 @@ class SurfacedFrProgressTimelineTest extends TestCase
             'status' => Ib39CdrStatus::Completed,
             'completed_at' => now(),
             'completed_by' => $ib39->id,
-            'current_final_version_id' => null,
         ]);
         $this->assertPhase($unavailable, 'cdr', 'unavailable', 'Unavailable', true);
     }
@@ -274,14 +267,13 @@ class SurfacedFrProgressTimelineTest extends TestCase
         return [$record, $ib39];
     }
 
-    private function completeCdr(Ib39SurfacedFormerRebel $record, User $actor): Ib39CdrDocumentVersion
+    private function completeCdr(Ib39SurfacedFormerRebel $record, User $actor): Ib39CdrFinalDocument
     {
-        $final = $record->cdrProcessing()->firstOrFail()->documentVersions()->create($this->cdrDocumentAttributes($actor));
+        $final = $record->cdrProcessing()->firstOrFail()->finalDocument()->create($this->cdrDocumentAttributes($actor));
         $record->cdrProcessing()->update([
             'status' => Ib39CdrStatus::Completed,
             'completed_at' => now(),
             'completed_by' => $actor->id,
-            'current_final_version_id' => $final->id,
         ]);
 
         return $final;
@@ -291,7 +283,6 @@ class SurfacedFrProgressTimelineTest extends TestCase
     private function cdrDocumentAttributes(User $actor): array
     {
         return [
-            'version_number' => 1,
             'source_type' => Ib39CdrDocumentSource::Uploaded,
             'storage_path' => 'tests/timeline/cdr-'.fake()->unique()->uuid().'.pdf',
             'original_filename' => 'final-cdr.pdf',
@@ -305,12 +296,12 @@ class SurfacedFrProgressTimelineTest extends TestCase
 
     private function createJapic(
         Ib39SurfacedFormerRebel $record,
-        Ib39CdrDocumentVersion $cdrFinal,
+        Ib39CdrFinalDocument $cdrFinal,
         User $actor,
     ): JapicCertificationProcessing {
         return JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $record->id,
-            'triggering_cdr_document_version_id' => $cdrFinal->id,
+            'triggering_cdr_final_document_id' => $cdrFinal->id,
             'status' => JapicCertificationStatus::Pending,
             'received_at' => now(),
             'due_at' => now()->addDays(14),
@@ -377,7 +368,7 @@ class SurfacedFrProgressTimelineTest extends TestCase
     private function loadedRecord(Ib39SurfacedFormerRebel $record): Ib39SurfacedFormerRebel
     {
         return $record->fresh()->load([
-            'cdrProcessing.currentFinalVersion',
+            'cdrProcessing.finalDocument',
             'japicCertificationProcessing.currentFinalVersion',
             'pswdoEnrollment.documents',
             'feaProcessing.documents',

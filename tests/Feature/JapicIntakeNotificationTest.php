@@ -201,10 +201,10 @@ class JapicIntakeNotificationTest extends TestCase
             'category' => Ib39FrCategory::RegularMember->value, 'province' => Ib39SurfacedFormerRebel::DEFAULT_PROVINCE,
             'municipality_id' => $municipality, 'surfaced_at' => now()->toDateString(), 'possessed_firearms' => false], $actor);
         $cdr = $record->cdrProcessing;
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr->id, 'version_number' => 1,
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr->id,
             'source_type' => 'generated', 'storage_path' => 'private/generated.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf',
             'size_bytes' => 1, 'sha256' => str_repeat('f', 64), 'created_by' => $actor->id, 'finalized_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'current_final_version_id' => $version]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id]);
 
         return [$cdr, $record];
     }

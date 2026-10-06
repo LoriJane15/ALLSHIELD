@@ -16,7 +16,6 @@ class Ib39CdrStatusHistory extends Model
         'event',
         'remarks',
         'delay_reason',
-        'document_version_id',
         'ip_address',
         'user_agent',
     ];
@@ -43,10 +42,5 @@ class Ib39CdrStatusHistory extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function documentVersion(): BelongsTo
-    {
-        return $this->belongsTo(Ib39CdrDocumentVersion::class, 'document_version_id');
     }
 }

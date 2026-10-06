@@ -31,11 +31,8 @@ class JapicCertificationDraftService
 
             $controlNumber = trim($controlNumber);
             $controlHash = $this->schema->controlNumberHash($controlNumber);
-            if (filled($locked->control_number_hash) && ! hash_equals((string) $locked->control_number_hash, $controlHash)) {
-                throw ValidationException::withMessages(['control_number' => 'The assigned control number cannot be changed.']);
-            }
             if (JapicCertificationProcessing::query()->where('control_number_hash', $controlHash)->whereKeyNot($locked->id)->exists()) {
-                throw ValidationException::withMessages(['control_number' => 'This control number is unavailable.']);
+                throw ValidationException::withMessages(['control_number' => 'The control number has already been used.']);
             }
 
             $source = $draft?->payload['source_snapshot'] ?? $this->schema->sourceSnapshot($locked);
@@ -50,7 +47,7 @@ class JapicCertificationDraftService
                 return $this->persist($locked, $draft, $payload, $controlNumber, $controlHash, $delayReason, $actor);
             } catch (QueryException $exception) {
                 if (str_contains(strtolower($exception->getMessage()), 'control')) {
-                    throw ValidationException::withMessages(['control_number' => 'This control number is unavailable.']);
+                    throw ValidationException::withMessages(['control_number' => 'The control number has already been used.']);
                 }
 
                 throw $exception;
@@ -153,7 +150,7 @@ class JapicCertificationDraftService
 
     private function assertEditable(JapicCertificationProcessing $processing): void
     {
-        if (! in_array($processing->status, [JapicCertificationStatus::Pending, JapicCertificationStatus::Drafting], true)) {
+        if (! $processing->status->isActive()) {
             throw ValidationException::withMessages(['draft' => 'This certification is not available for editing.']);
         }
     }

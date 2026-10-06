@@ -109,6 +109,52 @@ class Ib39FeaTemporaryLockTest extends TestCase
         $this->assertSame('Not Applicable', $processing->fresh('surfacedFormerRebel', 'documents')->overallStatus()->value);
     }
 
+    public function test_ready_workspace_shows_draft_inputs_without_official_sheets_and_selected_document_upload(): void
+    {
+        $this->completePswdoEnrollment();
+        $processing = $this->record->feaProcessing;
+        $tir = $processing->documents()->where('document_type', Ib39FeaDocumentType::Tir)->firstOrFail();
+
+        $response = $this->actingAs($this->actor)->get(route('ib39.fea.show', $processing))->assertOk()
+            ->assertDontSee('data-form="tir"', false)
+            ->assertDontSee('class="fea-official-preview"', false)
+            ->assertSee('name="draft[date]"', false)
+            ->assertSee('name="draft[rm_number]"', false)
+            ->assertSee('data-name="draft[items][__INDEX__][item]"', false)
+            ->assertSee('Save Draft')
+            ->assertSee('Draft Information')
+            ->assertSee('>Preview</a>', false)
+            ->assertDontSee('View Upload History')
+            ->assertDontSee('Document File')
+            ->assertSee(route('ib39.fea.documents.final-versions.store', [$processing, $tir]))
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History');
+
+        $html = $response->getContent();
+        foreach ($processing->documents as $document) {
+            $start = strpos($html, 'id="document-pane-'.$document->id.'" role="tabpanel"');
+            $this->assertNotFalse($start);
+            $next = strpos($html, 'class="fea-doc-pane', $start + 1);
+            $pane = substr($html, $start, $next === false ? null : $next - $start);
+            $this->assertStringContainsString(route('ib39.fea.documents.final-versions.store', [$processing, $document]), $pane);
+        }
+
+        $draft = app(Ib39FeaDraftSchema::class)->initial(Ib39FeaDocumentType::Tir, $this->record->display_name);
+        $draft['date'] = '2026-10-01';
+        $this->actingAs($this->actor)->from(route('ib39.fea.show', $processing))
+            ->put(route('ib39.fea.documents.draft.update', [$processing, $tir]), ['revision' => 0, 'draft' => $draft])
+            ->assertRedirect(route('ib39.fea.show', ['fea' => $processing, 'document' => $tir->id]));
+        $this->assertSame(1, $tir->fresh()->draft_revision);
+
+        $draft['time'] = '09:30';
+        $this->actingAs($this->actor)->from(route('ib39.fea.documents.draft.edit', [$processing, $tir]))
+            ->put(route('ib39.fea.documents.draft.update', [$processing, $tir]), ['revision' => 1, 'draft' => $draft])
+            ->assertRedirect(route('ib39.fea.documents.draft.edit', [$processing, $tir]));
+        $this->actingAs($this->actor)->get(route('ib39.fea.show', $processing))
+            ->assertOk()->assertSee('Draft Created')->assertSee('Draft Updated')->assertSee('Revision 2')
+            ->assertSee($this->actor->name)->assertSee('39th IB')->assertSee('datetime=', false);
+    }
+
     public function test_final_uploads_complete_the_six_required_documents_after_pswdo_completion(): void
     {
         $this->completePswdoEnrollment();
@@ -158,7 +204,8 @@ class Ib39FeaTemporaryLockTest extends TestCase
 
         foreach (['japic', 'pswdo'] as $role) {
             $viewer = User::factory()->role($role)->create();
-            $this->actingAs($viewer)->get(route("{$role}.fea.documents.versions.preview", [$processing, $document, $final]))->assertOk();
+            $this->actingAs($viewer)->get(route("{$role}.fea.documents.versions.preview", [$processing, $document, $final]))
+                ->assertOk()->assertHeader('X-Frame-Options', 'SAMEORIGIN');
             $this->actingAs($viewer)->get(route("{$role}.fea.documents.versions.download", [$processing, $document, $final]))->assertOk();
             $this->actingAs($viewer)->get(route("{$role}.fea.documents.versions.preview", [$processing, $otherDocument, $final]))->assertNotFound();
             $this->actingAs($viewer)->post(route('ib39.fea.documents.final-versions.store', [$processing, $otherDocument]), [
@@ -287,8 +334,9 @@ class Ib39FeaTemporaryLockTest extends TestCase
             ->assertSee(self::MESSAGE);
         $workspace = $this->actingAs($this->actor)->get(route('ib39.fea.show', $processing))->assertOk();
         $workspace->assertSee(self::MESSAGE)
-            ->assertSee('View Upload History')
-            ->assertSee('Preview Saved Draft')
+            ->assertSee('Preview')
+            ->assertDontSee('View Upload History')
+            ->assertDontSee('Preview Saved Draft')
             ->assertDontSee('Open Official Form Editor')
             ->assertDontSee('Start Preliminary Work')
             ->assertDontSee('Update Preliminary Work')
@@ -372,7 +420,7 @@ class Ib39FeaTemporaryLockTest extends TestCase
             'ib39_fea_processings', 'ib39_fea_documents', 'ib39_fea_document_histories',
             'ib39_fea_draft_histories', 'ib39_fea_document_versions', 'ib39_fea_upload_histories',
             'ib39_fea_processing_histories', 'audit_logs', 'ib39_cdr_processings',
-            'ib39_cdr_forms', 'ib39_cdr_document_versions', 'ib39_cdr_status_histories',
+            'ib39_cdr_forms', 'ib39_cdr_final_documents', 'ib39_cdr_status_histories',
             'japic_certification_processings', 'japic_certification_histories', 'notifications',
             'ib39_fr_cancellations', 'rcsp_forms', 'users', 'fr_government_assistances',
         ];
@@ -447,14 +495,14 @@ class Ib39FeaTemporaryLockTest extends TestCase
     private function completePswdoEnrollment(bool $finalSigned = true): PswdoEnrollment
     {
         $cdr = $this->record->cdrProcessing;
-        $cdrVersion = $cdr->documentVersions()->create([
-            'version_number' => 1, 'source_type' => 'uploaded', 'storage_path' => 'ib39/cdr/test/final.pdf',
+        $cdrVersion = $cdr->finalDocument()->create([
+            'source_type' => 'uploaded', 'storage_path' => 'ib39/cdr/test/final.pdf',
             'original_filename' => 'cdr.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20,
             'sha256' => str_repeat('c', 64), 'created_by' => $this->actor->id, 'finalized_at' => now(),
         ]);
-        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $this->actor->id, 'current_final_version_id' => $cdrVersion->id]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $this->actor->id]);
         $japic = JapicCertificationProcessing::query()->forceCreate([
-            'ib39_surfaced_former_rebel_id' => $this->record->id, 'triggering_cdr_document_version_id' => $cdrVersion->id,
+            'ib39_surfaced_former_rebel_id' => $this->record->id, 'triggering_cdr_final_document_id' => $cdrVersion->id,
             'status' => 'Completed', 'received_at' => now(), 'due_at' => now()->addDays(14),
             'completed_at' => now(), 'completed_by' => $this->actor->id, 'lock_version' => 1,
         ]);

@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Services\JapicCertificationDraftService;
@@ -21,18 +21,27 @@ class JapicCertificationPreviewTest extends TestCase
     {
         Storage::fake('local');
         [$processing, $japic] = $this->processingWithPhoto();
+        $sourcePhotoVersionId = data_get($processing->triggeringCdrFinalDocument->content_snapshot, 'fr_photo_version_id');
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))
+            ->assertOk()
+            ->assertSee('src="'.route('cdr.photos.preview', $sourcePhotoVersionId).'"', false)
+            ->assertSee('Frozen CDR photograph')
+            ->assertDontSee('View Securely');
         $this->save($processing, $japic, 'First Place');
+        $controlNumber = 'CTRL-PREVIEW-'.$processing->id;
 
         foreach (['japic.certifications.preview', 'japic.certifications.print'] as $route) {
             $response = $this->actingAs($japic)->get(route($route, $processing))->assertOk()
-                ->assertHeader('Cache-Control')->assertSee('DRAFT — NOT FINAL')->assertSee('JOINT AFP-PNP')
+                ->assertHeader('Cache-Control')->assertSee('JOINT AFP-PNP')
                 ->assertSee('Emblem')->assertSee('pending')->assertSee('PREPARED BY:')->assertSee('ATTESTED BY:')
                 ->assertSee('Enhanced Comprehensive Local Integration Program(E-CLIP)')->assertSee('First Place')
+                ->assertSee('Control Number:')->assertSee($controlNumber)
                 ->assertSee('She started her affiliation')->assertSee('during 1998')->assertSee('attest her legitimacy')
                 ->assertSee('TEST PREPARER')->assertSee('TEST ATTESTER')->assertSee('CPT')
                 ->assertSee('Task Force Balik Loob (TFBL);')->assertSee('DILG Provincial/HUC/ICC Office;')
                 ->assertSee('E-CLIP and Amnesty Program Cluster of NTF-ELCAC.')
-                ->assertDontSee('CamScanner')->assertDontSee('private/japic')->assertDontSee('storage_path');
+                ->assertDontSee('CamScanner')->assertDontSee('private/japic')->assertDontSee('storage_path')
+                ->assertDontSee('DRAFT — NOT FINAL');
             $this->assertStringContainsString('@page{size:A4 portrait', $response->getContent());
             $this->assertStringContainsString('border-bottom:1px solid #111', $response->getContent());
         }
@@ -43,7 +52,7 @@ class JapicCertificationPreviewTest extends TestCase
         Storage::fake('local');
         foreach ([['Male', 'He started his affiliation', 'attest his legitimacy'], ['Unsupported', 'The former rebel started their affiliation', 'attest their legitimacy']] as [$gender, $affiliation, $purpose]) {
             [$processing, $japic] = $this->processingWithPhoto();
-            $version = $processing->triggeringCdrDocumentVersion;
+            $version = $processing->triggeringCdrFinalDocument;
             $snapshot = $version->content_snapshot;
             $snapshot['content']['gender'] = $gender;
             $version->forceFill(['content_snapshot' => $snapshot])->saveQuietly();
@@ -54,18 +63,41 @@ class JapicCertificationPreviewTest extends TestCase
         }
     }
 
-    public function test_for_signing_preview_uses_the_frozen_history_revision(): void
+    public function test_for_signing_preview_remains_available_and_later_uses_the_latest_saved_revision(): void
     {
         Storage::fake('local');
         [$processing, $japic] = $this->processingWithPhoto();
-        $this->save($processing, $japic, 'Frozen Place');
+        $this->save($processing, $japic, 'Submitted Place');
         app(JapicCertificationWorkflowService::class)->submitForSigning($processing->fresh(), 1, 1, null, $japic);
-        $draft = $processing->draft()->firstOrFail();
-        $draft->payload = ['schema_version' => 2, 'certificate' => ['narrative_values' => ['surrendered_at' => 'Tampered']]];
-        $draft->save();
 
         $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))
-            ->assertOk()->assertSee('Frozen Place')->assertDontSee('Tampered');
+            ->assertOk()
+            ->assertSee('Submitted Place')
+            ->assertSee('CTRL-PREVIEW-'.$processing->id)
+            ->assertSee('Selected certification photograph')
+            ->assertSee('>Print</button>', false)
+            ->assertSee('>Download</a>', false)
+            ->assertDontSee('DRAFT — NOT FINAL');
+
+        $draft = $processing->draft()->firstOrFail();
+        $certificate = $draft->payload['certificate'];
+        unset($certificate['control_number'], $certificate['photo_version_id']);
+        $certificate['narrative_values']['surrendered_at'] = 'Latest saved place';
+        app(JapicCertificationDraftService::class)->save(
+            $processing->fresh(),
+            ['certificate' => $certificate],
+            'CTRL-PREVIEW-'.$processing->id,
+            1,
+            2,
+            null,
+            $japic,
+        );
+
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))
+            ->assertOk()
+            ->assertSee('Latest saved place')
+            ->assertDontSee('Submitted Place')
+            ->assertDontSee('DRAFT — NOT FINAL');
     }
 
     private function save(JapicCertificationProcessing $processing, User $japic, string $place): void
@@ -100,12 +132,11 @@ class JapicCertificationPreviewTest extends TestCase
             'mime_type' => 'image/png', 'size_bytes' => 3, 'sha256' => str_repeat('c', 64), 'uploaded_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         Storage::disk('local')->put('ib39/test/photo.png', 'png');
         DB::table('ib39_cdr_photos')->where('id', $photo)->update(['current_photo_version_id' => $photoVersion]);
-        $version = Ib39CdrDocumentVersion::query()->forceCreate(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'generated/preview', 'original_filename' => 'preview.html',
+        $version = Ib39CdrFinalDocument::query()->forceCreate(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'generated/preview', 'original_filename' => 'preview.html',
             'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => str_repeat('d', 64), 'content_schema_version' => 2, 'content_snapshot' => ['content' => ['alias' => 'Alias', 'gender' => 'Female',
                 'classification' => 'NPSRL', 'present_address' => 'Address', 'latest_position' => 'Leader', 'organization_affiliation' => 'Organization', 'recruitment_date' => '1998'], 'fr_photo_version_id' => $photoVersion], 'created_by' => $actor->id, 'finalized_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version->id]);
 
-        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version->id,
+        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version->id,
             'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]), $japic];
     }
 }

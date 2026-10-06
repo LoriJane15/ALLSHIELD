@@ -1050,7 +1050,7 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="text-muted small">Firearms</span>
                                 <div>
-                                    @if ($modalData['firearms'])
+                                    @if (($modalData['firearms'] ?? false))
                                         <span class="badge bg-danger text-white small px-2 py-0" style="border-radius: 6px;">Yes</span>
                                     @else
                                         <span class="badge bg-secondary text-white small px-2 py-0" style="border-radius: 6px;">No</span>

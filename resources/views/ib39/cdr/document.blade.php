@@ -1,3 +1,67 @@
+@if(isset($uploadedDocument))
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Uploaded Final CDR</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body { background: #334155; color: #0f172a; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+        .uploaded-toolbar { align-items: center; background: #1e293b; color: #fff; display: flex; gap: .75rem; justify-content: space-between; padding: .75rem 1rem; }
+        .uploaded-toolbar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+        .uploaded-toolbar a, .uploaded-toolbar button { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 6px; color: #fff; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; padding: .45rem .85rem; text-decoration: none; }
+        .uploaded-toolbar a:hover, .uploaded-toolbar button:hover { background: rgba(255,255,255,.22); }
+        .uploaded-document-frame { border: 0; flex: 1; min-height: 0; width: 100%; }
+        .uploaded-image-stage { align-items: flex-start; display: flex; flex: 1; justify-content: center; overflow: auto; padding: 1.5rem; }
+        .uploaded-image-stage img { background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.3); height: auto; max-width: 100%; }
+        @media print {
+            .uploaded-toolbar { display: none !important; }
+            body, .uploaded-image-stage { background: #fff; padding: 0; }
+            .uploaded-image-stage img { box-shadow: none; max-height: 100vh; max-width: 100%; object-fit: contain; }
+            .uploaded-document-frame { height: 100vh; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="uploaded-toolbar" aria-label="Uploaded final CDR actions">
+        <a href="{{ $backUrl }}">&larr; Back to CDR Workspace</a>
+        <strong>Actual Uploaded Final CDR</strong>
+        <div class="uploaded-toolbar-actions">
+            @if($canPrintUploaded)
+                <button type="button" onclick="printUploadedDocument()">Print</button>
+            @endif
+            @if($uploadedDownloadUrl)
+                <a href="{{ $uploadedDownloadUrl }}">Download</a>
+            @endif
+        </div>
+    </nav>
+
+    @if($uploadedDocument->mime_type === 'application/pdf')
+        <iframe class="uploaded-document-frame" id="uploadedDocumentFrame" src="{{ $uploadedFileUrl }}#toolbar=0&amp;navpanes=0" title="Uploaded final CDR"></iframe>
+    @else
+        <div class="uploaded-image-stage">
+            <img src="{{ $uploadedFileUrl }}" alt="Uploaded final CDR">
+        </div>
+    @endif
+
+    <script>
+        function printUploadedDocument() {
+            var frame = document.getElementById('uploadedDocumentFrame');
+            if (frame && frame.contentWindow) {
+                try {
+                    frame.contentWindow.focus();
+                    frame.contentWindow.print();
+                    return;
+                } catch (error) {}
+            }
+            window.print();
+        }
+    </script>
+</body>
+</html>
+@else
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,18 +69,20 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{{ $isFinal ? 'CDR Final Copy' : 'CDR Draft Preview' }}</title>
     <style>
+@unless($embedded ?? false)
 @page{size:A4;margin:0}
-* {
+@endunless
+{{ ($embedded ?? false) ? '.cdr-official-embed, .cdr-official-embed *' : '*' }} {
     box-sizing: border-box;
 }
-body {
+{{ ($embedded ?? false) ? '.cdr-official-embed' : 'body' }} {
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     color: #000;
     font-size: 11pt;
     line-height: 1.35;
     margin: 0;
-    background: #525659;
-    padding-bottom: 40px;
+    background: {{ ($embedded ?? false) ? '#f1f5f9' : '#525659' }};
+    padding-bottom: {{ ($embedded ?? false) ? '0' : '40px' }};
 }
 
 /* Screen toolbar */
@@ -414,6 +480,20 @@ table.cdr-table td.cell-end {
     display: block;
 }
 
+@if($embedded ?? false)
+.cdr-official-embed {
+    overflow-x: auto;
+    border-radius: 10px;
+}
+.cdr-official-embed .word-doc-container {
+    padding: 1rem;
+}
+.cdr-official-embed .word-page {
+    width: min(100%, 210mm);
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .10);
+}
+@else
 @media print {
     @page {
         size: A4 portrait;
@@ -448,23 +528,55 @@ table.cdr-table td.cell-end {
         break-after: auto !important;
     }
 }
+@endif
+@if($pdfMode ?? false)
+body {
+    background: transparent !important;
+    padding: 0 !important;
+}
+.toolbar, .page-number-tag {
+    display: none !important;
+}
+.word-doc-container {
+    display: block !important;
+    padding: 0 !important;
+}
+.word-page {
+    border: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    min-height: 297mm !important;
+    page-break-after: always;
+    width: 210mm !important;
+}
+.word-page:last-child {
+    page-break-after: auto;
+}
+@endif
     </style>
 </head>
 <body>
 
+@unless(($embedded ?? false) || ($pdfMode ?? false))
 <nav class="toolbar">
-    <div>
-        @unless($isFinal)
-            <a href="{{ route('ib39.cdr.edit', $cdr) }}">&larr; Edit draft</a>
-        @endunless
-    </div>
+    <div><a href="{{ $backUrl ?? route('ib39.cdr.show', $cdr) }}">&larr; Back to CDR Workspace</a></div>
     <div style="font-size: 13px; font-weight: bold; color: #cbd5e1;">
-        Microsoft Word Print Layout (A4 &bull; Arial 11)
+        Official Custodial Debriefing Report
     </div>
-    <div>
-        <button onclick="window.print()">Print Document</button>
+    <div style="display:flex; gap:.5rem;">
+        @if($canPrint ?? true)
+            @if($printUrl ?? null)
+                <a href="{{ $printUrl }}" target="_blank" rel="noopener">Print</a>
+            @else
+                <button onclick="window.print()">Print</button>
+            @endif
+        @endif
+        @if($downloadUrl ?? null)
+            <a href="{{ $downloadUrl }}">Download</a>
+        @endif
     </div>
 </nav>
+@endunless
 
 @php
 $docPages = [
@@ -501,6 +613,7 @@ $docPages = [
 ];
 @endphp
 
+@if($embedded ?? false)<div class="cdr-official-embed">@endif
 <div class="word-doc-container">
     @foreach($docPages as $pageNum => $pageData)
         <main class="word-page">
@@ -527,8 +640,10 @@ $docPages = [
                             </div>
 
                             <div class="fr-photo-frame" data-cover-fr-photo>
-                                @if($photoVersion)
-                                    <img src="{{ route('ib39.cdr.photos.show', $photoVersion) }}" alt="FR Photo">
+                                @if($photoSource ?? null)
+                                    <img src="{{ $photoSource }}" alt="FR Photo">
+                                @elseif($photoVersion)
+                                    <img src="{{ route(($embedded ?? false) ? 'cdr.photos.preview' : 'ib39.cdr.photos.show', $photoVersion) }}" alt="FR Photo">
                                 @else
                                     <span class="fr-photo-placeholder">FR Photo</span>
                                 @endif
@@ -646,8 +761,9 @@ $docPages = [
         </main>
     @endforeach
 </div>
+@if($embedded ?? false)</div>@endif
 
-@if($autoPrint)
+@if($autoPrint && !($embedded ?? false))
     <script>
         window.addEventListener('load', function(){ window.print(); });
     </script>
@@ -655,3 +771,4 @@ $docPages = [
 
 </body>
 </html>
+@endif

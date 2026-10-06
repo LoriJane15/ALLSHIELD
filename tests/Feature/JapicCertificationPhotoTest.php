@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Services\JapicCertificationPhotoService;
@@ -26,9 +26,17 @@ class JapicCertificationPhotoTest extends TestCase
         Storage::fake('local');
         [$processing, $japic] = $this->processing();
 
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))
+            ->assertOk()
+            ->assertSee('id="certification-photo"', false)
+            ->assertSee(route('japic.certifications.photos.store', $processing))
+            ->assertSee('photoForm.requestSubmit()', false)
+            ->assertDontSee('Upload &amp; Select', false)
+            ->assertDontSee('Active Photograph: Version');
+
         $this->actingAs($japic)->post(route('japic.certifications.photos.store', $processing), [
             'revision' => 0, 'lock_version' => 0, 'photo' => UploadedFile::fake()->image('first.png', 640, 480),
-        ])->assertRedirect(route('japic.certifications.draft.edit', $processing));
+        ])->assertRedirect(route('japic.certifications.workspace', $processing));
 
         $processing->refresh();
         $first = $processing->currentPhotoVersion;
@@ -39,6 +47,15 @@ class JapicCertificationPhotoTest extends TestCase
         $this->assertStringStartsWith("japic/certifications/{$processing->id}/photos/", $first->getRawOriginal('storage_path'));
         $this->assertNotSame('first.png', basename($first->getRawOriginal('storage_path')));
         Storage::disk('local')->assertExists($first->getRawOriginal('storage_path'));
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))
+            ->assertOk()
+            ->assertSee('Current certification photograph')
+            ->assertSee('src="'.route('japic.certifications.photos.show', [$processing, $first]).'"', false)
+            ->assertDontSee('View Securely');
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))
+            ->assertOk()
+            ->assertSee('Selected certification photograph')
+            ->assertSee('data:image/png;base64,', false);
 
         $this->actingAs($japic)->post(route('japic.certifications.photos.store', $processing), [
             'revision' => 1, 'lock_version' => 1, 'photo' => UploadedFile::fake()->image('replacement.jpg', 800, 600),
@@ -106,7 +123,7 @@ class JapicCertificationPhotoTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_stale_frozen_cancelled_and_failed_database_saves_leave_no_orphan_files(): void
+    public function test_stale_cancelled_and_failed_database_saves_leave_no_orphan_files_while_for_signing_remains_editable(): void
     {
         Storage::fake('local');
         [$processing, $japic] = $this->processing();
@@ -122,7 +139,26 @@ class JapicCertificationPhotoTest extends TestCase
         }
         $processing->forceFill(['status' => JapicCertificationStatus::ForSigning])->save();
         $this->actingAs($japic)->post(route('japic.certifications.photos.store', $processing), [
-            'revision' => 1, 'lock_version' => 1, 'photo' => UploadedFile::fake()->image('frozen.png'),
+            'revision' => 1, 'lock_version' => 1, 'photo' => UploadedFile::fake()->image('for-signing.png', 200, 200),
+        ])->assertRedirect(route('japic.certifications.workspace', $processing));
+        $processing->refresh();
+        $this->assertSame(JapicCertificationStatus::Drafting, $processing->status);
+        $this->assertSame(2, $processing->draft->revision);
+        $this->assertSame(2, $processing->currentPhotoVersion->version_number);
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))
+            ->assertOk()
+            ->assertSee('src="'.route('japic.certifications.photos.show', [$processing, $processing->currentPhotoVersion]).'"', false)
+            ->assertDontSee('View Securely');
+        $files = Storage::disk('local')->allFiles();
+
+        $processing->forceFill(['status' => JapicCertificationStatus::Completed])->save();
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))
+            ->assertOk()
+            ->assertSee('src="'.route('japic.certifications.photos.show', [$processing, $processing->currentPhotoVersion]).'"', false)
+            ->assertDontSee('id="certification-photo"', false)
+            ->assertDontSee('View Securely');
+        $this->actingAs($japic)->post(route('japic.certifications.photos.store', $processing), [
+            'revision' => 2, 'lock_version' => 2, 'photo' => UploadedFile::fake()->image('completed.png', 200, 200),
         ])->assertForbidden();
         $this->assertSame($files, Storage::disk('local')->allFiles());
 
@@ -172,13 +208,12 @@ class JapicCertificationPhotoTest extends TestCase
             'category' => 'Regular Member', 'province' => 'Davao del Sur', 'municipality_id' => $municipality, 'surfaced_at' => '2026-08-01',
             'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = Ib39CdrDocumentVersion::query()->forceCreate(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'generated/photo',
+        $version = Ib39CdrFinalDocument::query()->forceCreate(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'generated/photo',
             'original_filename' => 'photo.html', 'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => str_repeat('b', 64), 'content_schema_version' => 2,
             'content_snapshot' => ['content' => ['gender' => 'Female'], 'fr_photo_version_id' => null], 'created_by' => $actor->id, 'finalized_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version->id]);
 
         return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr,
-            'triggering_cdr_document_version_id' => $version->id, 'status' => JapicCertificationStatus::Pending,
+            'triggering_cdr_final_document_id' => $version->id, 'status' => JapicCertificationStatus::Pending,
             'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]), $japic];
     }
 }

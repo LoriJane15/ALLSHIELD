@@ -107,9 +107,9 @@ class JapicCertificationProcessing extends Model
         return $this->belongsTo(Ib39SurfacedFormerRebel::class, 'ib39_surfaced_former_rebel_id');
     }
 
-    public function triggeringCdrDocumentVersion(): BelongsTo
+    public function triggeringCdrFinalDocument(): BelongsTo
     {
-        return $this->belongsTo(Ib39CdrDocumentVersion::class, 'triggering_cdr_document_version_id');
+        return $this->belongsTo(Ib39CdrFinalDocument::class, 'triggering_cdr_final_document_id');
     }
 
     public function assignee(): BelongsTo
@@ -145,6 +145,11 @@ class JapicCertificationProcessing extends Model
     public function histories(): HasMany
     {
         return $this->hasMany(JapicCertificationHistory::class, 'processing_id');
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(JapicCertificationComment::class, 'japic_certification_processing_id');
     }
 
     public function documentVersions(): HasMany

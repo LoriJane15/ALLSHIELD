@@ -114,10 +114,10 @@
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <a class="btn btn-sm" href="{{ $document['previewUrl'] }}" style="background: #312e81; color: #ffffff; font-weight: 750; border-radius: 8px; padding: 0.45rem 1rem; border: none; box-shadow: 0 2px 6px rgba(49, 46, 129, 0.18);">
-                            <i class="mdi mdi-eye-outline mr-1"></i> Secure preview
+                            <i class="mdi mdi-eye-outline mr-1"></i> View
                         </a>
                         <a class="btn btn-sm" href="{{ $document['downloadUrl'] }}" style="background: #ffffff; color: #0f172a; font-weight: 750; border-radius: 8px; padding: 0.45rem 1rem; border: 1px solid #cbd5e1;">
-                            <i class="mdi mdi-download mr-1"></i> Secure download
+                            <i class="mdi mdi-download mr-1"></i> Download
                         </a>
                     </div>
                 </div>
@@ -142,4 +142,3 @@
     </div>
 </div>
 @endsection
-

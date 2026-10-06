@@ -10,7 +10,30 @@ class Ib39CdrProcessingPolicy
 {
     public function view(User $user, Ib39CdrProcessing $processing): bool
     {
-        return $this->canView($user, $processing);
+        if ($this->canView($user, $processing)) {
+            return true;
+        }
+
+        if (! $user->is_active) {
+            return false;
+        }
+
+        $processing->loadMissing('surfacedFormerRebel.pswdoEnrollment', 'surfacedFormerRebel.japicCertificationProcessing');
+        $record = $processing->surfacedFormerRebel;
+
+        if ($user->hasRole('pswdo')) {
+            return $record?->pswdoEnrollment !== null
+                && $user->can('view', $record->pswdoEnrollment);
+        }
+
+        return $user->hasRole('japic')
+            && $record?->japicCertificationProcessing !== null
+            && $user->can('view', $record->japicCertificationProcessing);
+    }
+
+    public function comment(User $user, Ib39CdrProcessing $processing): bool
+    {
+        return $this->view($user, $processing);
     }
 
     public function start(User $user, Ib39CdrProcessing $processing): bool
@@ -25,7 +48,10 @@ class Ib39CdrProcessingPolicy
 
     public function previewDraft(User $user, Ib39CdrProcessing $processing): bool
     {
-        return $this->canView($user, $processing);
+        return $this->canView($user, $processing)
+            || ($processing->status === Ib39CdrStatus::Completed
+                && $processing->form()->exists()
+                && $this->view($user, $processing));
     }
 
     public function printDraft(User $user, Ib39CdrProcessing $processing): bool
@@ -33,38 +59,27 @@ class Ib39CdrProcessingPolicy
         return $this->canView($user, $processing);
     }
 
+    public function downloadDraft(User $user, Ib39CdrProcessing $processing): bool
+    {
+        return $this->canView($user, $processing) && $processing->form()->exists();
+    }
+
     public function uploadPhoto(User $user, Ib39CdrProcessing $processing): bool
     {
         return $this->updateDraft($user, $processing);
-    }
-
-    public function finalize(User $user, Ib39CdrProcessing $processing): bool
-    {
-        return $this->hasAccess($user, $processing) && $processing->status === Ib39CdrStatus::Ongoing;
     }
 
     public function uploadFinal(User $user, Ib39CdrProcessing $processing): bool
     {
         return $this->hasAccess($user, $processing)
             && in_array($processing->status, [Ib39CdrStatus::Pending, Ib39CdrStatus::Ongoing], true)
-            && $processing->current_final_version_id === null;
-    }
-
-    public function replaceFinal(User $user, Ib39CdrProcessing $processing): bool
-    {
-        return $this->hasAccess($user, $processing)
-            && $processing->status === Ib39CdrStatus::Completed
-            && $processing->current_final_version_id !== null;
-    }
-
-    public function viewVersionHistory(User $user, Ib39CdrProcessing $processing): bool
-    {
-        return $this->canView($user, $processing);
+            && ! $processing->finalDocument()->exists();
     }
 
     public function viewPhoto(User $user, Ib39CdrProcessing $processing): bool
     {
-        return $this->canView($user, $processing);
+        return $this->canView($user, $processing)
+            || ($processing->status === Ib39CdrStatus::Completed && $this->view($user, $processing));
     }
 
     private function hasAccess(User $user, Ib39CdrProcessing $processing): bool

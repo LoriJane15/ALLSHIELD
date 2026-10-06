@@ -143,7 +143,7 @@
                     <div class="alert alert-success">{{ session('success') }}</div>
                 @endif
                 @if (session('error'))
-                    <div class="alert alert-danger">{{ session('error') }}</div>
+                    <div class="alert alert-danger" role="alert" data-toast style="position:fixed;top:1rem;right:1rem;z-index:1200;max-width:28rem;box-shadow:0 8px 24px rgba(15,23,42,.18)">{{ session('error') }}</div>
                 @endif
                 @yield('content')
             </div>

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow,noarchive">
-    <title>{{ $document->document_type->label() }} — Draft</title>
+    <title>{{ $document->document_type->label() }} — Preview</title>
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; background: #e5e7eb; color: #111; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
@@ -61,15 +61,33 @@
             .document-stack { overflow-x: auto; }
             .sheet { margin-left: 0; transform-origin: top left; }
         }
+        @if($pdfMode)
+            html, body { background: #fff; }
+            .document-stack { padding: 0; }
+            .sheet { margin: 0; box-shadow: none; page-break-after: always; }
+            .sheet:last-child { page-break-after: auto; }
+            .line-grid, .two-column, .legend-grid, .choice-row { display: block; }
+            .line-grid > :first-child { display: inline-block; width: 28%; vertical-align: bottom; }
+            .line-grid > :last-child { display: inline-block; width: 69%; vertical-align: bottom; }
+            .two-column > *, .legend-grid > div { display: inline-block; width: 48%; vertical-align: top; }
+            .checkbox { display: inline-block; text-align: center; }
+            .photo-box { display: block; text-align: center; }
+        @endif
     </style>
 </head>
 <body>
-<nav class="screen-controls no-print" aria-label="Draft preview controls">
-    <span class="warning">Private 39th IB working draft — not a final submission</span>
-    <a href="{{ route('ib39.fea.documents.draft.edit', [$fea, $document]) }}">Back to Editor</a>
-    <a href="{{ route('ib39.fea.documents.draft.preview', [$fea, $document]) }}">Preview</a>
-    @if($draft !== null)<button type="button" onclick="window.print()">Print Draft</button>@endif
-</nav>
+@unless($pdfMode)
+    <nav class="screen-controls no-print" aria-label="Draft preview controls">
+        <strong class="warning">{{ $document->document_type->label() }} — Preview</strong>
+        <a href="{{ route('ib39.fea.show', ['fea' => $fea, 'document' => $document->id]) }}">Back to FEA Workspace</a>
+        @if($draft !== null)
+            @can('downloadGeneratedDraft', [$document, $fea])
+                <a href="{{ route('ib39.fea.documents.draft.download', [$fea, $document]) }}">Download PDF</a>
+            @endcan
+            <button type="button" onclick="window.print()">Print</button>
+        @endif
+    </nav>
+@endunless
 
 @if($draft === null)
     <main class="empty-state"><strong style="display:block;margin-bottom:18px;color:#991b1b;letter-spacing:1.5px">DRAFT — NOT FINAL</strong><h1>Save a draft first</h1><p>No saved draft exists for this document. Return to the editor and save before previewing or printing.</p></main>
@@ -78,7 +96,7 @@
         <div class="print-draft-mark" aria-hidden="true">DRAFT — NOT FINAL</div>
         @include('ib39.fea.documents.'.strtolower($document->document_type->value), ['draft' => $draft])
     </main>
-    @if($printMode)<script>window.addEventListener('load', function () { window.print(); });</script>@endif
+    @if($printMode && ! $pdfMode)<script>window.addEventListener('load', function () { window.print(); });</script>@endif
 @endif
 </body>
 </html>

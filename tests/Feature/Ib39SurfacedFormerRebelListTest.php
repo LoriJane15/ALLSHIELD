@@ -380,7 +380,8 @@ class Ib39SurfacedFormerRebelListTest extends TestCase
         }
 
         $missingCdrFinal = $this->certifiedRecord('STATUS-MISSING-CDR-FINAL');
-        $missingCdrFinal->cdrProcessing()->update(['current_final_version_id' => null]);
+        DB::table('japic_certification_processings')->where('ib39_surfaced_former_rebel_id', $missingCdrFinal->id)->delete();
+        $missingCdrFinal->cdrProcessing->finalDocument()->delete();
         $this->assertSame(
             Ib39SurfacedFormerRebel::OVERALL_CASE_STATUS_CDR_COMPLETED,
             $missingCdrFinal->fresh()->load($this->overallStatusRelations())->overall_case_status,
@@ -410,17 +411,16 @@ class Ib39SurfacedFormerRebelListTest extends TestCase
             'completed_at' => now(), 'completed_by' => $this->creator->id,
             'created_at' => now(), 'updated_at' => now(),
         ]);
-        $cdrVersionId = DB::table('ib39_cdr_document_versions')->insertGetId([
-            'cdr_processing_id' => $cdrId, 'version_number' => 1, 'source_type' => 'generated',
+        $cdrVersionId = DB::table('ib39_cdr_final_documents')->insertGetId([
+            'cdr_processing_id' => $cdrId, 'source_type' => 'generated',
             'storage_path' => "generated/status/{$record->id}", 'original_filename' => 'final.html',
             'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => hash('sha256', 'cdr-'.$record->id),
             'content_schema_version' => 2, 'content_snapshot' => encrypt(['content' => []]),
             'created_by' => $this->creator->id, 'finalized_at' => now(), 'created_at' => now(), 'updated_at' => now(),
         ]);
-        DB::table('ib39_cdr_processings')->where('id', $cdrId)->update(['current_final_version_id' => $cdrVersionId]);
         $processing = JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $record->id,
-            'triggering_cdr_document_version_id' => $cdrVersionId,
+            'triggering_cdr_final_document_id' => $cdrVersionId,
             'status' => JapicCertificationStatus::Completed,
             'received_at' => now(), 'due_at' => now()->addDays(14), 'completed_at' => now(),
             'completed_by' => $this->creator->id, 'lock_version' => 1,
@@ -439,7 +439,7 @@ class Ib39SurfacedFormerRebelListTest extends TestCase
 
     private function overallStatusRelations(): array
     {
-        return ['cancellation', 'cdrProcessing.currentFinalVersion', 'japicCertificationProcessing.currentFinalVersion'];
+        return ['cancellation', 'cdrProcessing.finalDocument', 'japicCertificationProcessing.currentFinalVersion'];
     }
 
     private function record(array $overrides = []): Ib39SurfacedFormerRebel

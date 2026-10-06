@@ -80,10 +80,9 @@ class JapicDashboardTest extends TestCase
             'municipality_id' => $municipality, 'surfaced_at' => '2026-09-01', 'possessed_firearms' => 0, 'created_by' => $actor->id,
             'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => '2026-09-01', 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'private/test.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('a', 64), 'created_by' => $actor->id, 'finalized_at' => '2026-09-01', 'created_at' => now(), 'updated_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version]);
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'private/test.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('a', 64), 'created_by' => $actor->id, 'finalized_at' => '2026-09-01', 'created_at' => now(), 'updated_at' => now()]);
 
-        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version,
+        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version,
             'status' => $status, 'received_at' => Carbon::parse($due)->subDays(14), 'due_at' => $due, 'completed_at' => $completed, 'lock_version' => 0]);
     }
 }

@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\JapicCertificationEvent;
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Services\JapicCertificationDraftService;
@@ -85,12 +85,11 @@ class JapicCertificationWorkflowTest extends TestCase
         $fr = DB::table('ib39_surfaced_former_rebels')->insertGetId(['reference_number' => 'FR-WF-'.uniqid(), 'first_name' => 'Workflow', 'last_name' => 'Subject', 'category' => 'Regular Member',
             'province' => 'Davao del Sur', 'municipality_id' => $municipality, 'surfaced_at' => '2026-08-01', 'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = Ib39CdrDocumentVersion::query()->forceCreate(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'generated/wf', 'original_filename' => 'wf.html',
+        $version = Ib39CdrFinalDocument::query()->forceCreate(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'generated/wf', 'original_filename' => 'wf.html',
             'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => str_repeat('b', 64), 'content_schema_version' => 2, 'content_snapshot' => ['content' => ['alias' => 'Alias', 'gender' => 'Male',
                 'classification' => 'NPSRL', 'present_address' => 'Address', 'latest_position' => 'Leader', 'organization_affiliation' => 'Organization', 'recruitment_date' => '1998']], 'created_by' => $actor->id, 'finalized_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version->id]);
 
-        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version->id,
+        return [JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version->id,
             'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]), $japic];
     }
 }

@@ -2,13 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\Ib39FeaDocumentType;
 use App\Enums\Ib39FeaUploadSlot;
 use App\Enums\Ib39FrCategory;
 use App\Enums\JapicCertificationStatus;
 use App\Enums\PswdoEnrollmentDocumentType;
 use App\Models\ChatMessageDocumentReference;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39FeaDocumentVersion;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\JapicCertificationDocumentVersion;
@@ -57,7 +58,7 @@ class ChatDocumentReferenceTest extends TestCase
 
         $this->assertDatabaseCount('chat_message_document_references', 4);
         foreach ([
-            'ib39_cdr_document_version_id',
+            'ib39_cdr_final_document_id',
             'japic_certification_document_version_id',
             'pswdo_enrollment_document_id',
             'ib39_fea_document_version_id',
@@ -66,7 +67,7 @@ class ChatDocumentReferenceTest extends TestCase
         }
         $responses[0]->assertJsonPath('message.document_reference.preview_url', route(
             'japic.cdr.documents.preview',
-            [$context['cdr']->processing, $context['cdr']],
+            $context['cdr']->processing,
         ));
     }
 
@@ -216,20 +217,19 @@ class ChatDocumentReferenceTest extends TestCase
             'municipality_id' => $municipality, 'surfaced_at' => '2026-09-01', 'possessed_firearms' => true,
         ], $ib39)->load('cdrProcessing', 'feaProcessing.documents');
 
-        $cdr = Ib39CdrDocumentVersion::query()->forceCreate([
-            'cdr_processing_id' => $record->cdrProcessing->id, 'version_number' => 1, 'source_type' => 'uploaded',
+        $cdr = Ib39CdrFinalDocument::query()->forceCreate([
+            'cdr_processing_id' => $record->cdrProcessing->id, 'source_type' => 'uploaded',
             'storage_path' => 'ib39/cdr/chat-reference.pdf', 'original_filename' => 'cdr.pdf',
             'mime_type' => 'application/pdf', 'size_bytes' => 10, 'sha256' => str_repeat('c', 64),
             'created_by' => $ib39->id, 'finalized_at' => now(),
         ]);
         $record->cdrProcessing->update([
             'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $ib39->id,
-            'current_final_version_id' => $cdr->id,
         ]);
 
         $japicProcessing = JapicCertificationProcessing::query()->forceCreate([
             'ib39_surfaced_former_rebel_id' => $record->id,
-            'triggering_cdr_document_version_id' => $cdr->id,
+            'triggering_cdr_final_document_id' => $cdr->id,
             'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14),
             'assigned_to' => $japic->id, 'lock_version' => 0,
         ]);
@@ -255,15 +255,24 @@ class ChatDocumentReferenceTest extends TestCase
         ]));
         $pswdoDocument = $pswdoDocuments->first();
 
-        $feaVersions = $record->feaProcessing->documents->map(fn ($document) => Ib39FeaDocumentVersion::query()->forceCreate([
-            'fea_processing_id' => $record->feaProcessing->id, 'fea_document_id' => $document->id,
-            'slot' => Ib39FeaUploadSlot::Primary, 'version_number' => 1,
-            'storage_path' => 'ib39/fea/chat-reference-'.$document->document_type->value.'.pdf',
-            'original_filename' => $document->document_type->value.'.pdf',
-            'mime_type' => 'application/pdf', 'size_bytes' => 10,
-            'sha256' => hash('sha256', 'fea-'.$document->document_type->value),
-            'uploaded_by' => $ib39->id,
-        ])->load('document'));
+        $feaVersions = $record->feaProcessing->documents->map(function ($document) use ($ib39, $record): Ib39FeaDocumentVersion {
+            $version = Ib39FeaDocumentVersion::query()->forceCreate([
+                'fea_processing_id' => $record->feaProcessing->id, 'fea_document_id' => $document->id,
+                'slot' => Ib39FeaUploadSlot::FinalPrimary, 'version_number' => 1,
+                'storage_path' => 'ib39/fea/chat-reference-'.$document->document_type->value.'.pdf',
+                'original_filename' => $document->document_type->value.'.pdf',
+                'mime_type' => 'application/pdf', 'size_bytes' => 10,
+                'sha256' => hash('sha256', 'fea-'.$document->document_type->value),
+                'uploaded_by' => $ib39->id,
+            ]);
+            $document->forceFill([
+                'status' => Ib39FeaDocumentStatus::Completed,
+                'completed_at' => now(),
+                'current_final_version_id' => $version->id,
+            ])->save();
+
+            return $version->load('document');
+        });
         $feaVersion = $feaVersions->first(
             fn (Ib39FeaDocumentVersion $version): bool => $version->document->document_type === Ib39FeaDocumentType::Tir,
         );

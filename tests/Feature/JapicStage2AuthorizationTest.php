@@ -28,7 +28,7 @@ class JapicStage2AuthorizationTest extends TestCase
         }
     }
 
-    public function test_active_japic_has_only_the_explicit_stage_three_mutation_routes_and_correct_home(): void
+    public function test_active_japic_has_only_the_approved_certification_mutation_routes_and_correct_home(): void
     {
         $japic = User::factory()->role('japic')->create();
         $this->assertSame('japic.dashboard', $japic->homeRoute());
@@ -41,6 +41,7 @@ class JapicStage2AuthorizationTest extends TestCase
             ->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'japic.') && ! in_array('GET', $route->methods(), true))
             ->mapWithKeys(fn ($route) => [$route->getName() => $route->methods()[0]])->all();
         $this->assertSame([
+            'japic.certifications.comments.store' => 'POST',
             'japic.certifications.draft.update' => 'PUT',
             'japic.certifications.photos.store' => 'POST',
             'japic.certifications.final-document.upload' => 'POST',

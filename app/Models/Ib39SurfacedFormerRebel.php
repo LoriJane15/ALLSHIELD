@@ -85,10 +85,10 @@ class Ib39SurfacedFormerRebel extends Model
         if (! $this->cdrProcessing) {
             return false;
         }
-        $this->assertNestedRelationLoaded($this->cdrProcessing, 'currentFinalVersion');
+        $this->assertNestedRelationLoaded($this->cdrProcessing, 'finalDocument');
 
         return $this->cdrProcessing->status === Ib39CdrStatus::Completed
-            && $this->cdrProcessing->currentFinalVersion?->cdr_processing_id === $this->cdrProcessing->id;
+            && $this->cdrProcessing->finalDocument?->cdr_processing_id === $this->cdrProcessing->id;
     }
 
     public function hasCompletedJapicCertificationWithCurrentFinalDocument(): bool
@@ -124,7 +124,7 @@ class Ib39SurfacedFormerRebel extends Model
         }
 
         if ($this->cdrProcessing) {
-            $this->assertNestedRelationLoaded($this->cdrProcessing, 'currentFinalVersion');
+            $this->assertNestedRelationLoaded($this->cdrProcessing, 'finalDocument');
         }
         if ($this->japicCertificationProcessing) {
             $this->assertNestedRelationLoaded($this->japicCertificationProcessing, 'currentFinalVersion');

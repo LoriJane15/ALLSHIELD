@@ -12,6 +12,7 @@ use App\Models\Ib39FeaDocument;
 use App\Models\Ib39SurfacedFormerRebel;
 use App\Models\Municipality;
 use App\Models\User;
+use App\Services\Ib39FeaDraftSchema;
 use App\Services\Ib39FeaUploadService;
 use App\Services\Ib39SurfacedFormerRebelService;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -110,6 +111,21 @@ class Ib39FeaFinalUploadTest extends TestCase
     public function test_successful_final_is_immutable_audited_and_cannot_be_uploaded_twice(): void
     {
         $document = $this->document(Ib39FeaDocumentType::Tir);
+        $draft = app(Ib39FeaDraftSchema::class)->initial(Ib39FeaDocumentType::Tir, $this->record->display_name);
+        $draft['remarks'] = 'Persisted completed FEA draft';
+        $document->update([
+            'draft_data' => $draft,
+            'draft_schema_version' => Ib39FeaDraftSchema::VERSION,
+            'draft_revision' => 1,
+            'draft_saved_at' => now(),
+            'draft_saved_by' => $this->actor->id,
+        ]);
+        $document->draftHistories()->create([
+            'fea_processing_id' => $document->fea_processing_id,
+            'user_id' => $this->actor->id,
+            'revision' => 1,
+            'changed_fields' => ['remarks'],
+        ]);
         $this->upload($document, $this->pdf())->assertRedirect();
         $final = $document->fresh()->currentFinalVersion;
         $this->assertSame(Ib39FeaUploadSlot::FinalPrimary, $final->slot);
@@ -120,8 +136,20 @@ class Ib39FeaFinalUploadTest extends TestCase
         $this->assertSame(1, $document->uploadHistories()->where('event', 'final_uploaded')->count());
         $this->assertSame(1, AuditLog::query()->where('action', 'ib39_fea_final_file_uploaded')->count());
         Storage::disk('local')->assertExists($final->storage_path);
+        $this->actingAs($this->actor)->get(route('ib39.fea.show', ['fea' => $document->processing, 'document' => $document->id]))
+            ->assertOk()->assertSee('Document History')->assertSee('Completed')
+            ->assertSee('Final File Uploaded')->assertSee('Version 1')
+            ->assertSee('Draft Created')->assertSee('Persisted completed FEA draft')
+            ->assertSee('Completed document content is shown read-only.')
+            ->assertSee('fieldset disabled aria-label="Completed Technical Inspection Report content"', false)
+            ->assertSee('Uploaded Final File')->assertSee('View Uploaded File')
+            ->assertSee($this->actor->name)->assertSee('39th IB')->assertSee('datetime=', false);
 
         $this->upload($document, $this->pdf())->assertForbidden();
+        $this->actingAs($this->actor)->put(route('ib39.fea.documents.draft.update', [$document->processing, $document]), [
+            'revision' => 1,
+            'draft' => $draft,
+        ])->assertForbidden();
         $this->assertSame(1, $document->versions()->count());
         $this->assertSame(1, count(Storage::disk('local')->allFiles('ib39/fea')));
         try {

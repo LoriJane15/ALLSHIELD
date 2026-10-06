@@ -16,7 +16,6 @@ class Ib39CdrProcessing extends Model
         'due_at',
         'completed_at',
         'completed_by',
-        'current_final_version_id',
         'remarks',
         'delay_reason',
     ];
@@ -46,14 +45,14 @@ class Ib39CdrProcessing extends Model
         return $this->hasMany(Ib39CdrStatusHistory::class, 'cdr_processing_id');
     }
 
-    public function documentVersions(): HasMany
+    public function comments(): HasMany
     {
-        return $this->hasMany(Ib39CdrDocumentVersion::class, 'cdr_processing_id');
+        return $this->hasMany(Ib39CdrComment::class, 'cdr_processing_id');
     }
 
-    public function currentFinalVersion(): BelongsTo
+    public function finalDocument(): HasOne
     {
-        return $this->belongsTo(Ib39CdrDocumentVersion::class, 'current_final_version_id');
+        return $this->hasOne(Ib39CdrFinalDocument::class, 'cdr_processing_id');
     }
 
     public function completedBy(): BelongsTo

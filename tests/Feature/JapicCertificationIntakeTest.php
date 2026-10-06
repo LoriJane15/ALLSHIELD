@@ -17,14 +17,13 @@ class JapicCertificationIntakeTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_completed_cdr_with_owned_final_version_creates_exactly_one_intake_without_fea(): void
+    public function test_completed_cdr_with_owned_final_document_creates_exactly_one_intake_without_fea(): void
     {
         [$actor, $record] = $this->context(false);
         $cdr = $record->cdrProcessing;
         $completed = now()->subHours(3)->startOfSecond();
         $version = $this->version($cdr->id, $actor->id, $completed->copy()->subDay());
-        $cdr->update(['status' => 'Completed', 'completed_at' => $completed, 'completed_by' => $actor->id,
-            'current_final_version_id' => $version]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => $completed, 'completed_by' => $actor->id]);
 
         $service = app(JapicCertificationIntakeService::class);
         $first = $service->createForCompletedCdr($cdr);
@@ -35,6 +34,7 @@ class JapicCertificationIntakeTest extends TestCase
         $this->assertTrue($first->due_at->equalTo($completed->copy()->addDays(14)));
         $this->assertNull($record->feaProcessing);
         $this->assertDatabaseCount('japic_certification_processings', 1);
+        $this->assertDatabaseHas('japic_certification_processings', ['triggering_cdr_final_document_id' => $version]);
         $this->assertDatabaseCount('japic_certification_histories', 1);
         $this->assertDatabaseHas('japic_certification_histories', ['event' => JapicCertificationEvent::IntakeCreated->value]);
     }
@@ -47,8 +47,7 @@ class JapicCertificationIntakeTest extends TestCase
         [, $cancelled] = $this->context(false);
         $cdr = $cancelled->cdrProcessing;
         $version = $this->version($cdr->id, $actor->id, now());
-        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id,
-            'current_final_version_id' => $version]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id]);
         app(Ib39SurfacedFormerRebelCancellationService::class)->cancel($cancelled, 'Not eligible', $actor);
         $this->assertNull(app(JapicCertificationIntakeService::class)->createForCompletedCdr($cdr));
         $this->assertDatabaseCount('japic_certification_processings', 0);
@@ -70,8 +69,8 @@ class JapicCertificationIntakeTest extends TestCase
 
     private function version(int $cdr, int $actor, $finalized): int
     {
-        return DB::table('ib39_cdr_document_versions')->insertGetId([
-            'cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated',
+        return DB::table('ib39_cdr_final_documents')->insertGetId([
+            'cdr_processing_id' => $cdr, 'source_type' => 'generated',
             'storage_path' => 'private/cdr/final.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf',
             'size_bytes' => 1, 'sha256' => str_repeat('c', 64), 'created_by' => $actor, 'finalized_at' => $finalized,
             'created_at' => now(), 'updated_at' => now(),

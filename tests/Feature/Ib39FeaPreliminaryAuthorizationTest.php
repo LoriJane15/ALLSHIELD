@@ -54,7 +54,7 @@ class Ib39FeaPreliminaryAuthorizationTest extends TestCase
         $this->assertDatabaseCount('ib39_fea_document_histories', 0);
     }
 
-    public function test_workspace_escapes_metadata_and_displays_safe_actor_names_and_history_fallback(): void
+    public function test_workspace_omits_redundant_metadata_and_keeps_safe_sidebar_history(): void
     {
         [$actor, $processing, $document] = $this->context();
         $script = '<script>alert("unsafe")</script>';
@@ -73,11 +73,13 @@ class Ib39FeaPreliminaryAuthorizationTest extends TestCase
 
         $response = $this->actingAs($actor)->get(route('ib39.fea.show', $processing))->assertOk();
         $response->assertSee('Safe Authorization Actor')
-            ->assertSee('User unavailable')
-            ->assertSee('&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;', false)
+            ->assertSee('System')
+            ->assertSee('Document History')
+            ->assertDontSee('&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;', false)
             ->assertDontSee($script, false)
             ->assertDontSee('type="file"', false)
-            ->assertSee('View Upload History')
+            ->assertDontSee('View Upload History')
+            ->assertDontSee('class="metadata-grid"', false)
             ->assertDontSee('Upload Final CVIF')
             ->assertDontSee('Open Official Form Editor')
             ->assertSee(route('ib39.fea.documents.draft.preview', [$processing, $document]))

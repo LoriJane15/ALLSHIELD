@@ -63,8 +63,8 @@
 <div class="mblrc-dashboard-container">
     {{-- Top Back Nav --}}
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <a href="{{ route('japic.certifications.show', $processing) }}" class="btn btn-sm" style="background: #ffffff; border: 1px solid #cbd5e1; color: #475569; font-weight: 750; border-radius: 8px; padding: 0.45rem 1rem;">
-            <i class="mdi mdi-arrow-left mr-1"></i> Back to Certification Profile
+        <a href="{{ route('japic.certifications.workspace', $processing) }}" class="btn btn-sm" style="background: #ffffff; border: 1px solid #cbd5e1; color: #475569; font-weight: 750; border-radius: 8px; padding: 0.45rem 1rem;">
+            <i class="mdi mdi-arrow-left mr-1"></i> Back to Certification Workspace
         </a>
         <span class="badge" style="background: #eef2ff; color: #312e81; font-weight: 750; font-size: 0.8125rem; padding: 0.45rem 0.85rem; border-radius: 8px; border: 1px solid #c7d2fe;">
             <i class="mdi mdi-history mr-1"></i> Audit & Revision Log
@@ -241,4 +241,3 @@
     </div>
 </div>
 @endsection
-

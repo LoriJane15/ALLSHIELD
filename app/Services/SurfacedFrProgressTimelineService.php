@@ -188,7 +188,7 @@ class SurfacedFrProgressTimelineService
         }
 
         if ($record->cdrProcessing) {
-            $this->assertRelationLoaded($record->cdrProcessing, 'currentFinalVersion');
+            $this->assertRelationLoaded($record->cdrProcessing, 'finalDocument');
         }
         if ($record->japicCertificationProcessing) {
             $this->assertRelationLoaded($record->japicCertificationProcessing, 'currentFinalVersion');

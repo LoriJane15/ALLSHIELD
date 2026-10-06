@@ -48,7 +48,7 @@ class DashboardController extends Controller
                 'completed' => $items->filter->isCompleted()->count(),
             ])->sortByDesc('total')->take(5)->values();
         $cdrReady = Ib39SurfacedFormerRebel::query()->whereHas('cdrProcessing', fn ($query) => $query
-            ->where('status', 'Completed')->whereNotNull('current_final_version_id'))->count();
+            ->where('status', 'Completed')->whereHas('finalDocument'))->count();
 
         return view('pswdo.dashboard', [
             'total' => $total,

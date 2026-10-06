@@ -9,6 +9,7 @@ use App\Http\Controllers\Ib39;
 use App\Http\Controllers\Japic;
 use App\Http\Controllers\Lgu;
 use App\Http\Controllers\Mblrc;
+use App\Http\Controllers\ProcessingCommentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Pswdo;
 use App\Http\Controllers\SuperAdmin;
@@ -36,6 +37,32 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:60,1')->name('chat.conversations.read');
     Route::post('/chat/conversations/{chatConversation}/messages', [ChatMessageController::class, 'store'])
         ->middleware('throttle:60,1')->name('chat.messages.store');
+    Route::post('/cdr/{cdr}/comments', Ib39\CdrCommentController::class)
+        ->middleware('throttle:30,1')->name('cdr.comments.store');
+    Route::post('/japic-certifications/{japicCertificationProcessing}/comments', [ProcessingCommentController::class, 'japic'])
+        ->middleware('throttle:30,1')->name('japic.certifications.comments.store');
+    Route::post('/fea/{fea}/comments', [ProcessingCommentController::class, 'fea'])
+        ->middleware('throttle:30,1')->name('fea.comments.store');
+    Route::post('/pswdo-enrollments/{pswdoEnrollment}/comments', [ProcessingCommentController::class, 'pswdo'])
+        ->middleware('throttle:30,1')->name('pswdo.enrollments.comments.store');
+    Route::get('/cdr/{cdr}/workspace', [Ib39\CdrController::class, 'workspace'])->name('cdr.workspace');
+    Route::get('/cdr/{cdr}/draft/preview', [Ib39\CdrController::class, 'preview'])->name('cdr.draft.preview');
+    Route::get('/certifications/{japicCertificationProcessing}/workspace', [Japic\CertificationController::class, 'workspace'])
+        ->name('japic.certifications.workspace');
+    Route::get('/certifications/{japicCertificationProcessing}/preview', [Japic\CertificationDocumentController::class, 'preview'])
+        ->name('japic.certifications.preview');
+    Route::get('/certifications/{japicCertificationProcessing}/document-versions/{version}/preview', [Japic\CertificationDocumentController::class, 'previewFinal'])
+        ->name('japic.certifications.document-versions.preview');
+    Route::get('/fea/{fea}/documents/{document}/draft/preview', [Ib39\FeaDraftController::class, 'preview'])
+        ->name('fea.documents.draft.preview');
+    Route::get('/fea/{fea}/documents/{document}/view', [Ib39\FeaProcessingController::class, 'document'])
+        ->name('fea.documents.view');
+    Route::get('/enrollments/{pswdoEnrollment}/workspace/{document?}', [Pswdo\EnrollmentController::class, 'workspace'])
+        ->name('pswdo.enrollments.workspace');
+    Route::get('/cdr/{cdr}/final-document/preview', [Ib39\CdrDocumentController::class, 'preview'])
+        ->name('cdr.documents.preview');
+    Route::get('/cdr-photo-versions/{photoVersion}/preview', [Ib39\CdrPhotoController::class, 'show'])
+        ->name('cdr.photos.preview');
 });
 
 /*
@@ -178,13 +205,11 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::put('/cdr/{cdr}/draft', [Ib39\CdrController::class, 'update'])->name('cdr.update');
     Route::get('/cdr/{cdr}/preview', [Ib39\CdrController::class, 'preview'])->name('cdr.preview');
     Route::get('/cdr/{cdr}/print', [Ib39\CdrController::class, 'print'])->name('cdr.print');
-    Route::get('/cdr/{cdr}/finalization-review', [Ib39\CdrController::class, 'finalizationReview'])->name('cdr.finalization.review');
-    Route::post('/cdr/{cdr}/finalize', [Ib39\CdrController::class, 'finalize'])->name('cdr.finalize');
+    Route::get('/cdr/{cdr}/draft/download', [Ib39\CdrController::class, 'downloadDraft'])->name('cdr.download');
     Route::post('/cdr/{cdr}/final-document', [Ib39\CdrDocumentController::class, 'upload'])->name('cdr.documents.upload');
-    Route::post('/cdr/{cdr}/final-document/replacement', [Ib39\CdrDocumentController::class, 'replace'])->name('cdr.documents.replace');
-    Route::get('/cdr/{cdr}/document-versions/{version}/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
-    Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
-    Route::get('/cdr/{cdr}/document-versions/{version}/print', [Ib39\CdrDocumentController::class, 'print'])->name('cdr.documents.print');
+    Route::get('/cdr/{cdr}/final-document/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
+    Route::get('/cdr/{cdr}/final-document/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
+    Route::get('/cdr/{cdr}/final-document/print', [Ib39\CdrDocumentController::class, 'print'])->name('cdr.documents.print');
     Route::post('/cdr/{cdr}/photos', [Ib39\CdrPhotoController::class, 'store'])->name('cdr.photos.store');
     Route::get('/cdr-photo-versions/{photoVersion}/preview', [Ib39\CdrPhotoController::class, 'show'])->name('cdr.photos.show');
 
@@ -196,6 +221,7 @@ Route::middleware(['auth', 'role:39th_ib'])->prefix('39th-ib')->name('ib39.')->g
     Route::put('/fea/{fea}/documents/{document}/draft', [Ib39\FeaDraftController::class, 'update'])->name('fea.documents.draft.update');
     Route::get('/fea/{fea}/documents/{document}/draft/preview', [Ib39\FeaDraftController::class, 'preview'])->name('fea.documents.draft.preview');
     Route::get('/fea/{fea}/documents/{document}/draft/print', [Ib39\FeaDraftController::class, 'print'])->name('fea.documents.draft.print');
+    Route::get('/fea/{fea}/documents/{document}/draft/download', [Ib39\FeaDraftController::class, 'download'])->name('fea.documents.draft.download');
     Route::post('/fea/{fea}/documents/{document}/draft-versions', [Ib39\FeaUploadController::class, 'store'])->name('fea.documents.versions.store');
     Route::post('/fea/{fea}/documents/{document}/final-versions', [Ib39\FeaUploadController::class, 'storeFinal'])->name('fea.documents.final-versions.store');
     Route::post('/fea/{fea}/documents/{document}/comparison-photo-versions', [Ib39\FeaUploadController::class, 'storeComparison'])->name('fea.documents.comparison-versions.store');
@@ -251,16 +277,14 @@ Route::middleware(['auth', 'role:japic'])->prefix('japic')->name('japic.')->grou
     Route::put('/certifications/{japicCertificationProcessing}/draft', [Japic\CertificationDraftController::class, 'update'])->name('certifications.draft.update');
     Route::post('/certifications/{processing}/photo-versions', [Japic\CertificationPhotoController::class, 'store'])->name('certifications.photos.store');
     Route::get('/certifications/{processing}/photo-versions/{photoVersion}', [Japic\CertificationPhotoController::class, 'show'])->name('certifications.photos.show');
-    Route::get('/certifications/{japicCertificationProcessing}/preview', [Japic\CertificationDocumentController::class, 'preview'])->name('certifications.preview');
     Route::get('/certifications/{japicCertificationProcessing}/print', [Japic\CertificationDocumentController::class, 'print'])->name('certifications.print');
     Route::post('/certifications/{japicCertificationProcessing}/final-document', [Japic\CertificationDocumentController::class, 'uploadFinal'])->name('certifications.final-document.upload');
-    Route::get('/certifications/{japicCertificationProcessing}/document-versions/{version}/preview', [Japic\CertificationDocumentController::class, 'previewFinal'])->name('certifications.document-versions.preview');
     Route::get('/certifications/{japicCertificationProcessing}/document-versions/{version}/download', [Japic\CertificationDocumentController::class, 'downloadFinal'])->name('certifications.document-versions.download');
     Route::post('/certifications/{japicCertificationProcessing}/submit-for-signing', [Japic\CertificationWorkflowController::class, 'submitForSigning'])->name('certifications.submit-for-signing');
     Route::post('/certifications/{japicCertificationProcessing}/signing-complete', [Japic\CertificationWorkflowController::class, 'signingComplete'])->name('certifications.signing-complete');
 
-    Route::get('/cdr/{cdr}/document-versions/{version}/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
-    Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
+    Route::get('/cdr/{cdr}/final-document/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
+    Route::get('/cdr/{cdr}/final-document/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/download', [Ib39\FeaUploadController::class, 'download'])->name('fea.documents.versions.download');
     Route::get('/pswdo-enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('pswdo-enrollment-documents.preview');
@@ -271,18 +295,23 @@ Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->grou
     Route::get('/', [Pswdo\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/enrollments', [Pswdo\EnrollmentController::class, 'index'])->name('enrollments.index');
     Route::get('/enrollments/{pswdoEnrollment}', [Pswdo\EnrollmentController::class, 'show'])->name('enrollments.show');
-    Route::get('/enrollments/{pswdoEnrollment}/workspace', [Pswdo\EnrollmentController::class, 'workspace'])->name('enrollments.workspace');
     Route::get('/enrollments/{pswdoEnrollment}/documents/cdr', [Pswdo\EnrollmentController::class, 'cdr'])->name('enrollments.records.cdr');
     Route::get('/enrollments/{pswdoEnrollment}/documents/japic-certification', [Pswdo\EnrollmentController::class, 'certification'])->name('enrollments.records.certification');
     Route::get('/enrollments/{pswdoEnrollment}/documents/pswdo-enrollment', [Pswdo\EnrollmentController::class, 'pswdo'])->name('enrollments.records.pswdo');
     Route::get('/enrollments/{pswdoEnrollment}/documents/fea', [Pswdo\EnrollmentController::class, 'fea'])->name('enrollments.records.fea');
     Route::get('/enrollments/{pswdoEnrollment}/assistance', [Pswdo\EnrollmentController::class, 'assistance'])->name('enrollments.records.assistance');
+    Route::put('/enrollments/{pswdoEnrollment}/documents/eclip-enrollment-form/draft', [Pswdo\EnrollmentDocumentController::class, 'saveEclipDraft'])->name('enrollments.eclip-draft.update');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/eclip-enrollment-form/preview', [Pswdo\EnrollmentDocumentController::class, 'previewEclipDraft'])->name('enrollments.eclip-draft.preview');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/eclip-enrollment-form/download', [Pswdo\EnrollmentDocumentController::class, 'downloadEclipDraft'])->name('enrollments.eclip-draft.download');
+    Route::put('/enrollments/{pswdoEnrollment}/documents/initial-interview-form/draft', [Pswdo\EnrollmentDocumentController::class, 'saveInitialInterviewDraft'])->name('enrollments.initial-interview-draft.update');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/initial-interview-form/preview', [Pswdo\EnrollmentDocumentController::class, 'previewInitialInterviewDraft'])->name('enrollments.initial-interview-draft.preview');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/initial-interview-form/download', [Pswdo\EnrollmentDocumentController::class, 'downloadInitialInterviewDraft'])->name('enrollments.initial-interview-draft.download');
     Route::post('/enrollments/{pswdoEnrollment}/documents/{documentType}/final-document', [Pswdo\EnrollmentDocumentController::class, 'store'])->name('enrollments.documents.store');
     Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('enrollments.documents.preview');
     Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/download', [Pswdo\EnrollmentDocumentController::class, 'download'])->name('enrollments.documents.download');
 
-    Route::get('/cdr/{cdr}/document-versions/{version}/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
-    Route::get('/cdr/{cdr}/document-versions/{version}/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
+    Route::get('/cdr/{cdr}/final-document/preview', [Ib39\CdrDocumentController::class, 'preview'])->name('cdr.documents.preview');
+    Route::get('/cdr/{cdr}/final-document/download', [Ib39\CdrDocumentController::class, 'download'])->name('cdr.documents.download');
     Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/preview', [Japic\CertificationDocumentController::class, 'previewFinal'])->name('japic.document-versions.preview');
     Route::get('/japic-certifications/{japicCertificationProcessing}/document-versions/{version}/download', [Japic\CertificationDocumentController::class, 'downloadFinal'])->name('japic.document-versions.download');
     Route::get('/fea/{fea}/documents/{document}/versions/{version}/preview', [Ib39\FeaUploadController::class, 'preview'])->name('fea.documents.versions.preview');

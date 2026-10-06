@@ -41,6 +41,61 @@ class JapicCertificationProfileTest extends TestCase
         $processing->update(['assigned_to' => $assignee->id]);
         $this->actingAs($assignee)->get(route('japic.certifications.show', $processing))->assertOk();
         $this->actingAs($other)->get(route('japic.certifications.show', $processing))->assertForbidden();
+        $this->actingAs($assignee)->get(route('japic.certifications.workspace', $processing))->assertOk();
+        $this->actingAs($other)->get(route('japic.certifications.workspace', $processing))->assertForbidden();
+    }
+
+    public function test_profile_is_a_light_overview_with_a_link_to_the_separate_workspace(): void
+    {
+        $japic = User::factory()->role('japic')->create();
+        $processing = $this->processing();
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($japic)->get(route('japic.certifications.show', $processing))->assertOk()
+            ->assertSee('JAP-PROFILE')->assertSee('Certification Information')
+            ->assertSee(JapicCertificationStatus::Pending->value)
+            ->assertSee('Open Certification Workspace')
+            ->assertSee('href="'.route('japic.certifications.workspace', $processing).'"', false)
+            ->assertDontSee('Comments &amp; Remarks', false)
+            ->assertDontSee('Document History')
+            ->assertDontSee('process-workspace-grid')
+            ->assertDontSee('process-comment-form')
+            ->assertDontSee('Save Draft')
+            ->assertDontSee('Start Draft')
+            ->assertDontSee('Upload Final Signed Certification')
+            ->assertDontSee('<iframe', false);
+
+        $queries = strtolower(collect(DB::getQueryLog())->pluck('query')->implode("\n"));
+        foreach (['japic_certification_comments', 'japic_certification_histories', 'japic_certification_drafts'] as $table) {
+            $this->assertStringNotContainsString($table, $queries);
+        }
+    }
+
+    public function test_workspace_contains_processing_and_shared_activity_with_profile_navigation(): void
+    {
+        $japic = User::factory()->role('japic')->create();
+        $processing = $this->processing();
+        $processing->comments()->create(['user_id' => $japic->id, 'author_role' => 'japic', 'text' => 'Workspace only note']);
+
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))->assertOk()
+            ->assertSee('process-workspace-grid')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertSee('Workspace only note')
+            ->assertSee('JAPIC Certification')
+            ->assertSee('name="certificate[narrative_values][fr_name]"', false)
+            ->assertSee('Save Draft')
+            ->assertSee('Upload Certification')
+            ->assertSee('All changes saved')
+            ->assertSee('Preview Draft')
+            ->assertDontSee('No certification draft has been saved.')
+            ->assertDontSee('Final certification version 1')
+            ->assertSee('Back to Certification Profile')
+            ->assertSee('href="'.route('japic.certifications.show', $processing).'"', false);
+
+        $this->actingAs($japic)->get(route('japic.certifications.show', $processing))->assertOk()
+            ->assertDontSee('Workspace only note');
     }
 
     public function test_both_profiles_present_the_same_ordered_documents_and_monitoring_destinations(): void
@@ -62,22 +117,22 @@ class JapicCertificationProfileTest extends TestCase
                 ->assertDontSee('Secure download');
         }
         foreach ([
-            'japic.certifications.records.cdr',
-            'japic.certifications.records.pswdo',
-            'japic.certifications.records.fea',
-            'japic.certifications.records.assistance',
-            'japic.certifications.records.certification',
-        ] as $routeName) {
-            $japicResponse->assertSee('href="'.route($routeName, $processing).'"', false);
+            route('cdr.workspace', $fr->cdrProcessing),
+            route('japic.certifications.records.pswdo', $processing),
+            route('japic.certifications.records.fea', $processing),
+            route('japic.certifications.records.assistance', $processing),
+            route('japic.certifications.workspace', $processing),
+        ] as $url) {
+            $japicResponse->assertSee('href="'.$url.'"', false);
         }
         foreach ([
-            'ib39.fr-profiles.records.cdr',
-            'ib39.fr-profiles.records.pswdo',
-            'ib39.fr-profiles.records.fea',
-            'ib39.fr-profiles.records.assistance',
-            'ib39.fr-profiles.records.certification',
-        ] as $routeName) {
-            $ib39Response->assertSee('href="'.route($routeName, $fr).'"', false);
+            route('cdr.workspace', $fr->cdrProcessing),
+            route('ib39.fr-profiles.records.pswdo', $fr),
+            route('ib39.fr-profiles.records.fea', $fr),
+            route('ib39.fr-profiles.records.assistance', $fr),
+            route('japic.certifications.workspace', $processing),
+        ] as $url) {
+            $ib39Response->assertSee('href="'.$url.'"', false);
         }
     }
 
@@ -95,13 +150,13 @@ class JapicCertificationProfileTest extends TestCase
 
         $response = $this->actingAs($japic)->get(route('japic.certifications.show', $processing))->assertOk()
             ->assertSee('FR Profile Information')->assertSee('Documents/Records')
-            ->assertSee('JAPIC Certification Timeline')->assertSee('Certification Workspace')
+            ->assertDontSee('JAPIC Certification Timeline')->assertSee('Open Certification Workspace')
             ->assertDontSee('Related Workflows')->assertDontSee('Current Final CDR')->assertDontSee('Secure preview')
             ->assertDontSee('Private certification photographs')->assertDontSee('Immutable draft revisions')
             ->assertDontSee('JAPIC-MUST-NOT-RECEIVE-CDR-HISTORY')->assertDontSee('CDR History');
 
         $response->assertDontSee('id="overall-status-heading"', false)
-            ->assertSeeInOrder(['FR Profile Information', 'JAPIC Certification Timeline', 'Documents/Records', 'Certification Workspace']);
+            ->assertSeeInOrder(['FR Profile Information', 'Documents/Records', 'Certification Information']);
 
         $this->assertFalse(collect(DB::getQueryLog())->contains(
             fn (array $query): bool => str_contains(strtolower($query['query']), 'ib39_cdr_status_histories')
@@ -121,7 +176,7 @@ class JapicCertificationProfileTest extends TestCase
     {
         $processing = $this->processing();
         $processing->load([
-            'surfacedFormerRebel.cdrProcessing.currentFinalVersion',
+            'surfacedFormerRebel.cdrProcessing.finalDocument',
             'surfacedFormerRebel.feaProcessing.documents.currentDraftVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSupportingPhotoVersion',
             'surfacedFormerRebel.feaProcessing.documents.currentSurrenderedPhotoVersion',
@@ -134,24 +189,22 @@ class JapicCertificationProfileTest extends TestCase
         app(SurfacedFrDocumentsRecordsService::class)->summaries($record);
     }
 
-    public function test_static_timeline_maps_every_internal_status_without_clickable_steps(): void
+    public function test_profile_shows_status_without_the_old_certification_timeline(): void
     {
         $japic = User::factory()->role('japic')->create();
         $processing = $this->processing();
         foreach ([
-            JapicCertificationStatus::Pending->value => 0,
-            JapicCertificationStatus::Drafting->value => 1,
-            JapicCertificationStatus::ForSigning->value => 2,
-            JapicCertificationStatus::AwaitingFinalUpload->value => 2,
-            JapicCertificationStatus::Completed->value => 3,
-        ] as $status => $expectedCompleted) {
+            JapicCertificationStatus::Pending->value,
+            JapicCertificationStatus::Drafting->value,
+            JapicCertificationStatus::ForSigning->value,
+            JapicCertificationStatus::AwaitingFinalUpload->value,
+            JapicCertificationStatus::Completed->value,
+        ] as $status) {
             $processing->forceFill(['status' => $status])->save();
             $html = $this->actingAs($japic)->get(route('japic.certifications.show', $processing))->assertOk()->getContent();
-            preg_match_all('/<li class="certification-step ([^"]*)">/', $html, $steps);
-            $this->assertCount(3, $steps[1]);
-            $this->assertSame($expectedCompleted, collect($steps[1])->filter(fn (string $class): bool => str_contains($class, 'is-complete'))->count());
-            $this->assertStringNotContainsString('<button class="certification-step', $html);
-            $this->assertStringNotContainsString('<a class="certification-step', $html);
+            $this->assertStringContainsString($status, $html);
+            $this->assertStringNotContainsString('JAPIC Certification Timeline', $html);
+            $this->assertStringNotContainsString('certification-step', $html);
         }
 
         $processing->histories()->create([
@@ -174,8 +227,7 @@ class JapicCertificationProfileTest extends TestCase
         $html = $this->actingAs($japic)->get(route('japic.certifications.show', $processing))->assertOk()
             ->assertSee('Certification processing stopped because the FR was cancelled.')
             ->getContent();
-        preg_match_all('/<li class="certification-step ([^"]*)">/', $html, $steps);
-        $this->assertSame(1, collect($steps[1])->filter(fn (string $class): bool => str_contains($class, 'is-complete'))->count());
+        $this->assertStringNotContainsString('JAPIC Certification Timeline', $html);
     }
 
     private function processing(): JapicCertificationProcessing
@@ -184,9 +236,8 @@ class JapicCertificationProfileTest extends TestCase
         $municipality = DB::table('municipalities')->insertGetId(['name' => 'Profile Municipality', 'created_at' => now(), 'updated_at' => now()]);
         $fr = DB::table('ib39_surfaced_former_rebels')->insertGetId(['reference_number' => 'JAP-PROFILE', 'first_name' => 'Profile', 'last_name' => 'Person', 'category' => Ib39FrCategory::RegularMember->value, 'province' => Ib39SurfacedFormerRebel::DEFAULT_PROVINCE, 'municipality_id' => $municipality, 'surfaced_at' => '2026-09-01', 'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'uploaded', 'storage_path' => 'private/cdr/secret.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('c', 64), 'created_by' => $actor->id, 'finalized_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version]);
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr, 'source_type' => 'uploaded', 'storage_path' => 'private/cdr/secret.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('c', 64), 'created_by' => $actor->id, 'finalized_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
 
-        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version, 'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]);
+        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version, 'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]);
     }
 }

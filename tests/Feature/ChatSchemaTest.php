@@ -27,7 +27,7 @@ class ChatSchemaTest extends TestCase
             'id', 'chat_conversation_id', 'user_id', 'last_read_message_id', 'created_at', 'updated_at',
         ]));
         $this->assertTrue(Schema::hasColumns('chat_message_document_references', [
-            'id', 'chat_message_id', 'ib39_cdr_document_version_id',
+            'id', 'chat_message_id', 'ib39_cdr_final_document_id',
             'japic_certification_document_version_id', 'pswdo_enrollment_document_id',
             'ib39_fea_document_version_id', 'created_at',
         ]));

@@ -97,7 +97,7 @@ class JapicCertificationListTest extends TestCase
         $response->assertSee('JAPIC Certified');
 
         $queries = collect(DB::getQueryLog())->pluck('query')->map('strtolower');
-        foreach (['ib39_cdr_processings', 'ib39_cdr_document_versions', 'ib39_fr_cancellations', 'japic_certification_document_versions'] as $table) {
+        foreach (['ib39_cdr_processings', 'ib39_cdr_final_documents', 'ib39_fr_cancellations', 'japic_certification_document_versions'] as $table) {
             $this->assertLessThanOrEqual(1, $queries->filter(fn (string $sql): bool => str_contains($sql, 'from "'.$table.'"'))->count(), "{$table} was queried per row.");
         }
         $this->assertFalse($queries->contains(fn (string $sql): bool => str_contains($sql, 'fr_government_assistances')));
@@ -111,10 +111,9 @@ class JapicCertificationListTest extends TestCase
             'category' => Ib39FrCategory::RegularMember->value, 'province' => Ib39SurfacedFormerRebel::DEFAULT_PROVINCE, 'municipality_id' => $municipality,
             'surfaced_at' => '2026-09-01', 'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => '2026-09-02', 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'private/final.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('b', 64), 'created_by' => $actor->id, 'finalized_at' => '2026-09-02', 'created_at' => now(), 'updated_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version]);
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'private/final.pdf', 'original_filename' => 'final.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('b', 64), 'created_by' => $actor->id, 'finalized_at' => '2026-09-02', 'created_at' => now(), 'updated_at' => now()]);
 
-        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version,
+        return JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version,
             'status' => JapicCertificationStatus::Pending, 'received_at' => '2026-09-02', 'due_at' => '2026-09-16', 'lock_version' => 0])->load('surfacedFormerRebel');
     }
 }

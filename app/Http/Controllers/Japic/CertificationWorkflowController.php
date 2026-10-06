@@ -15,13 +15,13 @@ class CertificationWorkflowController extends Controller
     {
         $workflow->submitForSigning($japicCertificationProcessing, (int) $request->validated('revision'), (int) $request->validated('lock_version'), $request->validated('delay_reason'), $request->user());
 
-        return redirect()->route('japic.certifications.show', $japicCertificationProcessing)->with('status', 'The certification revision is frozen for physical signing.');
+        return redirect()->route('japic.certifications.workspace', $japicCertificationProcessing)->with('status', 'The certification was submitted for signing.');
     }
 
     public function signingComplete(ConfirmCertificationSigningRequest $request, JapicCertificationProcessing $japicCertificationProcessing, JapicCertificationWorkflowService $workflow): RedirectResponse
     {
         $workflow->confirmSigningComplete($japicCertificationProcessing, (int) $request->validated('revision'), (int) $request->validated('lock_version'), $request->validated('delay_reason'), $request->user());
 
-        return redirect()->route('japic.certifications.show', $japicCertificationProcessing)->with('status', 'Signing completion confirmed. The signed final PDF is now awaiting upload.');
+        return redirect()->route('japic.certifications.workspace', $japicCertificationProcessing)->with('status', 'Signing completion confirmed. The signed final PDF is now awaiting upload.');
     }
 }

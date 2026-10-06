@@ -1,6 +1,7 @@
 @php
     $current = $slot === \App\Enums\Ib39FeaUploadSlot::JustificationSurrendered ? $document->currentSurrenderedPhotoVersion : $document->currentSupportingPhotoVersion;
-    $versions = $document->versions->where('slot', $slot);
+    $showHistory = $showHistory ?? true;
+    $versions = $showHistory ? $document->versions->where('slot', $slot) : collect();
     $routeName = $slot === \App\Enums\Ib39FeaUploadSlot::JustificationSurrendered ? 'ib39.fea.documents.surrendered-versions.store' : 'ib39.fea.documents.comparison-versions.store';
     $section = $slot === \App\Enums\Ib39FeaUploadSlot::JustificationSurrendered ? '3' : '4';
     $formId = 'support-photo-form-'.$section;
@@ -21,6 +22,8 @@
                 <button class="btn btn-sm btn-primary" type="submit" form="{{ $formId }}">Upload Photo</button>
             </div>
         @endcan
-        <details class="version-history"><summary>View Upload History{{ $versions->isNotEmpty() ? ' ('.$versions->count().')' : '' }}</summary>@forelse($versions as $version)<div><strong>Version {{ $version->version_number }} — DRAFT — NOT FINAL</strong><br>{{ $version->original_filename }} · {{ $version->created_at->format('F d, Y · h:i A') }} · {{ $version->uploader?->name ?? 'User unavailable' }}@if($version->replacement_reason)<br>Replacement reason: {{ $version->replacement_reason }}@endif <a href="{{ route('ib39.fea.documents.versions.preview', [$fea, $document, $version]) }}" target="_blank" rel="noopener">Preview</a> <a href="{{ route('ib39.fea.documents.versions.download', [$fea, $document, $version]) }}">Download</a></div>@empty<div>No uploads recorded.</div>@endforelse</details>
+        @if($showHistory)
+            <details class="version-history"><summary>View Upload History{{ $versions->isNotEmpty() ? ' ('.$versions->count().')' : '' }}</summary>@forelse($versions as $version)<div><strong>Version {{ $version->version_number }} — DRAFT — NOT FINAL</strong><br>{{ $version->original_filename }} · {{ $version->created_at->format('F d, Y · h:i A') }} · {{ $version->uploader?->name ?? 'User unavailable' }}@if($version->replacement_reason)<br>Replacement reason: {{ $version->replacement_reason }}@endif <a href="{{ route('ib39.fea.documents.versions.preview', [$fea, $document, $version]) }}" target="_blank" rel="noopener">Preview</a> <a href="{{ route('ib39.fea.documents.versions.download', [$fea, $document, $version]) }}">Download</a></div>@empty<div>No uploads recorded.</div>@endforelse</details>
+        @endif
     </div>
 @endif

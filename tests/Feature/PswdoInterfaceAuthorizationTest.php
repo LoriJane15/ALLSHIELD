@@ -16,7 +16,7 @@ class PswdoInterfaceAuthorizationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_pswdo_home_empty_states_and_only_one_mutation_route_are_truthful(): void
+    public function test_pswdo_home_empty_states_and_only_document_upload_and_comment_mutations_are_truthful(): void
     {
         $pswdo = User::factory()->role('pswdo')->create();
         $this->assertSame('pswdo.dashboard', $pswdo->homeRoute());
@@ -26,7 +26,12 @@ class PswdoInterfaceAuthorizationTest extends TestCase
         $mutations = collect(app('router')->getRoutes()->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->getName() ?? '', 'pswdo.') && ! in_array('GET', $route->methods(), true))
             ->mapWithKeys(fn ($route) => [$route->getName() => $route->methods()[0]])->all();
-        $this->assertSame(['pswdo.enrollments.documents.store' => 'POST'], $mutations);
+        $this->assertSame([
+            'pswdo.enrollments.comments.store' => 'POST',
+            'pswdo.enrollments.eclip-draft.update' => 'PUT',
+            'pswdo.enrollments.initial-interview-draft.update' => 'PUT',
+            'pswdo.enrollments.documents.store' => 'POST',
+        ], $mutations);
     }
 
     public function test_guest_inactive_and_other_roles_cannot_enter_pswdo_routes(): void
@@ -48,12 +53,15 @@ class PswdoInterfaceAuthorizationTest extends TestCase
     {
         [$enrollment, $pswdo] = $this->enrollment();
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.show', $enrollment))->assertOk()
+            ->assertSee('Interface Subject')
             ->assertSee('Documents/Records')
             ->assertSeeInOrder([
                 'CDR', 'JAPIC Certification', 'PSWDO Enrollment Documents',
                 'FEA Processing Documents', 'Assistance Records',
             ])
             ->assertSee('href="'.route('pswdo.enrollments.records.pswdo', $enrollment).'"', false)
+            ->assertSee('href="'.route('cdr.workspace', $enrollment->surfacedFormerRebel->cdrProcessing).'"', false)
+            ->assertSee('href="'.route('japic.certifications.workspace', $enrollment->surfacedFormerRebel->japicCertificationProcessing).'"', false)
             ->assertDontSee('E-CLIP Enrollment Form')
             ->assertDontSee('No documents available')
             ->assertDontSee('type="file"', false)
@@ -65,11 +73,42 @@ class PswdoInterfaceAuthorizationTest extends TestCase
             ->assertDontSee('Secure preview')
             ->assertDontSee('Secure download');
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.workspace', $enrollment))->assertOk()
-            ->assertSee('Upload Final Signed PDF')->assertSee('Endorsement Letter is locked')
-            ->assertDontSee('Drafting')->assertDontSee('For Signature');
+            ->assertSee('Upload Final E-CLIP Enrollment Form')
+            ->assertSee('E-CLIP Enrollment Form drafting area', false)
+            ->assertSee('Preview Draft')
+            ->assertSee('Endorsement Letter')
+            ->assertDontSee('For Signature');
 
-        $enrollment->surfacedFormerRebel->cdrProcessing->update(['current_final_version_id' => null]);
+        $enrollment->surfacedFormerRebel->cdrProcessing->update(['status' => 'Pending', 'completed_at' => null, 'completed_by' => null]);
         $this->actingAs($pswdo)->get(route('pswdo.enrollments.show', $enrollment))->assertForbidden();
+    }
+
+    public function test_non_pswdo_user_cannot_update_structured_pswdo_drafts(): void
+    {
+        [$enrollment] = $this->enrollment();
+        $japic = User::factory()->role('japic')->create();
+
+        $this->actingAs($japic)
+            ->putJson(route('pswdo.enrollments.eclip-draft.update', $enrollment), [])
+            ->assertForbidden();
+        $this->actingAs($japic)
+            ->putJson(route('pswdo.enrollments.initial-interview-draft.update', $enrollment), [])
+            ->assertForbidden();
+    }
+
+    public function test_show_does_not_reload_the_same_surfaced_fr_for_policy_profile_and_fea_status(): void
+    {
+        [$enrollment, $pswdo] = $this->enrollment();
+        $surfacedFrQueries = [];
+        DB::listen(function ($query) use (&$surfacedFrQueries): void {
+            if (str_starts_with($query->sql, 'select * from "ib39_surfaced_former_rebels" where ')) {
+                $surfacedFrQueries[] = $query->sql;
+            }
+        });
+
+        $this->actingAs($pswdo)->get(route('pswdo.enrollments.show', $enrollment))->assertOk();
+
+        $this->assertCount(1, $surfacedFrQueries, 'The show page should reuse the surfaced FR loaded for authorization.');
     }
 
     private function enrollment(): array
@@ -80,9 +119,9 @@ class PswdoInterfaceAuthorizationTest extends TestCase
         $municipality = Municipality::query()->create(['name' => 'Interface Municipality']);
         $record = app(Ib39SurfacedFormerRebelService::class)->create(['first_name' => 'Interface', 'last_name' => 'Subject', 'category' => Ib39FrCategory::RegularMember->value, 'municipality_id' => $municipality->id, 'surfaced_at' => '2026-09-01', 'possessed_firearms' => true], $ib39)->load('cdrProcessing');
         $cdr = $record->cdrProcessing;
-        $cdrVersion = $cdr->documentVersions()->create(['version_number' => 1, 'source_type' => 'uploaded', 'storage_path' => "ib39/cdr/{$cdr->id}/final.pdf", 'original_filename' => 'cdr.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20, 'sha256' => str_repeat('a', 64), 'created_by' => $ib39->id, 'finalized_at' => now()]);
-        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $ib39->id, 'current_final_version_id' => $cdrVersion->id]);
-        $processing = JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $record->id, 'triggering_cdr_document_version_id' => $cdrVersion->id, 'status' => 'Completed', 'received_at' => now(), 'due_at' => now()->addDays(14), 'completed_at' => now(), 'completed_by' => $japic->id, 'lock_version' => 1]);
+        $cdrVersion = $cdr->finalDocument()->create(['source_type' => 'uploaded', 'storage_path' => "ib39/cdr/{$cdr->id}/final.pdf", 'original_filename' => 'cdr.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20, 'sha256' => str_repeat('a', 64), 'created_by' => $ib39->id, 'finalized_at' => now()]);
+        $cdr->update(['status' => 'Completed', 'completed_at' => now(), 'completed_by' => $ib39->id]);
+        $processing = JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $record->id, 'triggering_cdr_final_document_id' => $cdrVersion->id, 'status' => 'Completed', 'received_at' => now(), 'due_at' => now()->addDays(14), 'completed_at' => now(), 'completed_by' => $japic->id, 'lock_version' => 1]);
         $final = $processing->documentVersions()->create(['version_number' => 1, 'storage_path' => "japic/certifications/{$processing->id}/final-documents/final.pdf", 'original_filename' => 'japic.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 20, 'sha256' => str_repeat('b', 64), 'uploaded_by' => $japic->id, 'all_signatories_confirmed' => true, 'correct_final_confirmed' => true, 'uploaded_at' => now()]);
         $processing->forceFill(['current_final_version_id' => $final->id])->save();
         $enrollment = DB::transaction(fn () => app(PswdoEnrollmentIntakeService::class)->receiveEligible($record->id));

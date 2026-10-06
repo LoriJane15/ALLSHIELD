@@ -19,22 +19,38 @@ class Ib39CdrDraftService
         User $actor,
         ?string $ipAddress = null,
         ?string $userAgent = null,
+        bool $recordHistory = false,
     ): Ib39CdrForm {
-        return DB::transaction(function () use ($processing, $content, $actor, $ipAddress, $userAgent) {
+        return DB::transaction(function () use ($processing, $content, $actor, $ipAddress, $userAgent, $recordHistory) {
             $locked = Ib39CdrProcessing::query()->lockForUpdate()->findOrFail($processing->id);
             abort_unless($locked->surfacedFormerRebel()->whereDoesntHave('cancellation')->exists(), 403);
             $this->statuses->recordDraftSaved($locked, $actor, $ipAddress, $userAgent);
+            $locked->refresh();
 
             $form = Ib39CdrForm::query()
                 ->where('cdr_processing_id', $locked->id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $previousContent = $form->content;
+
             $form->update([
                 'schema_version' => Ib39CdrFormSchema::VERSION,
                 'content' => $content,
                 'last_edited_by' => $actor->id,
             ]);
+            if ($recordHistory) {
+                $locked->statusHistories()->create([
+                    'user_id' => $actor->id,
+                    'from_status' => $locked->status,
+                    'to_status' => $locked->status,
+                    'event' => $previousContent === null || $previousContent === $content ? 'draft_saved' : 'draft_updated',
+                    'remarks' => null,
+                    'delay_reason' => null,
+                    'ip_address' => $ipAddress,
+                    'user_agent' => $userAgent ? mb_substr($userAgent, 0, 1000) : null,
+                ]);
+            }
             AuditLog::query()->create([
                 'user_id' => $actor->id,
                 'action' => 'ib39_cdr_draft_saved',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ib39;
 
+use App\Enums\Ib39FeaDocumentStatus;
 use App\Enums\Ib39FeaUploadSlot;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Ib39\UploadFeaDraftFileRequest;
@@ -38,15 +39,25 @@ class FeaUploadController extends Controller
         return $this->save($request, $fea, $document, Ib39FeaUploadSlot::JustificationSurrendered, $uploads);
     }
 
-    public function preview(Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaDocumentVersion $version, Ib39FeaUploadService $uploads): StreamedResponse
+    public function preview(Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaDocumentVersion $version, Ib39FeaUploadService $uploads): StreamedResponse|RedirectResponse
     {
+        abort_unless($version->fea_processing_id === $fea->id && $version->fea_document_id === $document->id, 404);
+        $unavailable = $this->unavailable($fea, $document);
+        if ($unavailable) {
+            return $unavailable;
+        }
         $this->authorizeVersion($fea, $document, $version, 'preview');
 
         return $uploads->preview($version, request()->user(), request()->ip(), request()->userAgent());
     }
 
-    public function download(Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaDocumentVersion $version, Ib39FeaUploadService $uploads): StreamedResponse
+    public function download(Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaDocumentVersion $version, Ib39FeaUploadService $uploads): StreamedResponse|RedirectResponse
     {
+        abort_unless($version->fea_processing_id === $fea->id && $version->fea_document_id === $document->id, 404);
+        $unavailable = $this->unavailable($fea, $document);
+        if ($unavailable) {
+            return $unavailable;
+        }
         $this->authorizeVersion($fea, $document, $version, 'download');
 
         return $uploads->download($version, request()->user(), request()->ip(), request()->userAgent());
@@ -66,7 +77,21 @@ class FeaUploadController extends Controller
     private function authorizeVersion(Ib39FeaProcessing $fea, Ib39FeaDocument $document, Ib39FeaDocumentVersion $version, string $ability): void
     {
         Gate::authorize('viewUploads', [$document, $fea]);
-        abort_unless($version->fea_processing_id === $fea->id && $version->fea_document_id === $document->id, 404);
         Gate::authorize($ability, $version);
+    }
+
+    private function unavailable(Ib39FeaProcessing $fea, Ib39FeaDocument $document): ?RedirectResponse
+    {
+        Gate::authorize('viewUploads', [$document, $fea]);
+        if (request()->user()->hasRole('39th_ib') || $document->status === Ib39FeaDocumentStatus::Completed) {
+            return null;
+        }
+        $fea->loadMissing('surfacedFormerRebel.pswdoEnrollment', 'surfacedFormerRebel.japicCertificationProcessing');
+        $record = $fea->surfacedFormerRebel;
+        $destination = request()->user()->hasRole('pswdo')
+            ? route('pswdo.enrollments.show', $record->pswdoEnrollment)
+            : route('japic.certifications.show', $record->japicCertificationProcessing);
+
+        return redirect($destination)->with('error', 'Document is not available yet.');
     }
 }

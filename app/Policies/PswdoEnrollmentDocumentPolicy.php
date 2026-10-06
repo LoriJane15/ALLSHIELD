@@ -9,10 +9,15 @@ class PswdoEnrollmentDocumentPolicy
 {
     public function preview(User $user, PswdoEnrollmentDocument $document): bool
     {
-        return $this->hasAccess($user, $document);
+        return $document->isConfirmedFinal() && $this->hasAccess($user, $document);
     }
 
     public function download(User $user, PswdoEnrollmentDocument $document): bool
+    {
+        return $document->isConfirmedFinal() && $this->hasAccess($user, $document);
+    }
+
+    public function view(User $user, PswdoEnrollmentDocument $document): bool
     {
         return $this->hasAccess($user, $document);
     }

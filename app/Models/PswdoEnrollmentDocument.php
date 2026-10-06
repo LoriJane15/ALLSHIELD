@@ -40,4 +40,12 @@ class PswdoEnrollmentDocument extends Model
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
+
+    public function isConfirmedFinal(): bool
+    {
+        return $this->correct_document_type_confirmed
+            && $this->belongs_to_fr_confirmed
+            && $this->final_signed_confirmed
+            && $this->uploaded_at !== null;
+    }
 }

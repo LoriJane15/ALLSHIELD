@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable
 {
@@ -59,6 +60,32 @@ class User extends Authenticatable
             'pswdo' => 'pswdo.dashboard',
             default => 'login',
         };
+    }
+
+    /** Safe public URL for the profile image already configured for this account. */
+    public function profileImageUrl(): ?string
+    {
+        if ($this->hasRole('gov_agency') && $this->govAgency?->profile) {
+            $filename = ltrim($this->govAgency->profile, '/');
+
+            return is_file(public_path('assets/logoAgency/'.$filename))
+                ? asset('assets/logoAgency/'.$filename)
+                : null;
+        }
+
+        if (! $this->logo) {
+            return null;
+        }
+
+        if (Storage::disk('public')->exists($this->logo)) {
+            return Storage::disk('public')->url($this->logo);
+        }
+
+        $filename = ltrim($this->logo, '/');
+
+        return is_file(public_path('assets/'.$filename))
+            ? asset('assets/'.$filename)
+            : null;
     }
 
     // Relationships -------------------------------------------------------

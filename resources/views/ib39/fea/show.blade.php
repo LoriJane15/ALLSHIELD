@@ -164,68 +164,7 @@
         margin-top: 0.05rem;
     }
 
-    /* Full-Width Horizontal FR Summary Card */
-    .fr-summary-strip {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-        padding: 1rem 1.25rem;
-        margin-bottom: 1.25rem;
-    }
-    .fr-summary-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding-bottom: 0.75rem;
-        margin-bottom: 0.75rem;
-        border-bottom: 1px solid #f1f5f9;
-    }
-    .fr-summary-title {
-        color: #0f172a;
-        font-size: 0.9rem;
-        font-weight: 800;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-    }
-    .fr-summary-grid {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-        gap: 0.75rem;
-    }
-    .fr-summary-item {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 0.6rem 0.85rem;
-        transition: all 0.15s ease;
-    }
-    .fr-summary-item:hover {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-    }
-    .fr-summary-item small {
-        color: #64748b;
-        display: block;
-        font-size: 0.65rem;
-        font-weight: 750;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 0.2rem;
-    }
-    .fr-summary-item strong {
-        color: #0f172a;
-        font-size: 0.825rem;
-        font-weight: 700;
-        display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    /* Workspace Master-Detail Panels */
+    /* Document workspace */
     .fea-panel {
         border: 1px solid #e2e8f0;
         border-radius: 16px;
@@ -254,11 +193,13 @@
         padding: 1.25rem;
     }
 
-    /* Document Navigation List (Left Sidebar) */
+    /* Horizontal document checklist */
     .doc-nav-list {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
         gap: 0.6rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
     }
     .doc-nav-btn {
         display: flex;
@@ -274,13 +215,15 @@
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
         text-align: left;
-        width: 100%;
+        min-width: 165px;
+        max-width: 220px;
+        flex: 1 0 165px;
     }
     .doc-nav-btn:hover {
         background: #eef2ff;
         border-color: #c7d2fe;
         color: #4338ca;
-        transform: translateX(3px);
+        transform: translateY(-2px);
     }
     .doc-nav-btn.active {
         background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
@@ -340,6 +283,11 @@
         flex-shrink: 0;
     }
 
+    .fea-checklist { margin-bottom: 1.25rem; }
+    .fea-draft-inputs { margin-top: 1rem; }
+    .fea-draft-inputs h3 { font-size: 1rem; font-weight: 800; }
+    .fea-photo-preview { display: block; max-width: 100%; max-height: 480px; margin: 1rem auto; object-fit: contain; }
+
     /* Active Document Card Pane */
     .requirement-card {
         background: #ffffff;
@@ -380,36 +328,6 @@
         font-weight: 750;
         padding: 0.3rem 0.85rem;
         letter-spacing: 0.02em;
-    }
-
-    /* Metadata Grid */
-    .metadata-grid {
-        display: grid;
-        gap: 0.75rem;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .metadata-item {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 0.65rem 0.85rem;
-    }
-    .metadata-item small {
-        color: #64748b;
-        display: block;
-        font-size: 0.65rem;
-        font-weight: 750;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 0.2rem;
-    }
-    .metadata-item span {
-        color: #0f172a;
-        font-size: 0.825rem;
-        font-weight: 700;
-    }
-    .metadata-item.full {
-        grid-column: 1 / -1;
     }
 
     /* Document Actions */
@@ -461,56 +379,13 @@
         color: #4338ca;
     }
 
-    /* History & Uploads */
-    .document-history {
-        border-top: 1px solid #f1f5f9;
-        margin-top: 1rem;
-        padding-top: 0.85rem;
-    }
-    .history-row {
-        border-left: 3px solid #6366f1;
-        margin: 0.5rem 0;
-        padding-left: 0.75rem;
-        background: #f8fafc;
-        padding-top: 0.35rem;
-        padding-bottom: 0.35rem;
-        border-radius: 0 8px 8px 0;
-    }
-    .history-row strong {
-        color: #0f172a;
-        display: block;
-        font-size: 0.78rem;
-    }
-    .history-row span {
-        color: #64748b;
-        font-size: 0.72rem;
-    }
-    .empty-history {
-        color: #94a3b8;
-        font-size: 0.75rem;
-        font-style: italic;
-    }
+    /* Selected-document upload controls */
     .compact-upload {
         margin-top: 1rem;
         padding: 0.85rem;
         background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 10px;
-    }
-    .version-history {
-        display: block;
-        margin-top: 0.75rem;
-    }
-    .version-history summary {
-        color: #4338ca;
-        cursor: pointer;
-        font-size: 0.75rem;
-        font-weight: 750;
-    }
-    .version-history div {
-        color: #64748b;
-        font-size: 0.72rem;
-        margin: 0.5rem 0;
     }
     .preliminary-form {
         background: #f8fafc;
@@ -520,23 +395,13 @@
         padding: 1.25rem;
     }
 
-    @media(max-width:1199px){
-        .fr-summary-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-    }
     @media(max-width:767px){
-        .fr-summary-grid, .metadata-grid {
-            grid-template-columns: 1fr;
-        }
-        .metadata-item.full {
-            grid-column: auto;
-        }
         .requirement-header {
             flex-direction: column;
         }
     }
 </style>
+@include('components.processing-workspace.styles')
 @endpush
 
 @section('content')
@@ -573,8 +438,8 @@
                 <i class="mdi mdi-shield-account-outline" aria-hidden="true"></i>
             </div>
             <div>
-                <h2>FEA Record {{ $record->reference_number }}</h2>
-                <p>Preliminary document workspace</p>
+                <h2>FEA Processing</h2>
+                <p>FR {{ $record->reference_number }} · Preliminary document workspace</p>
             </div>
         </div>
         <div>
@@ -582,7 +447,7 @@
         </div>
     </header>
 
-    @unless($isReady)
+    @if(! $readOnlyViewer && ! $isReady)
         <div class="fea-lock-notice" role="status">
             <i class="mdi mdi-lock-clock" aria-hidden="true"></i>
             <div>
@@ -591,7 +456,7 @@
                 <div>Final FEA documents and photos can be uploaded after PSWDO enrollment is completed.</div>
             </div>
         </div>
-    @endunless
+    @endif
 
     @if(session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
@@ -604,54 +469,8 @@
         </div>
     @endif
 
-    {{-- Full-Width Horizontal FR Summary Strip --}}
-    <section class="fr-summary-strip" aria-label="FR Summary">
-        <div class="fr-summary-header">
-            <h3 class="fr-summary-title">
-                <i class="mdi mdi-account-box-outline text-primary"></i>
-                <span>FR Summary</span>
-            </h3>
-            <a href="{{ route('ib39.fr-profiles.show', $record) }}" class="btn btn-sm btn-outline-primary rounded-pill font-weight-bold px-3 py-1" style="font-size:0.75rem;">
-                <i class="mdi mdi-eye me-1"></i> View Profile
-            </a>
-        </div>
-        <div class="fr-summary-grid">
-            <div class="fr-summary-item">
-                <small>Reference</small>
-                <strong class="font-monospace text-primary">{{ $record->reference_number }}</strong>
-            </div>
-            <div class="fr-summary-item">
-                <small>Category</small>
-                <strong>{{ $record->category->value }}</strong>
-            </div>
-            <div class="fr-summary-item">
-                <small>Firearms</small>
-                <div>
-                    <span class="badge {{ $record->possessed_firearms ? 'badge-warning text-dark' : 'badge-light text-muted border' }} font-weight-bold px-2 py-0" style="font-size:0.72rem;">
-                        {{ $record->possessed_firearms ? 'Yes' : 'No' }}
-                    </span>
-                </div>
-            </div>
-            <div class="fr-summary-item">
-                <small>Surfacing date</small>
-                <strong>{{ $record->surfaced_at->format('F d, Y') }}</strong>
-            </div>
-            <div class="fr-summary-item">
-                <small>Municipality</small>
-                <strong>{{ $record->municipality->name }}</strong>
-            </div>
-            <div class="fr-summary-item">
-                <small>Barangay</small>
-                <strong>{{ $record->barangay?->name ?? 'Not provided' }}</strong>
-            </div>
-        </div>
-    </section>
-
-    {{-- Interactive Split Master-Detail Document Workspace --}}
-    <div class="row">
-        {{-- Left Column: Requirements Navigator (Master List) --}}
-        <div class="col-lg-4 col-xl-4 mb-4">
-            <section class="card fea-panel h-100" aria-label="Document Navigation">
+    @unless($readOnlyViewer)
+    <section class="card fea-panel fea-checklist" aria-label="Document Checklist">
                 <div class="card-header">
                     <h3 class="fea-title">
                         <i class="mdi mdi-clipboard-text text-primary"></i>
@@ -662,12 +481,14 @@
                     </span>
                 </div>
                 <div class="card-body">
-                    <div class="doc-nav-list" role="tablist">
+                    <div class="doc-nav-list" role="tablist" aria-label="FEA documents">
                         @foreach($fea->documents as $index => $document)
                             <button type="button"
                                     class="doc-nav-btn {{ $index === 0 ? 'active' : '' }}"
                                     data-fea-tab-target="document-pane-{{ $document->id }}"
+                                    id="document-tab-{{ $document->id }}"
                                     role="tab"
+                                    aria-controls="document-pane-{{ $document->id }}"
                                     aria-selected="{{ $index === 0 ? 'true' : 'false' }}">
                                 <div class="doc-nav-left">
                                     <span class="doc-nav-num">{{ $index + 1 }}</span>
@@ -683,21 +504,15 @@
                         @endforeach
                     </div>
                 </div>
-            </section>
-        </div>
+    </section>
+    @endunless
 
-        {{-- Right Column: Active Document Workspace (Detail Pane) --}}
-        <div class="col-lg-8 col-xl-8 mb-4">
-            <section class="card fea-panel h-100" aria-label="Document Requirements">
-                <div class="card-header">
-                    <h3 class="fea-title">
-                        <i class="mdi mdi-clipboard-check-outline text-primary"></i>
-                        <span>Document Requirements</span>
-                    </h3>
-                </div>
+    <div class="process-workspace-grid">
+    <main class="process-workspace-main">
+            <section class="card fea-panel" aria-label="Selected FEA document">
                 <div class="card-body">
                     @foreach($fea->documents as $index => $document)
-                        <div class="fea-doc-pane {{ $index === 0 ? '' : 'd-none' }}" id="document-pane-{{ $document->id }}">
+                        <div class="fea-doc-pane {{ $index === 0 ? '' : 'd-none' }}" id="document-pane-{{ $document->id }}" role="tabpanel" aria-labelledby="document-tab-{{ $document->id }}">
                             <div class="requirement-card requirement" id="document-{{ $document->id }}">
                                 <div class="requirement-header">
                                     <div>
@@ -712,55 +527,55 @@
                                     <span class="pending-badge">{{ $document->status->value }}</span>
                                 </div>
 
-                                <div class="metadata-grid">
-                                    <div class="metadata-item">
-                                        <small>Started</small>
-                                        <span>{{ $document->started_at?->format('F d, Y · h:i A') ?? 'Not started' }}</span>
-                                    </div>
-                                    <div class="metadata-item">
-                                        <small>Prepared by</small>
-                                        <span>{{ filled($document->preparer?->name) ? $document->preparer->name : 'Not recorded' }}</span>
-                                    </div>
-                                    <div class="metadata-item">
-                                        <small>Last updated</small>
-                                        <span>{{ $document->last_updated_by ? $document->updated_at->format('F d, Y · h:i A') : 'Not updated' }}</span>
-                                    </div>
-                                    <div class="metadata-item">
-                                        <small>Updated by</small>
-                                        <span>{{ filled($document->lastUpdater?->name) ? $document->lastUpdater->name : 'Not recorded' }}</span>
-                                    </div>
-                                    <div class="metadata-item full">
-                                        <small>Remarks</small>
-                                        <span>{{ $document->remarks ?: 'No remarks recorded.' }}</span>
-                                    </div>
-                                    <div class="metadata-item full">
-                                        <small>Compliance reason</small>
-                                        <span>{{ $document->compliance_reason ?: 'No compliance reason recorded.' }}</span>
-                                    </div>
-                                    <div class="metadata-item full">
-                                        <small>Delay reason</small>
-                                        <span>{{ $document->delay_reason ?: 'No delay recorded.' }}</span>
-                                    </div>
-                                </div>
-
-                                @if($document->document_type->hasDraftEditor())
-                                    <div class="document-actions">
-                                        @if($isReady)
-                                            <a class="btn btn-sm btn-action-primary" href="{{ route('ib39.fea.documents.draft.edit', [$fea, $document]) }}">
-                                                <i class="mdi mdi-pencil-box"></i>
-                                                <span>Open Official Form Editor</span>
-                                            </a>
+                                @if($readOnlyViewer)
+                                    @php($documentPreview = $documentPreviewUrls[$document->id])
+                                    @if($documentPreview['image'])
+                                        <img class="fea-photo-preview" src="{{ $documentPreview['url'] }}" alt="{{ $document->document_type->label() }}">
+                                    @else
+                                        <iframe title="{{ $document->document_type->label() }}" src="{{ $documentPreview['url'] }}" style="width:100%;min-height:72vh;border:1px solid #e2e8f0;border-radius:10px;background:#fff;"></iframe>
+                                    @endif
+                                @elseif($document->document_type->hasDraftEditor())
+                                    @php($draftEditable = $draftEditors[$document->id]['editable'])
+                                    <section class="fea-draft-inputs" aria-label="{{ $document->document_type->label() }} inputs">
+                                        <h3>Draft Information</h3>
+                                        <p class="text-muted small">{{ $draftEditable ? 'Save your entries before previewing the official document.' : 'Completed document content is shown read-only.' }}</p>
+                                        @if($draftEditable && $document->document_type === \App\Enums\Ib39FeaDocumentType::Justification)
+                                            @include('ib39.fea.partials.supporting-photo-upload', ['slot' => \App\Enums\Ib39FeaUploadSlot::JustificationSurrendered, 'render' => 'form', 'showHistory' => false])
+                                            @include('ib39.fea.partials.supporting-photo-upload', ['slot' => \App\Enums\Ib39FeaUploadSlot::JustificationComparison, 'render' => 'form', 'showHistory' => false])
                                         @endif
+                                        <form @if($draftEditable) method="POST" action="{{ route('ib39.fea.documents.draft.update', [$fea, $document]) }}" data-fea-draft-form @endif>
+                                            @if($draftEditable)
+                                                @csrf @method('PUT')
+                                                <input type="hidden" name="revision" value="{{ $document->draft_revision }}">
+                                            @else
+                                                <fieldset disabled aria-label="Completed {{ $document->document_type->label() }} content">
+                                            @endif
+                                            @include('ib39.fea.partials.draft-inputs', ['fields' => $draftEditors[$document->id]['fields'], 'draft' => $draftEditors[$document->id]['draft'], 'showHistory' => false, 'readOnly' => ! $draftEditable])
+                                            @unless($draftEditable)</fieldset>@endunless
+                                            @if($draftEditable)
+                                                <div class="document-actions"><button class="btn btn-primary" type="submit">Save Draft</button></div>
+                                            @endif
+                                        </form>
                                         @can('viewDraft', [$document, $fea])
-                                            <a class="btn btn-sm btn-action-outline" href="{{ route('ib39.fea.documents.draft.preview', [$fea, $document]) }}">
-                                                <i class="mdi mdi-eye-outline"></i>
-                                                <span>Preview Saved Draft</span>
-                                            </a>
+                                            <a class="btn btn-action-outline" href="{{ route('ib39.fea.documents.draft.preview', [$fea, $document]) }}">Preview</a>
                                         @endcan
-                                    </div>
+                                    </section>
+                                @else
+                                    @php($photo = $document->currentFinalVersion ?? $document->currentDraftVersion)
+                                    <section aria-label="{{ $document->document_type->label() }} photograph">
+                                        @if($photo)
+                                            <img class="fea-photo-preview" src="{{ route('ib39.fea.documents.versions.preview', [$fea, $document, $photo]) }}" alt="{{ $document->document_type->label() }}">
+                                        @else
+                                            <p class="text-muted">No photograph has been uploaded for this requirement.</p>
+                                        @endif
+                                    </section>
                                 @endif
 
-                                @if($isReady)
+                                @unless($readOnlyViewer)
+                                    @include('ib39.fea.partials.uploads', ['showHistory' => false])
+                                @endunless
+
+                                @if($canProcess[$document->id])
                                     @if($document->status === \App\Enums\Ib39FeaDocumentStatus::Pending)
                                         <form method="POST" action="{{ route('ib39.fea.documents.start', [$fea, $document]) }}" class="mt-3">
                                             @csrf
@@ -802,25 +617,13 @@
                                     @endif
                                 @endif
 
-                                @include('ib39.fea.partials.uploads')
-
-                                <div class="document-history">
-                                    <strong class="requirement-name d-block mb-1" style="font-size:0.875rem;">History</strong>
-                                    @forelse($document->histories as $history)
-                                        <div class="history-row">
-                                            <strong>{{ $history->event->label() }}</strong>
-                                            <span>{{ $history->created_at->format('F d, Y · h:i A') }} · {{ filled($history->actor?->name) ? $history->actor->name : 'User unavailable' }}</span>
-                                        </div>
-                                    @empty
-                                        <div class="empty-history mt-2">No document history recorded.</div>
-                                    @endforelse
-                                </div>
                             </div>
                         </div>
                     @endforeach
                 </div>
             </section>
-        </div>
+    </main>
+    @include('components.processing-workspace.sidebar', ['sidebarId' => 'fea', 'comments' => $fea->comments, 'events' => $workspaceEvents, 'commentAction' => route('fea.comments.store', $fea), 'canComment' => $canComment])
     </div>
 </div>
 
@@ -830,30 +633,32 @@
         const tabButtons = document.querySelectorAll('[data-fea-tab-target]');
         const tabPanes = document.querySelectorAll('.fea-doc-pane');
 
+        function activateDocument(button) {
+            const targetId = button.getAttribute('data-fea-tab-target');
+            tabButtons.forEach(tab => {
+                const active = tab === button;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            tabPanes.forEach(pane => pane.classList.toggle('d-none', pane.id !== targetId));
+            try { sessionStorage.setItem('fea-active-document-{{ $fea->id }}', targetId); } catch (error) { /* Storage may be disabled. */ }
+        }
+
         tabButtons.forEach(btn => {
             btn.addEventListener('click', function (e) {
                 e.preventDefault();
-                const targetId = this.getAttribute('data-fea-tab-target');
-
-                // Update active tab buttons
-                tabButtons.forEach(b => {
-                    b.classList.remove('active');
-                    b.setAttribute('aria-selected', 'false');
-                });
-                this.classList.add('active');
-                this.setAttribute('aria-selected', 'true');
-
-                // Toggle visibility of target pane
-                tabPanes.forEach(pane => {
-                    if (pane.id === targetId) {
-                        pane.classList.remove('d-none');
-                    } else {
-                        pane.classList.add('d-none');
-                    }
-                });
+                activateDocument(this);
             });
         });
+
+        let selected = new URLSearchParams(window.location.search).get('document');
+        if (!selected) {
+            try { selected = sessionStorage.getItem('fea-active-document-{{ $fea->id }}')?.replace('document-pane-', ''); } catch (error) { /* Storage may be disabled. */ }
+        }
+        const selectedButton = Array.from(tabButtons).find(button => button.getAttribute('data-fea-tab-target') === 'document-pane-' + selected);
+        if (selectedButton) activateDocument(selectedButton);
     });
 </script>
+@include('ib39.fea.partials.draft-interactions')
 @endpush
 @endsection

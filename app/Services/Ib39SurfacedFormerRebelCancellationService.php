@@ -40,7 +40,7 @@ class Ib39SurfacedFormerRebelCancellationService
 
                 $locked->load([
                     'cancellation',
-                    'cdrProcessing.currentFinalVersion',
+                    'cdrProcessing.finalDocument',
                     'japicCertificationProcessing.currentFinalVersion',
                 ]);
                 $previousStatus = $locked->overall_case_status;

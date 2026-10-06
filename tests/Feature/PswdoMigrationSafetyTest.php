@@ -27,7 +27,8 @@ class PswdoMigrationSafetyTest extends TestCase
         DB::setDefaultConnection('pswdo_migration_safety');
         DB::purge('pswdo_migration_safety');
         foreach (glob(database_path('migrations/*.php')) as $file) {
-            if (! str_contains($file, '2026_09_11_000002')) {
+            if (! str_contains($file, '2026_09_11_000002')
+                && ! str_contains($file, '2026_09_30_000001')) {
                 (require $file)->up();
             }
         }

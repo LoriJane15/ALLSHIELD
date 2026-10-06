@@ -28,7 +28,8 @@ class JapicMigrationSafetyTest extends TestCase
         DB::purge('japic_migration_safety');
         foreach (glob(database_path('migrations/*.php')) as $file) {
             if (! str_contains($file, '2026_09_09_000001') && ! str_contains($file, '2026_09_09_000002')
-                && ! str_contains($file, '2026_09_10_000001')) {
+                && ! str_contains($file, '2026_09_10_000001')
+                && ! str_contains($file, '2026_09_30_000001')) {
                 (require $file)->up();
             }
         }
@@ -266,8 +267,8 @@ class JapicMigrationSafetyTest extends TestCase
             'possessed_firearms' => 0, 'created_by' => 1, 'created_at' => $time, 'updated_at' => $time]);
         DB::table('ib39_cdr_processings')->insert(['id' => 1, 'ib39_surfaced_former_rebel_id' => 1,
             'status' => 'Completed', 'completed_at' => $time, 'completed_by' => 1, 'created_at' => $time, 'updated_at' => $time]);
-        DB::table('ib39_cdr_document_versions')->insert(['id' => 1, 'cdr_processing_id' => 1, 'version_number' => 1,
-            'source_type' => 'generated', 'storage_path' => 'x', 'original_filename' => 'x.pdf',
+        DB::table('ib39_cdr_document_versions')->insert(['id' => 1, 'cdr_processing_id' => 1,
+            'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'x', 'original_filename' => 'x.pdf',
             'mime_type' => 'application/pdf', 'size_bytes' => 1, 'sha256' => str_repeat('d', 64),
             'created_by' => 1, 'finalized_at' => '2026-08-31 10:11:12', 'created_at' => $time, 'updated_at' => $time]);
         DB::table('ib39_cdr_processings')->where('id', 1)->update(['current_final_version_id' => 1]);

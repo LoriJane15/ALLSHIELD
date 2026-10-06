@@ -9,10 +9,10 @@ class PrintCdrDocumentRequest extends FormRequest
     public function authorize(): bool
     {
         $cdr = $this->route('cdr');
-        $version = $this->route('version');
+        $document = $cdr?->finalDocument;
 
-        return $version?->cdr_processing_id === $cdr?->id
-            && ($this->user()?->can('print', $version) ?? false);
+        return $document?->cdr_processing_id === $cdr?->id
+            && ($this->user()?->can('print', $document) ?? false);
     }
 
     public function rules(): array

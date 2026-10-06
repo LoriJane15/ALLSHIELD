@@ -85,7 +85,7 @@ class LocalPswdoDemoSeeder extends Seeder
         $cdr = $record->cdrProcessing()->firstOrCreate([], [
             'status' => Ib39CdrStatus::Pending,
         ]);
-        $cdrFinal = $cdr->documentVersions()->firstOrCreate(['version_number' => 1], [
+        $cdrFinal = $cdr->finalDocument()->firstOrCreate([], [
             'source_type' => Ib39CdrDocumentSource::Uploaded,
             'storage_path' => "demo/cdr/{$reference}/final.pdf",
             'original_filename' => "{$reference}-cdr-final.pdf",
@@ -99,7 +99,6 @@ class LocalPswdoDemoSeeder extends Seeder
             'status' => Ib39CdrStatus::Completed,
             'completed_at' => now()->subMonths(6),
             'completed_by' => $ib39->id,
-            'current_final_version_id' => $cdrFinal->id,
             'remarks' => 'DEMO CDR final record completed for PSWDO workflow testing.',
         ]);
 
@@ -109,7 +108,7 @@ class LocalPswdoDemoSeeder extends Seeder
             $receivedAt = now()->subMonths(5);
             $japicProcessing = JapicCertificationProcessing::query()->forceCreate([
                 'ib39_surfaced_former_rebel_id' => $record->id,
-                'triggering_cdr_document_version_id' => $cdrFinal->id,
+                'triggering_cdr_final_document_id' => $cdrFinal->id,
                 'status' => JapicCertificationStatus::Completed,
                 'received_at' => $receivedAt,
                 'due_at' => $receivedAt->copy()->addDays(14),

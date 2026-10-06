@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\JapicCertificationStatus;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\JapicCertificationProcessing;
 use App\Models\User;
 use App\Support\JapicCertificationDraftSchema;
@@ -36,6 +36,28 @@ class JapicCertificationDraftEditorTest extends TestCase
         $this->assertDatabaseCount('japic_certification_draft_histories', 1);
     }
 
+    public function test_existing_draft_endpoint_supports_workspace_autosave_state_updates(): void
+    {
+        [$processing, $japic] = $this->processing();
+
+        $this->actingAs($japic)->putJson(
+            route('japic.certifications.draft.update', $processing),
+            $this->draftInput($processing),
+        )->assertOk()->assertJson([
+            'saved' => true,
+            'revision' => 1,
+            'lock_version' => 1,
+            'message' => 'All changes saved',
+        ]);
+
+        $this->assertSame(1, $processing->fresh()->draft->revision);
+        $this->assertDatabaseHas('japic_certification_histories', [
+            'processing_id' => $processing->id,
+            'actor_id' => $japic->id,
+            'event' => 'started',
+        ]);
+    }
+
     public function test_server_owned_unknown_fields_and_stale_revisions_are_rejected(): void
     {
         [$processing, $japic] = $this->processing();
@@ -56,10 +78,23 @@ class JapicCertificationDraftEditorTest extends TestCase
         [$first, $japic] = $this->processing('One');
         [$second] = $this->processing('Two');
         $this->actingAs($japic)->put(route('japic.certifications.draft.update', $first), $this->draftInput($first))->assertRedirect();
+
+        $unchanged = $this->draftInput($first->fresh('draft'));
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $first), $unchanged)->assertRedirect();
+
         $input = $this->draftInput($second);
         $input['control_number'] = ' ctrl-001 ';
+        $this->actingAs($japic)->putJson(route('japic.certifications.draft.update', $second), $input)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['control_number'])
+            ->assertJsonPath('errors.control_number.0', 'The control number has already been used.');
         $this->actingAs($japic)->from(route('japic.certifications.draft.edit', $second))->put(route('japic.certifications.draft.update', $second), $input)
-            ->assertSessionHasErrors('control_number')->assertSessionDoesntHaveErrors(['request']);
+            ->assertSessionHasErrors(['control_number' => 'The control number has already been used.'])
+            ->assertSessionDoesntHaveErrors(['request']);
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $second))
+            ->assertOk()
+            ->assertSee('let dirty = true;', false)
+            ->assertSee('Unsaved changes');
         $this->assertSame(app(JapicCertificationDraftSchema::class)->controlNumberHash('CTRL-001'), $first->fresh()->control_number_hash);
         $this->assertStringNotContainsString('CTRL-001', DB::table('japic_certification_processings')->where('id', $first->id)->value('control_number'));
 
@@ -69,7 +104,14 @@ class JapicCertificationDraftEditorTest extends TestCase
         $changed['control_number'] = 'CTRL-CHANGED';
         $this->actingAs($japic)->from(route('japic.certifications.draft.edit', $first))
             ->put(route('japic.certifications.draft.update', $first), $changed)
-            ->assertSessionHasErrors('control_number');
+            ->assertRedirect(route('japic.certifications.workspace', $first));
+        $first->refresh();
+        $this->assertSame('CTRL-CHANGED', $first->control_number);
+        $this->assertSame(app(JapicCertificationDraftSchema::class)->controlNumberHash('CTRL-CHANGED'), $first->control_number_hash);
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $first))
+            ->assertOk()
+            ->assertSee('value="CTRL-CHANGED"', false)
+            ->assertDontSee('id="control-number" class="form-control mblrc-input mblrc-input-readonly"', false);
     }
 
     public function test_overdue_changed_save_requires_an_encrypted_delay_reason(): void
@@ -164,6 +206,161 @@ class JapicCertificationDraftEditorTest extends TestCase
             ->assertSee('during 1998')->assertDontSee('name="source_snapshot', false);
     }
 
+    public function test_workspace_starts_with_empty_inputs_and_returns_to_saved_draft(): void
+    {
+        [$processing, $japic] = $this->processing();
+        $workspace = route('japic.certifications.workspace', $processing);
+
+        $response = $this->actingAs($japic)->get($workspace)->assertOk()
+            ->assertSee('name="control_number" maxlength="100" required', false)
+            ->assertSee('name="certificate[narrative_values][fr_name]"', false)
+            ->assertSee('value=""', false)
+            ->assertSee('Save Draft')
+            ->assertSee('Upload Certification')
+            ->assertSee('All changes saved')
+            ->assertSee('let dirty = false;', false)
+            ->assertSee('if (!dirty || submitting) return;', false)
+            ->assertSee('submitting = true;', false)
+            ->assertSee('Preview Draft')
+            ->assertDontSee('No certification draft has been saved.')
+            ->assertDontSee('Certification Workspace')
+            ->assertDontSee('Final certification version 1')
+            ->assertDontSee('> Preview</a>', false)
+            ->assertSee('data-bs-toggle="collapse" data-bs-target="#japic-workspace-comments"', false)
+            ->assertSee('data-bs-toggle="collapse" data-bs-target="#japic-workspace-history"', false)
+            ->assertDontSee('data-toggle="collapse"', false)
+            ->assertDontSee('Private Certification Photograph');
+
+        $html = $response->getContent();
+        $upload = strpos($html, 'id="japic-final-upload"');
+        $toolbar = strpos($html, 'aria-label="JAPIC certification drafting controls"');
+        $draftArea = strpos($html, 'data-japic-draft-area');
+        $photo = strpos($html, 'data-japic-photo-section');
+        $draftForm = strpos($html, 'id="japicDraftForm"');
+        $sidebar = strpos($html, 'aria-label="Document activity"');
+        $this->assertNotFalse($upload);
+        $this->assertTrue($upload < $toolbar && $toolbar < $draftArea && $draftArea < $photo && $photo < $draftForm && $draftForm < $sidebar);
+
+        $this->actingAs($japic)->from($workspace)
+            ->put(route('japic.certifications.draft.update', $processing), $this->draftInput($processing))
+            ->assertRedirect($workspace);
+        $this->assertSame(1, $processing->fresh()->draft->revision);
+
+        $this->actingAs($japic)->get($workspace)->assertOk()
+            ->assertSee('name="certificate[narrative_values][surrendered_to]"', false)
+            ->assertSee('value="39IB"', false)
+            ->assertSee('Preview Draft')
+            ->assertSee('Draft Created')
+            ->assertSee('Save Draft');
+        $edited = $this->draftInput($processing->fresh('draft'));
+        $edited['certificate']['narrative_values']['surrendered_at'] = 'Edited test location';
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $processing), $edited)->assertRedirect($workspace);
+        $this->actingAs($japic)->get($workspace)->assertOk()
+            ->assertSee('Draft Updated')->assertSee('Revision 2')
+            ->assertSee($japic->name)->assertSee('JAPIC')->assertSee('datetime=', false);
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))->assertOk()
+            ->assertSee('JOINT AFP-PNP')
+            ->assertSee('Edited test location')
+            ->assertSee('>Print</button>', false)
+            ->assertSee('>Download</a>', false)
+            ->assertDontSee('name="certificate[narrative_values][surrendered_to]"', false);
+        $this->actingAs($japic)->get(route('japic.certifications.preview', [$processing, 'download' => 1]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_read_only_workspace_uses_the_official_saved_draft_without_edit_controls(): void
+    {
+        [$processing, $japic] = $this->processing();
+        $viewer = User::factory()->role('japic')->create();
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $processing), $this->draftInput($processing))->assertRedirect();
+        $processing->forceFill(['status' => JapicCertificationStatus::Cancelled])->save();
+
+        $workspace = route('japic.certifications.workspace', $processing);
+        $this->actingAs($viewer)->get($workspace)->assertOk()
+            ->assertSee('Official JAPIC certification draft preview')
+            ->assertSee('embedded=1')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertDontSee('name="certificate[narrative_values][fr_name]"', false)
+            ->assertDontSee('Save Draft')
+            ->assertDontSee('Upload Certification');
+        $this->actingAs($viewer)->get(route('japic.certifications.preview', ['japicCertificationProcessing' => $processing, 'embedded' => 1]))
+            ->assertOk()->assertHeader('X-Frame-Options', 'SAMEORIGIN')
+            ->assertSee('JOINT AFP-PNP')->assertSee('Test location');
+        $this->actingAs($viewer)->get(route('japic.certifications.draft.edit', $processing))->assertForbidden();
+        $this->actingAs($viewer)->put(route('japic.certifications.draft.update', $processing), $this->draftInput($processing->fresh()))->assertForbidden();
+    }
+
+    public function test_read_only_workspace_without_a_document_has_a_truthful_empty_state(): void
+    {
+        [$processing, $japic] = $this->processing();
+        $processing->forceFill(['status' => JapicCertificationStatus::Cancelled])->save();
+
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))->assertOk()
+            ->assertSee('Certification document is not yet available.')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertDontSee('Save Draft')
+            ->assertDontSee('Upload Certification')
+            ->assertDontSee('name="certificate[narrative_values][fr_name]"', false);
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))->assertForbidden();
+        $this->actingAs($japic)->post(route('japic.certifications.final-document.upload', $processing), [])->assertForbidden();
+    }
+
+    public function test_for_signing_workspace_remains_editable_and_later_saves_follow_the_submission_history(): void
+    {
+        [$processing, $japic] = $this->processing();
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $processing), $this->draftInput($processing))->assertRedirect();
+        $processing->refresh();
+        $this->actingAs($japic)->post(route('japic.certifications.submit-for-signing', $processing), [
+            'revision' => $processing->draft->revision,
+            'lock_version' => $processing->lock_version,
+        ])->assertRedirect(route('japic.certifications.workspace', $processing));
+
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))->assertOk()
+            ->assertSee('For Signing')
+            ->assertSee('Upload Certification')
+            ->assertSee('name="certificate[narrative_values][fr_name]"', false)
+            ->assertSee('name="control_number"', false)
+            ->assertSee('id="certification-photo"', false)
+            ->assertSee('Save Draft')
+            ->assertSee('All changes saved')
+            ->assertSee('Preview Draft')
+            ->assertSee('Comments &amp; Remarks', false)
+            ->assertSee('Document History')
+            ->assertSee('Submitted for Signing')
+            ->assertSee($japic->name)
+            ->assertSee('JAPIC')
+            ->assertSee('datetime=', false)
+            ->assertDontSee('Official JAPIC certification draft preview')
+            ->assertDontSee('Completed / Read-only');
+        $this->actingAs($japic)->get(route('japic.certifications.preview', $processing))
+            ->assertOk()->assertHeader('X-Frame-Options', 'DENY')
+            ->assertSee('Test location')
+            ->assertSee('>Print</button>', false)
+            ->assertSee('>Download</a>', false)
+            ->assertDontSee('DRAFT — NOT FINAL');
+
+        $updated = $this->draftInput($processing->fresh('draft'));
+        $updated['control_number'] = 'CTRL-AFTER-SIGNING';
+        $updated['certificate']['narrative_values']['surrendered_at'] = 'Updated after signing submission';
+        $this->actingAs($japic)->put(route('japic.certifications.draft.update', $processing), $updated)
+            ->assertRedirect(route('japic.certifications.workspace', $processing));
+        $processing->refresh();
+        $this->assertSame(JapicCertificationStatus::Drafting, $processing->status);
+        $this->assertSame('CTRL-AFTER-SIGNING', $processing->control_number);
+        $this->assertSame(2, $processing->draft->revision);
+
+        $this->actingAs($japic)->get(route('japic.certifications.workspace', $processing))->assertOk()
+            ->assertSee('value="CTRL-AFTER-SIGNING"', false)
+            ->assertSee('Updated after signing submission')
+            ->assertSeeInOrder(['Draft Created', 'Submitted for Signing', 'Draft Updated'])
+            ->assertSee('Revision 2')
+            ->assertSee($japic->name)
+            ->assertSee('datetime=', false);
+    }
+
     private function draftInput(JapicCertificationProcessing $processing): array
     {
         return ['revision' => $processing->draft?->revision ?? 0, 'lock_version' => $processing->lock_version, 'control_number' => 'CTRL-001',
@@ -185,13 +382,12 @@ class JapicCertificationDraftEditorTest extends TestCase
             'category' => 'Regular Member', 'province' => 'Davao del Sur', 'municipality_id' => $municipality, 'specific_location' => 'Village',
             'surfaced_at' => '2026-08-01', 'possessed_firearms' => 0, 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed', 'completed_at' => now(), 'completed_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
-        $version = Ib39CdrDocumentVersion::query()->forceCreate(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated', 'storage_path' => 'generated/test',
+        $version = Ib39CdrFinalDocument::query()->forceCreate(['cdr_processing_id' => $cdr, 'source_type' => 'generated', 'storage_path' => 'generated/test',
             'original_filename' => 'test.html', 'mime_type' => 'text/html', 'size_bytes' => 1, 'sha256' => str_repeat('a', 64), 'content_schema_version' => 2,
             'content_snapshot' => ['content' => ['alias' => 'Subject Alias', 'gender' => 'Female', 'classification' => 'NPSRL', 'present_address' => 'Test Address',
                 'latest_position' => 'Team Leader', 'organization_affiliation' => 'Test Organization', 'recruitment_date' => '1998', 'posting_areas' => [['place' => 'Area One']]], 'fr_photo_version_id' => null],
             'created_by' => $actor->id, 'finalized_at' => now()]);
-        DB::table('ib39_cdr_processings')->where('id', $cdr)->update(['current_final_version_id' => $version->id]);
-        $processing = JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_document_version_id' => $version->id,
+        $processing = JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr, 'triggering_cdr_final_document_id' => $version->id,
             'status' => JapicCertificationStatus::Pending, 'received_at' => now(), 'due_at' => now()->addDays(14), 'lock_version' => 0]);
         $processing->histories()->create(['actor_id' => $actor->id, 'to_status' => JapicCertificationStatus::Pending, 'event' => 'intake_created', 'occurred_at' => now()]);
 

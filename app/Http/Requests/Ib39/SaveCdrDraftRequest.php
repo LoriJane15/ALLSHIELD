@@ -10,7 +10,7 @@ class SaveCdrDraftRequest extends FormRequest
 {
     private const PROTECTED_FIELDS = [
         'status', 'started_at', 'due_at', 'completed_at', 'completed_by',
-        'current_final_version_id', 'created_by', 'last_edited_by',
+        'created_by', 'last_edited_by',
         'schema_version', 'storage_path', 'document_versions', 'history',
     ];
 
@@ -23,6 +23,7 @@ class SaveCdrDraftRequest extends FormRequest
     {
         $rules = [
             'content' => ['nullable', 'array:'.implode(',', Ib39CdrFormSchema::allowedKeys())],
+            'save_intent' => ['nullable', Rule::in(['manual'])],
             ...collect(self::PROTECTED_FIELDS)->mapWithKeys(fn (string $field) => [$field => ['missing']])->all(),
         ];
 
@@ -53,6 +54,11 @@ class SaveCdrDraftRequest extends FormRequest
     public function validatedContent(): array
     {
         return $this->normalize($this->validated('content', []));
+    }
+
+    public function isManualSave(): bool
+    {
+        return $this->validated('save_intent') === 'manual';
     }
 
     public function messages(): array

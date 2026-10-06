@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Enums\Ib39CdrDocumentSource;
 use App\Enums\Ib39CdrStatus;
 use App\Models\AuditLog;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39CdrProcessing;
 use App\Models\User;
 use App\Support\Ib39CdrUploadedDocument;
@@ -28,51 +28,47 @@ class Ib39CdrDocumentService
         User $actor,
         ?string $ipAddress = null,
         ?string $userAgent = null,
-    ): Ib39CdrDocumentVersion {
-        return $this->store($processing, $file, null, $actor, $ipAddress, $userAgent);
+    ): Ib39CdrFinalDocument {
+        return $this->store($processing, $file, $actor, $ipAddress, $userAgent);
     }
 
-    public function replaceFinal(
-        Ib39CdrProcessing $processing,
-        UploadedFile $file,
-        string $reason,
-        User $actor,
-        ?string $ipAddress = null,
-        ?string $userAgent = null,
-    ): Ib39CdrDocumentVersion {
-        return $this->store($processing, $file, trim($reason), $actor, $ipAddress, $userAgent);
-    }
-
-    public function preview(Ib39CdrDocumentVersion $version, User $actor, ?string $ipAddress, ?string $userAgent): StreamedResponse
+    public function preview(Ib39CdrFinalDocument $document, User $actor, ?string $ipAddress, ?string $userAgent): StreamedResponse
     {
-        $response = $this->fileResponse($version, 'inline');
-        $this->recordAccess($version, $actor, 'preview', $ipAddress, $userAgent);
+        $response = $this->fileResponse($document, 'inline');
+        $this->recordAccess($document, $actor, 'preview', $ipAddress, $userAgent);
 
         return $response;
     }
 
-    public function download(Ib39CdrDocumentVersion $version, User $actor, ?string $ipAddress, ?string $userAgent): StreamedResponse
+    public function download(Ib39CdrFinalDocument $document, User $actor, ?string $ipAddress, ?string $userAgent): StreamedResponse
     {
-        $response = $this->fileResponse($version, 'attachment');
-        $this->recordAccess($version, $actor, 'download', $ipAddress, $userAgent);
+        $response = $this->fileResponse($document, 'attachment');
+        $this->recordAccess($document, $actor, 'download', $ipAddress, $userAgent);
 
         return $response;
     }
 
-    public function recordGeneratedPreview(Ib39CdrDocumentVersion $version, User $actor, ?string $ipAddress, ?string $userAgent): void
+    public function recordGeneratedAccess(Ib39CdrFinalDocument $document, User $actor, string $action, ?string $ipAddress, ?string $userAgent): void
     {
-        abort_unless($version->source_type === Ib39CdrDocumentSource::Generated, 404);
-        $this->recordAccess($version, $actor, 'preview', $ipAddress, $userAgent);
+        abort_unless($document->source_type === Ib39CdrDocumentSource::Generated, 404);
+        $this->recordAccess($document, $actor, $action, $ipAddress, $userAgent);
+    }
+
+    public function ensureUploadedFileIsAvailable(Ib39CdrFinalDocument $document): void
+    {
+        abort_unless($document->source_type === Ib39CdrDocumentSource::Uploaded, 404);
+        abort_unless(str_starts_with($document->storage_path, 'ib39/cdr/'), 404);
+        abort_unless(in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png'], true), 404);
+        abort_unless(Storage::disk('local')->exists($document->storage_path), 404);
     }
 
     private function store(
         Ib39CdrProcessing $processing,
         UploadedFile $file,
-        ?string $replacementReason,
         User $actor,
         ?string $ipAddress,
         ?string $userAgent,
-    ): Ib39CdrDocumentVersion {
+    ): Ib39CdrFinalDocument {
         abort_unless($actor->is_active && $actor->hasRole('39th_ib'), 403);
         $metadata = Ib39CdrUploadedDocument::inspect($file);
         $path = sprintf('ib39/cdr/%d/final-documents/%s.%s', $processing->id, Str::uuid(), $metadata['extension']);
@@ -82,36 +78,18 @@ class Ib39CdrDocumentService
         }
 
         try {
-            $result = DB::transaction(function () use ($processing, $replacementReason, $actor, $path, $metadata, $ipAddress, $userAgent) {
+            $document = DB::transaction(function () use ($processing, $actor, $path, $metadata, $ipAddress, $userAgent) {
                 $locked = Ib39CdrProcessing::query()->lockForUpdate()->findOrFail($processing->id);
                 abort_unless($locked->surfacedFormerRebel()->whereDoesntHave('cancellation')->exists(), 403);
-                $isReplacement = $replacementReason !== null;
-
-                if ($isReplacement) {
-                    if ($locked->status !== Ib39CdrStatus::Completed || $locked->current_final_version_id === null) {
-                        throw ValidationException::withMessages(['document' => 'This CDR is no longer available for replacement.']);
-                    }
-                    $current = Ib39CdrDocumentVersion::query()->where('cdr_processing_id', $locked->id)->lockForUpdate()->findOrFail($locked->current_final_version_id);
-                    if ($current->source_type === Ib39CdrDocumentSource::Uploaded
-                        && hash_equals($current->sha256, $metadata['sha256'])
-                        && $current->replacement_reason === $replacementReason) {
-                        return ['version' => $current, 'duplicate' => true];
-                    }
-                } else {
-                    if (! in_array($locked->status, [Ib39CdrStatus::Pending, Ib39CdrStatus::Ongoing], true) || $locked->current_final_version_id !== null) {
-                        throw ValidationException::withMessages(['document' => 'This CDR is no longer available for direct final upload.']);
-                    }
-                    $current = null;
+                if (! in_array($locked->status, [Ib39CdrStatus::Pending, Ib39CdrStatus::Ongoing], true)
+                    || $locked->finalDocument()->exists()) {
+                    throw ValidationException::withMessages(['document' => 'This CDR already has a final document or is no longer available for upload.']);
                 }
 
                 $fromStatus = $locked->status;
-                $versionNumber = ((int) $locked->documentVersions()->max('version_number')) + 1;
                 $finalizedAt = now();
-                $version = $locked->documentVersions()->create([
-                    'version_number' => $versionNumber,
+                $document = $locked->finalDocument()->create([
                     'source_type' => Ib39CdrDocumentSource::Uploaded,
-                    'replaces_version_id' => $current?->id,
-                    'replacement_reason' => $replacementReason,
                     'storage_path' => $path,
                     'original_filename' => $metadata['original_filename'],
                     'mime_type' => $metadata['mime_type'],
@@ -123,47 +101,36 @@ class Ib39CdrDocumentService
                     'finalized_at' => $finalizedAt,
                 ]);
 
-                $changes = ['current_final_version_id' => $version->id];
-                if (! $isReplacement) {
-                    $changes += [
-                        'status' => Ib39CdrStatus::Completed,
-                        'completed_at' => $finalizedAt,
-                        'completed_by' => $actor->id,
-                    ];
-                }
-                $locked->update($changes);
+                $locked->update([
+                    'status' => Ib39CdrStatus::Completed,
+                    'completed_at' => $finalizedAt,
+                    'completed_by' => $actor->id,
+                ]);
                 $locked->statusHistories()->create([
                     'user_id' => $actor->id,
                     'from_status' => $fromStatus,
                     'to_status' => Ib39CdrStatus::Completed,
-                    'event' => $isReplacement ? 'final_document_replaced' : 'direct_final_uploaded',
-                    'document_version_id' => $version->id,
+                    'event' => 'final_document_uploaded',
                     'ip_address' => $ipAddress,
                     'user_agent' => $userAgent ? mb_substr($userAgent, 0, 1000) : null,
                 ]);
                 AuditLog::query()->create([
                     'user_id' => $actor->id,
-                    'action' => $isReplacement ? 'ib39_cdr_final_document_replaced' : 'ib39_cdr_direct_final_uploaded',
+                    'action' => 'ib39_cdr_final_document_uploaded',
                     'entity_type' => Ib39CdrProcessing::class,
                     'entity_id' => $locked->id,
-                    'previous_values' => ['status' => $fromStatus->value, 'current_version_number' => $current?->version_number],
-                    'new_values' => ['status' => Ib39CdrStatus::Completed->value, 'version_number' => $versionNumber, 'source_type' => Ib39CdrDocumentSource::Uploaded->value],
+                    'previous_values' => ['status' => $fromStatus->value],
+                    'new_values' => ['status' => Ib39CdrStatus::Completed->value, 'source_type' => Ib39CdrDocumentSource::Uploaded->value],
                     'ip_address' => $ipAddress,
                     'user_agent' => $userAgent ? mb_substr($userAgent, 0, 1000) : null,
                 ]);
 
-                if (! $isReplacement) {
-                    $this->japicIntake->createForCompletedCdr($locked->fresh());
-                }
+                $this->japicIntake->createForCompletedCdr($locked->fresh());
 
-                return ['version' => $version, 'duplicate' => false];
+                return $document;
             }, 5);
 
-            if ($result['duplicate']) {
-                Storage::disk('local')->delete($path);
-            }
-
-            return $result['version'];
+            return $document;
         } catch (Throwable $exception) {
             Storage::disk('local')->delete($path);
 
@@ -171,16 +138,13 @@ class Ib39CdrDocumentService
         }
     }
 
-    private function fileResponse(Ib39CdrDocumentVersion $version, string $disposition): StreamedResponse
+    private function fileResponse(Ib39CdrFinalDocument $document, string $disposition): StreamedResponse
     {
-        abort_unless($version->source_type === Ib39CdrDocumentSource::Uploaded, 404);
-        abort_unless(str_starts_with($version->storage_path, 'ib39/cdr/'), 404);
-        abort_unless(in_array($version->mime_type, ['application/pdf', 'image/jpeg', 'image/png'], true), 404);
-        abort_unless(Storage::disk('local')->exists($version->storage_path), 404);
+        $this->ensureUploadedFileIsAvailable($document);
 
-        return Storage::disk('local')->response($version->storage_path, $version->original_filename, [
-            'Content-Type' => $version->mime_type,
-            'Content-Disposition' => $disposition.'; filename="'.addcslashes($version->original_filename, '"\\').'"',
+        return Storage::disk('local')->response($document->storage_path, $document->original_filename, [
+            'Content-Type' => $document->mime_type,
+            'Content-Disposition' => $disposition.'; filename="'.addcslashes($document->original_filename, '"\\').'"',
             'Cache-Control' => 'private, no-store, no-cache, must-revalidate, max-age=0',
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
@@ -188,15 +152,15 @@ class Ib39CdrDocumentService
         ]);
     }
 
-    private function recordAccess(Ib39CdrDocumentVersion $version, User $actor, string $access, ?string $ipAddress, ?string $userAgent): void
+    private function recordAccess(Ib39CdrFinalDocument $document, User $actor, string $access, ?string $ipAddress, ?string $userAgent): void
     {
         AuditLog::query()->create([
             'user_id' => $actor->id,
             'action' => 'ib39_cdr_final_document_'.$access,
-            'entity_type' => Ib39CdrDocumentVersion::class,
-            'entity_id' => $version->id,
+            'entity_type' => Ib39CdrFinalDocument::class,
+            'entity_id' => $document->id,
             'previous_values' => null,
-            'new_values' => ['version_number' => $version->version_number, 'source_type' => $version->source_type->value],
+            'new_values' => ['source_type' => $document->source_type->value],
             'ip_address' => $ipAddress,
             'user_agent' => $userAgent ? mb_substr($userAgent, 0, 1000) : null,
         ]);

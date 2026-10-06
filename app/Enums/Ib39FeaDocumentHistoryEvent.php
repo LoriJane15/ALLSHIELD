@@ -17,7 +17,7 @@ enum Ib39FeaDocumentHistoryEvent: string
             self::ComplianceChanged => 'Compliance status changed',
             self::RemarksChanged => 'Remarks changed',
             self::DelayChanged => 'Delay information changed',
-            self::Completed => 'Final document uploaded and completed',
+            self::Completed => 'Completed',
         };
     }
 }

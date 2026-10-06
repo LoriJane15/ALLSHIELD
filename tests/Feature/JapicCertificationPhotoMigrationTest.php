@@ -162,11 +162,11 @@ class JapicCertificationPhotoMigrationTest extends TestCase
             'possessed_firearms' => 0, 'created_by' => $user, 'created_at' => $time, 'updated_at' => $time]);
         $cdr = DB::table('ib39_cdr_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr, 'status' => 'Completed',
             'completed_at' => $time, 'completed_by' => $user, 'created_at' => $time, 'updated_at' => $time]);
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr, 'version_number' => 1, 'source_type' => 'generated',
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr, 'source_type' => 'generated',
             'storage_path' => 'generated/migration', 'original_filename' => 'migration.html', 'mime_type' => 'text/html', 'size_bytes' => 1,
             'sha256' => str_repeat('b', 64), 'created_by' => $user, 'finalized_at' => $time, 'created_at' => $time, 'updated_at' => $time]);
         $processing = DB::table('japic_certification_processings')->insertGetId(['ib39_surfaced_former_rebel_id' => $fr,
-            'triggering_cdr_document_version_id' => $version, 'status' => 'Pending', 'received_at' => $time,
+            'triggering_cdr_final_document_id' => $version, 'status' => 'Pending', 'received_at' => $time,
             'due_at' => $time->copy()->addDays(14), 'lock_version' => 0, 'created_at' => $time, 'updated_at' => $time]);
 
         return compact('user', 'processing');

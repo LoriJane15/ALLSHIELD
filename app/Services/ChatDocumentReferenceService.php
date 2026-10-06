@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Enums\JapicCertificationStatus;
 use App\Models\ChatConversation;
 use App\Models\ChatMessageDocumentReference;
-use App\Models\Ib39CdrDocumentVersion;
+use App\Models\Ib39CdrFinalDocument;
 use App\Models\Ib39FeaDocumentVersion;
 use App\Models\JapicCertificationDocumentVersion;
 use App\Models\PswdoEnrollmentDocument;
@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 class ChatDocumentReferenceService
 {
-    public const TYPE_CDR = 'cdr_document_version';
+    public const TYPE_CDR = 'cdr_final_document';
 
     public const TYPE_JAPIC = 'japic_certification_document_version';
 
@@ -33,8 +33,8 @@ class ChatDocumentReferenceService
     ];
 
     public const EAGER_LOADS = [
-        'documentReference.cdrDocumentVersion.processing.surfacedFormerRebel.pswdoEnrollment',
-        'documentReference.cdrDocumentVersion.processing.surfacedFormerRebel.japicCertificationProcessing',
+        'documentReference.cdrFinalDocument.processing.surfacedFormerRebel.pswdoEnrollment',
+        'documentReference.cdrFinalDocument.processing.surfacedFormerRebel.japicCertificationProcessing',
         'documentReference.japicDocumentVersion.processing.surfacedFormerRebel.pswdoEnrollment',
         'documentReference.pswdoEnrollmentDocument.enrollment.surfacedFormerRebel.japicCertificationProcessing',
         'documentReference.feaDocumentVersion.document',
@@ -50,7 +50,7 @@ class ChatDocumentReferenceService
         }
 
         $targets = collect()
-            ->merge(Ib39CdrDocumentVersion::query()
+            ->merge(Ib39CdrFinalDocument::query()
                 ->with(['processing.surfacedFormerRebel.pswdoEnrollment', 'processing.surfacedFormerRebel.japicCertificationProcessing'])
                 ->where(function ($query) use ($receiver): void {
                     $query->where('created_by', $receiver->getKey())
@@ -157,7 +157,7 @@ class ChatDocumentReferenceService
     private function find(string $type, int $id): ?Model
     {
         return match ($type) {
-            self::TYPE_CDR => Ib39CdrDocumentVersion::query()->with([
+            self::TYPE_CDR => Ib39CdrFinalDocument::query()->with([
                 'processing.surfacedFormerRebel.pswdoEnrollment',
                 'processing.surfacedFormerRebel.japicCertificationProcessing',
             ])->find($id),
@@ -187,7 +187,7 @@ class ChatDocumentReferenceService
         $id = $receiver->getKey();
 
         return match (true) {
-            $target instanceof Ib39CdrDocumentVersion => $target->created_by === $id
+            $target instanceof Ib39CdrFinalDocument => $target->created_by === $id
                 || $target->processing?->completed_by === $id,
             $target instanceof JapicCertificationDocumentVersion => $target->uploaded_by === $id
                 || $target->processing?->assigned_to === $id
@@ -201,7 +201,7 @@ class ChatDocumentReferenceService
     private function isCanonical(Model $target): bool
     {
         return match (true) {
-            $target instanceof Ib39CdrDocumentVersion => $target->processing !== null,
+            $target instanceof Ib39CdrFinalDocument => $target->processing !== null,
             $target instanceof JapicCertificationDocumentVersion => $target->processing !== null
                 && $target->processing->status === JapicCertificationStatus::Completed
                 && $target->processing->current_final_version_id === $target->getKey(),
@@ -221,7 +221,7 @@ class ChatDocumentReferenceService
     private function target(ChatMessageDocumentReference $reference): ?Model
     {
         return match (true) {
-            $reference->ib39_cdr_document_version_id !== null => $reference->cdrDocumentVersion,
+            $reference->ib39_cdr_final_document_id !== null => $reference->cdrFinalDocument,
             $reference->japic_certification_document_version_id !== null => $reference->japicDocumentVersion,
             $reference->pswdo_enrollment_document_id !== null => $reference->pswdoEnrollmentDocument,
             $reference->ib39_fea_document_version_id !== null => $reference->feaDocumentVersion,
@@ -232,7 +232,7 @@ class ChatDocumentReferenceService
     private function typeFor(Model $target): string
     {
         return match (true) {
-            $target instanceof Ib39CdrDocumentVersion => self::TYPE_CDR,
+            $target instanceof Ib39CdrFinalDocument => self::TYPE_CDR,
             $target instanceof JapicCertificationDocumentVersion => self::TYPE_JAPIC,
             $target instanceof PswdoEnrollmentDocument => self::TYPE_PSWDO,
             $target instanceof Ib39FeaDocumentVersion => self::TYPE_FEA,
@@ -242,7 +242,7 @@ class ChatDocumentReferenceService
     private function columnFor(string $type): string
     {
         return match ($type) {
-            self::TYPE_CDR => 'ib39_cdr_document_version_id',
+            self::TYPE_CDR => 'ib39_cdr_final_document_id',
             self::TYPE_JAPIC => 'japic_certification_document_version_id',
             self::TYPE_PSWDO => 'pswdo_enrollment_document_id',
             self::TYPE_FEA => 'ib39_fea_document_version_id',
@@ -252,7 +252,7 @@ class ChatDocumentReferenceService
     private function label(Model $target): string
     {
         return match (true) {
-            $target instanceof Ib39CdrDocumentVersion => $target->processing->surfacedFormerRebel->reference_number.' CDR',
+            $target instanceof Ib39CdrFinalDocument => $target->processing->surfacedFormerRebel->reference_number.' CDR',
             $target instanceof JapicCertificationDocumentVersion => $target->processing->surfacedFormerRebel->reference_number.' JAPIC Certification',
             $target instanceof PswdoEnrollmentDocument => $target->enrollment->surfacedFormerRebel->reference_number.' '.$target->document_type->label(),
             $target instanceof Ib39FeaDocumentVersion => $target->processing->surfacedFormerRebel->reference_number.' '.$target->document->document_type->label(),
@@ -264,10 +264,10 @@ class ChatDocumentReferenceService
         $role = $viewer->role;
 
         return match (true) {
-            $target instanceof Ib39CdrDocumentVersion => match ($role) {
-                '39th_ib' => route('ib39.cdr.documents.preview', [$target->processing, $target]),
-                'japic' => route('japic.cdr.documents.preview', [$target->processing, $target]),
-                'pswdo' => route('pswdo.cdr.documents.preview', [$target->processing, $target]),
+            $target instanceof Ib39CdrFinalDocument => match ($role) {
+                '39th_ib' => route('ib39.cdr.documents.preview', $target->processing),
+                'japic' => route('japic.cdr.documents.preview', $target->processing),
+                'pswdo' => route('pswdo.cdr.documents.preview', $target->processing),
                 default => null,
             },
             $target instanceof JapicCertificationDocumentVersion => match ($role) {

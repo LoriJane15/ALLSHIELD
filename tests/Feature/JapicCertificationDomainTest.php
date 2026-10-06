@@ -68,13 +68,13 @@ class JapicCertificationDomainTest extends TestCase
         ], $user);
         $fr = $frModel->id;
         $cdr = $frModel->cdrProcessing()->value('id');
-        $version = DB::table('ib39_cdr_document_versions')->insertGetId(['cdr_processing_id' => $cdr, 'version_number' => 1,
+        $version = DB::table('ib39_cdr_final_documents')->insertGetId(['cdr_processing_id' => $cdr,
             'source_type' => 'generated', 'storage_path' => 'x', 'original_filename' => 'x.pdf', 'mime_type' => 'application/pdf',
             'size_bytes' => 1, 'sha256' => str_repeat('a', 64), 'created_by' => $user->id, 'finalized_at' => now(),
             'created_at' => now(), 'updated_at' => now()]);
         $received = now();
         $processing = JapicCertificationProcessing::query()->forceCreate(['ib39_surfaced_former_rebel_id' => $fr,
-            'triggering_cdr_document_version_id' => $version, 'status' => JapicCertificationStatus::Pending,
+            'triggering_cdr_final_document_id' => $version, 'status' => JapicCertificationStatus::Pending,
             'received_at' => $received, 'due_at' => $received->copy()->addDays(14), 'lock_version' => 0]);
 
         return [$processing, $user];
