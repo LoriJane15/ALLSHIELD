@@ -30,6 +30,7 @@ class PswdoInterfaceAuthorizationTest extends TestCase
             'pswdo.enrollments.comments.store' => 'POST',
             'pswdo.enrollments.eclip-draft.update' => 'PUT',
             'pswdo.enrollments.initial-interview-draft.update' => 'PUT',
+            'pswdo.enrollments.profiling-interview-draft.update' => 'PUT',
             'pswdo.enrollments.documents.store' => 'POST',
         ], $mutations);
     }
@@ -93,6 +94,15 @@ class PswdoInterfaceAuthorizationTest extends TestCase
             ->assertForbidden();
         $this->actingAs($japic)
             ->putJson(route('pswdo.enrollments.initial-interview-draft.update', $enrollment), [])
+            ->assertForbidden();
+        $this->actingAs($japic)
+            ->putJson(route('pswdo.enrollments.profiling-interview-draft.update', $enrollment), [])
+            ->assertForbidden();
+        $this->actingAs($japic)
+            ->get(route('pswdo.enrollments.profiling-interview-draft.preview', $enrollment))
+            ->assertForbidden();
+        $this->actingAs($japic)
+            ->get(route('pswdo.enrollments.profiling-interview-draft.download', $enrollment))
             ->assertForbidden();
     }
 

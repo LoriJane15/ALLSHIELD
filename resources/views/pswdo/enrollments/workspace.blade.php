@@ -507,6 +507,174 @@
     line-height: 1.35;
 }
 .pswdo-iif-option input { margin-top: 0.15rem; }
+.pswdo-pif-editor .pswdo-eclip-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    align-items: stretch;
+    gap: 0.9rem 1rem;
+}
+.pswdo-pif-editor fieldset,
+.pswdo-pif-editor .pswdo-eclip-grid > *,
+.pswdo-pif-editor .pswdo-iif-options > * {
+    min-width: 0;
+}
+.pswdo-pif-editor .pswdo-eclip-grid > div {
+    display: flex;
+    flex-direction: column;
+}
+.pswdo-pif-editor .pswdo-eclip-group {
+    margin-bottom: 1.5rem;
+    padding: 1.1rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 10px;
+    background: #fff;
+}
+.pswdo-pif-editor .pswdo-eclip-group > h3 {
+    margin: -1.1rem -1.1rem 1rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid #dbe3ee;
+    border-radius: 10px 10px 0 0;
+    background: #f8fafc;
+}
+.pswdo-pif-editor h4,
+.pswdo-pif-editor h5 {
+    margin-bottom: 0.65rem;
+    color: #1e293b;
+    line-height: 1.5;
+}
+.pswdo-pif-editor .pswdo-eclip-label {
+    margin-bottom: 0.4rem;
+    line-height: 1.5;
+}
+.pswdo-pif-editor .form-control,
+.pswdo-pif-editor select.form-control {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.7rem;
+    border-color: #cbd5e1;
+    border-radius: 7px;
+    line-height: 1.5;
+}
+.pswdo-pif-editor .pswdo-iif-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.65rem;
+}
+.pswdo-pif-editor .pswdo-iif-option {
+    display: grid;
+    grid-template-columns: 1.05rem minmax(0, 1fr);
+    align-items: start;
+    min-height: 2.15rem;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 7px;
+    background: #fff;
+    cursor: pointer;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.pswdo-pif-editor .pswdo-iif-option input[type="radio"],
+.pswdo-pif-editor .pswdo-iif-option input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    align-self: start;
+    margin-top: 0.2rem;
+}
+.pswdo-pif-editor .pswdo-pif-question-card,
+.pswdo-pif-editor .pswdo-pif-choice-panel,
+.pswdo-pif-editor .pswdo-pif-answer-row {
+    margin-bottom: 0.9rem;
+    padding: 0.85rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 9px;
+    background: #f8fafc;
+}
+.pswdo-pif-editor .pswdo-pif-question-card > .pswdo-eclip-label,
+.pswdo-pif-editor .pswdo-pif-answer-row > .pswdo-eclip-label {
+    color: #1e293b;
+    font-size: 0.84rem;
+}
+.pswdo-pif-editor .pswdo-pif-answer-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(230px, 1.2fr) minmax(210px, 1fr);
+    align-items: start;
+    gap: 0.75rem;
+}
+.pswdo-pif-editor .pswdo-pif-answer-row > div {
+    min-width: 0;
+}
+.pswdo-pif-editor .pswdo-pif-compact-options {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+}
+.pswdo-pif-editor .pswdo-pif-choice-panel > strong {
+    display: block;
+    margin-bottom: 0.55rem;
+    color: #334155;
+}
+.pswdo-pif-table-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1.25rem 0 0.65rem;
+}
+.pswdo-pif-table-heading .btn { flex: 0 0 auto; }
+.pswdo-pif-table-wrap table { min-width: 1120px; }
+.pswdo-pif-table-wrap th,
+.pswdo-pif-table-wrap td {
+    vertical-align: middle;
+    white-space: normal;
+}
+.pswdo-pif-table-wrap .form-control {
+    min-width: 8.5rem;
+    margin: 0;
+}
+.pswdo-pif-table-wrap th:first-child,
+.pswdo-pif-table-wrap td:first-child {
+    width: 3rem;
+    min-width: 3rem;
+    text-align: center;
+}
+.pswdo-pif-row-action {
+    width: 5.5rem;
+    min-width: 5.5rem;
+    text-align: center;
+}
+.pswdo-pif-row-action .btn {
+    width: 100%;
+    white-space: nowrap;
+}
+.pswdo-pif-code-legends {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+.pswdo-pif-code-legends section {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    background: #fff;
+}
+.pswdo-pif-code-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.2rem 0.75rem;
+    margin-top: 0.4rem;
+}
+.pswdo-pif-code { font-weight: 800; }
 .pswdo-iif-question {
     margin-bottom: 1rem;
     padding: 0.9rem;
@@ -548,12 +716,45 @@
     .pswdo-eclip-field-full {
         grid-column: auto;
     }
+    .pswdo-pif-code-legends,
+    .pswdo-pif-code-grid {
+        grid-template-columns: 1fr;
+    }
+    .pswdo-pif-table-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .pswdo-pif-editor .pswdo-pif-answer-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+    .pswdo-pif-editor .pswdo-iif-options {
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    }
     .pswdo-upload-actions-compact {
         align-items: stretch;
         flex-direction: column;
     }
     .pswdo-upload-actions-compact .pswdo-upload-submit {
         align-self: flex-end;
+    }
+}
+@media(max-width: 575px) {
+    .pswdo-pif-editor .pswdo-eclip-group {
+        padding: 0.85rem;
+    }
+    .pswdo-pif-editor .pswdo-eclip-group > h3 {
+        margin: -0.85rem -0.85rem 0.9rem;
+        padding: 0.8rem 0.85rem;
+    }
+    .pswdo-pif-editor .pswdo-eclip-grid,
+    .pswdo-pif-editor .pswdo-iif-options,
+    .pswdo-pif-code-legends,
+    .pswdo-pif-code-grid {
+        grid-template-columns: 1fr;
+    }
+    .pswdo-pif-table-heading .btn {
+        width: 100%;
     }
 }
 </style>
@@ -688,6 +889,7 @@
             $structuredDraftType = in_array($type, [
                 \App\Enums\PswdoEnrollmentDocumentType::EclipEnrollmentForm,
                 \App\Enums\PswdoEnrollmentDocumentType::InitialInterviewForm,
+                \App\Enums\PswdoEnrollmentDocumentType::ProfilingInterviewForm,
             ], true);
         @endphp
         <section id="{{ $type->value }}" class="pswdo-doc-section-card {{ $structuredDraftType ? 'pswdo-final-upload-card' : '' }}">
@@ -1292,6 +1494,41 @@
                     </form>
                 </div>
             </section>
+        @elseif($type === \App\Enums\PswdoEnrollmentDocumentType::ProfilingInterviewForm)
+            <section class="pswdo-eclip-toolbar" aria-label="Profiling Interview Form drafting controls">
+                <div class="pswdo-save-state {{ $profilingInterviewReadOnly ? '' : 'saved' }}" id="pswdoPifSaveState" aria-live="polite">
+                    <i class="mdi {{ $profilingInterviewReadOnly ? 'mdi-lock-outline' : 'mdi-cloud-check' }}" id="pswdoPifSaveIcon"></i>
+                    <span id="pswdoPifSaveText">{{ $profilingInterviewReadOnly ? 'Completed / Read-only' : 'All changes saved' }}</span>
+                </div>
+                <a id="pswdoPifPreview"
+                   class="btn btn-outline-primary btn-sm {{ $profilingInterviewDraft ? '' : 'disabled' }}"
+                   href="{{ route('pswdo.enrollments.profiling-interview-draft.preview', $enrollment) }}"
+                   target="_blank" rel="noopener"
+                   @unless($profilingInterviewDraft) aria-disabled="true" tabindex="-1" @endunless>
+                    <i class="mdi mdi-eye-outline mr-1"></i> Preview Draft
+                </a>
+            </section>
+
+            <section class="pswdo-doc-section-card" aria-label="Profiling Interview Form drafting area">
+                <div class="pswdo-doc-head">
+                    <div class="pswdo-doc-head-title">
+                        <div class="pswdo-doc-head-icon" style="background:#eef2ff;color:#4338ca;"><i class="mdi mdi-file-document-edit-outline"></i></div>
+                        <div>
+                            <span style="font-size:.72rem;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.05em;">Structured official draft</span>
+                            <div style="font-size:1rem;font-weight:800;color:#0f172a;">Profiling Interview Form (45 minutes)</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pswdo-doc-body">
+                    @include('pswdo.enrollments.partials.profiling-interview-editor', [
+                        'payload' => $profilingInterviewPayload,
+                        'draft' => $profilingInterviewDraft,
+                        'readOnly' => $profilingInterviewReadOnly,
+                        'canEdit' => $canEditProfilingInterviewDraft,
+                        'updateUrl' => $profilingInterviewUpdateUrl,
+                    ])
+                </div>
+            </section>
         @endif
     @endforeach
     @endif
@@ -1449,6 +1686,69 @@ function wirePswdoDraftForm(config) {
     });
 }
 
+function wirePifDynamicRows() {
+    const form = document.getElementById('pswdoPifDraftForm');
+    if (!form || form.dataset.editable !== 'true') return;
+
+    const clearRow = row => {
+        row.querySelectorAll('input, select, textarea').forEach(field => {
+            if (field instanceof HTMLInputElement && ['checkbox', 'radio'].includes(field.type)) {
+                field.checked = false;
+            } else if (field instanceof HTMLSelectElement && field.multiple) {
+                Array.from(field.options).forEach(option => { option.selected = false; });
+            } else {
+                field.value = '';
+            }
+        });
+    };
+    const reindex = table => {
+        const collection = table.dataset.pifDynamicTable;
+        table.querySelectorAll('[data-pif-row]').forEach((row, index) => {
+            row.dataset.rowIndex = String(index);
+            row.querySelector('[data-pif-row-number]').textContent = String(index + 1);
+            row.querySelectorAll('[name]').forEach(field => {
+                field.name = field.name.replace(
+                    new RegExp(`^draft\\[${collection}\\]\\[\\d+\\]`),
+                    `draft[${collection}][${index}]`,
+                );
+                if (field.hasAttribute('aria-label')) {
+                    field.setAttribute('aria-label', field.getAttribute('aria-label').replace(/row \d+/i, `row ${index + 1}`));
+                }
+            });
+            const remove = row.querySelector('[data-pif-remove-row]');
+            if (remove) remove.setAttribute('aria-label', `Remove ${collection === 'children' ? 'child' : 'family member'} row ${index + 1}`);
+        });
+    };
+    const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));
+
+    form.querySelectorAll('[data-pif-dynamic-table]').forEach(table => {
+        const rows = table.querySelector('[data-pif-rows]');
+        const add = form.querySelector(`[data-pif-add-row="${table.dataset.pifDynamicTable}"]`);
+        add?.addEventListener('click', () => {
+            const source = rows.querySelector('[data-pif-row]');
+            const row = source.cloneNode(true);
+            clearRow(row);
+            rows.appendChild(row);
+            reindex(table);
+            changed();
+            row.querySelector('input, select, textarea')?.focus();
+        });
+        table.addEventListener('click', event => {
+            const remove = event.target.closest('[data-pif-remove-row]');
+            if (!remove) return;
+            const row = remove.closest('[data-pif-row]');
+            if (rows.querySelectorAll('[data-pif-row]').length === 1) {
+                clearRow(row);
+            } else {
+                row.remove();
+            }
+            reindex(table);
+            changed();
+        });
+        reindex(table);
+    });
+}
+
 wirePswdoDraftForm({
     formId: 'pswdoEclipDraftForm',
     revisionId: 'pswdoEclipRevision',
@@ -1467,5 +1767,15 @@ wirePswdoDraftForm({
     previewId: 'pswdoIifPreview',
     errorMessage: 'Initial Interview Form draft save failed.',
 });
+wirePswdoDraftForm({
+    formId: 'pswdoPifDraftForm',
+    revisionId: 'pswdoPifRevision',
+    stateId: 'pswdoPifSaveState',
+    iconId: 'pswdoPifSaveIcon',
+    textId: 'pswdoPifSaveText',
+    previewId: 'pswdoPifPreview',
+    errorMessage: 'Profiling Interview Form draft save failed.',
+});
+wirePifDynamicRows();
 </script>
 @endsection

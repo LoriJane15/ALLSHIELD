@@ -123,6 +123,15 @@ class EnrollmentController extends Controller
         );
         $initialInterviewReadOnly = $activeDocument?->document_type === PswdoEnrollmentDocumentType::InitialInterviewForm
             && $activeDocument->isConfirmedFinal();
+        $profilingInterviewDraft = $pswdoEnrollment->documentDrafts->first(
+            fn ($draft): bool => $draft->document_type === PswdoEnrollmentDocumentType::ProfilingInterviewForm
+        );
+        $profilingInterviewPayload = array_replace(
+            $this->initialProfilingInterviewPayload($pswdoEnrollment),
+            $profilingInterviewDraft?->payload ?? [],
+        );
+        $profilingInterviewReadOnly = $activeDocument?->document_type === PswdoEnrollmentDocumentType::ProfilingInterviewForm
+            && $activeDocument->isConfirmedFinal();
 
         return view('pswdo.enrollments.workspace', [
             'enrollment' => $pswdoEnrollment,
@@ -139,6 +148,11 @@ class EnrollmentController extends Controller
             'initialInterviewPayload' => $initialInterviewPayload,
             'initialInterviewReadOnly' => $initialInterviewReadOnly,
             'canEditInitialInterviewDraft' => $isProcessor && Gate::allows('editDraft', [$pswdoEnrollment, PswdoEnrollmentDocumentType::InitialInterviewForm]),
+            'profilingInterviewDraft' => $profilingInterviewDraft,
+            'profilingInterviewPayload' => $profilingInterviewPayload,
+            'profilingInterviewReadOnly' => $profilingInterviewReadOnly,
+            'canEditProfilingInterviewDraft' => $isProcessor && Gate::allows('editDraft', [$pswdoEnrollment, PswdoEnrollmentDocumentType::ProfilingInterviewForm]),
+            'profilingInterviewUpdateUrl' => route('pswdo.enrollments.profiling-interview-draft.update', $pswdoEnrollment),
             'canComment' => Gate::allows('comment', $pswdoEnrollment),
             'workspaceEvents' => ProcessingWorkspaceHistory::pswdo($pswdoEnrollment),
         ]);
@@ -280,6 +294,18 @@ class EnrollmentController extends Controller
             'current_municipality_city' => (string) $record?->municipality?->name,
             'current_province' => (string) $record?->province,
             'current_psgc_barangay_code' => '',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function initialProfilingInterviewPayload(PswdoEnrollment $enrollment): array
+    {
+        $record = $enrollment->surfacedFormerRebel;
+
+        return [
+            'respondent_last_name' => (string) $record?->last_name,
+            'respondent_first_name' => (string) $record?->first_name,
+            'respondent_middle_name' => '',
         ];
     }
 }
