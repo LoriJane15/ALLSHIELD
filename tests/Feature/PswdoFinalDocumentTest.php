@@ -576,6 +576,314 @@ class PswdoFinalDocumentTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_endorsement_letter_uses_an_encrypted_revisioned_official_draft_without_form_seven(): void
+    {
+        $workspaceUrl = route('pswdo.enrollments.workspace', [
+            'pswdoEnrollment' => $this->enrollment,
+            'document_type' => PswdoEnrollmentDocumentType::EndorsementLetter->value,
+        ]);
+        $workspace = $this->actingAs($this->pswdo)->get($workspaceUrl)->assertOk()
+            ->assertSee('Endorsement Letter drafting area', false)
+            ->assertSee('id="pswdoEndorsementDraftForm"', false)
+            ->assertSee('Letter Information')
+            ->assertSee('Addressee')
+            ->assertSee('Endorsed Beneficiaries')
+            ->assertSee('Assistance Summary')
+            ->assertSee('name="draft[fiscal_year]"', false)
+            ->assertSee('name="draft[addressee_lines][0]"', false)
+            ->assertSee('Addressee Line 1')
+            ->assertSee('Appears on line 1 above the salutation.')
+            ->assertSee('name="draft[beneficiaries][0][name]"', false)
+            ->assertSee('name="draft[beneficiaries][1][name]"', false)
+            ->assertSee('name="draft[beneficiaries][2][name]"', false)
+            ->assertDontSee('name="draft[beneficiaries][3][name]"', false)
+            ->assertSee('data-endorsement-add-row="beneficiaries"', false)
+            ->assertSee('data-endorsement-remove-row', false)
+            ->assertSee('Add Beneficiary')
+            ->assertSee('function wireEndorsementDynamicRows()', false)
+            ->assertSee('row.remove();', false)
+            ->assertSee('reindex();', false)
+            ->assertSee('name="draft[assistance_summary][0][immediate_assistance]"', false)
+            ->assertDontSee('name="draft[assistance_summary][1][immediate_assistance]"', false)
+            ->assertSee('data-endorsement-add-row="assistance_summary"', false)
+            ->assertSee('Add Assistance')
+            ->assertSee('Remove assistance row 1')
+            ->assertDontSee('Respectfully endorsing the enrolment of the following FR and/or FVE beneficiaries for financial assistance:')
+            ->assertDontSee('Governor Name')
+            ->assertDontSee('Office Address')
+            ->assertDontSee('FORM 7');
+        $this->assertStringContainsString($this->enrollment->surfacedFormerRebel->display_name, $workspace->getContent());
+        $this->assertDatabaseCount('pswdo_enrollment_document_drafts', 0);
+
+        $payload = $this->endorsementLetterPayload();
+        $this->actingAs($this->pswdo)->putJson(route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment), [
+            'revision' => 0,
+            'draft' => $payload,
+        ])->assertOk()->assertJsonPath('saved', true)->assertJsonPath('revision', 1);
+
+        $draft = PswdoEnrollmentDocumentDraft::query()->sole();
+        $this->assertSame(PswdoEnrollmentDocumentType::EndorsementLetter, $draft->document_type);
+        $this->assertSame($payload, $draft->payload);
+        $this->assertStringNotContainsString('Saved Beneficiary', DB::table('pswdo_enrollment_document_drafts')->value('payload'));
+
+        $this->actingAs($this->pswdo)->get($workspaceUrl)->assertOk()
+            ->assertSee('value="2026"', false)
+            ->assertSee('Saved Addressee Office')
+            ->assertSee('Saved Beneficiary');
+
+        $preview = $this->actingAs($this->pswdo)->get(route('pswdo.enrollments.endorsement-letter-draft.preview', $this->enrollment))
+            ->assertOk()
+            ->assertSee('ECLIP IS Form')
+            ->assertSee('ENDORSEMENT LETTER')
+            ->assertSee('Respectfully endorsing the enrolment of the following FR and/or FVE beneficiaries for financial assistance:')
+            ->assertSee('Summary of the number of partner-stakeholder/s (beneficiary/ies) and financial assistance requested:')
+            ->assertSee('I hereby certify that the list is a full, true, and correct statement of beneficiaries and this is in support of the liquidation of financial assistance to be granted to the FR/s and/or FVE/s.')
+            ->assertSee('GOVERNOR OR HUC/ICC MAYOR')
+            ->assertSee('JAPIC Certification and ECLIP Enrolment Form')
+            ->assertSee('Property Turn-in Slip (PTIS)')
+            ->assertSee('Saved Beneficiary')
+            ->assertSee('Saved Pending Case')
+            ->assertSee('Saved Addressee Office')
+            ->assertSee('@page { size: A4 portrait; margin: 25.4mm; }', false)
+            ->assertSee('width: 210mm;', false)
+            ->assertSee('min-height: 297mm;', false)
+            ->assertSee('padding: 25.4mm;', false)
+            ->assertSee('data-endorsement-page="1"', false)
+            ->assertDontSee('data-endorsement-page="2"', false)
+            ->assertDontSee('Appears on line')
+            ->assertDontSee('FORM 7')
+            ->assertDontSee('form-seven', false)
+            ->assertDontSee('raw JSON')
+            ->assertSee('>Download PDF</a>', false);
+
+        $this->mock(OfficialDocumentPdf::class, function ($mock): void {
+            $mock->shouldReceive('render')->once()->withArgs(function (string $html): bool {
+                return str_contains($html, 'ENDORSEMENT LETTER')
+                    && str_contains($html, 'Saved Beneficiary')
+                    && str_contains($html, 'Saved Addressee Office')
+                    && str_contains($html, 'GOVERNOR OR HUC/ICC MAYOR')
+                    && str_contains($html, 'width: auto;')
+                    && str_contains($html, 'min-height: 0;')
+                    && str_contains($html, 'margin: 0;')
+                    && str_contains($html, 'padding: 0;')
+                    && ! str_contains($html, 'FORM 7')
+                    && ! str_contains($html, 'form-seven');
+            })->andReturn("%PDF-1.4\nendorsement\n%%EOF");
+        });
+        $this->actingAs($this->pswdo)->get(route('pswdo.enrollments.endorsement-letter-draft.download', $this->enrollment))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $updated = array_replace($payload, ['salutation' => 'Updated Addressee']);
+        $this->actingAs($this->pswdo)->putJson(route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment), [
+            'revision' => 1,
+            'draft' => $updated,
+        ])->assertOk()->assertJsonPath('revision', 2);
+        $this->actingAs($this->pswdo)->putJson(route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment), [
+            'revision' => 1,
+            'draft' => array_replace($payload, ['salutation' => 'Stale Addressee']),
+        ])->assertStatus(409);
+
+        foreach (PswdoEnrollmentDocumentType::prerequisites() as $position => $type) {
+            $this->upload($type, 'endorsement-required-'.$position)->assertSessionHasNoErrors();
+        }
+        $this->upload(PswdoEnrollmentDocumentType::EndorsementLetter, 'endorsement-final')->assertSessionHasNoErrors();
+        $this->actingAs($this->pswdo)->get($workspaceUrl)->assertOk()
+            ->assertSee('Completed / Read-only')
+            ->assertSee('fieldset disabled', false)
+            ->assertDontSee('Save Draft');
+        $this->actingAs($this->pswdo)->putJson(route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment), [
+            'revision' => 2,
+            'draft' => $updated,
+        ])->assertForbidden();
+    }
+
+    public function test_endorsement_letter_dynamic_beneficiaries_normalize_and_continue_without_truncation(): void
+    {
+        $saveUrl = route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment);
+        $previewUrl = route('pswdo.enrollments.endorsement-letter-draft.preview', $this->enrollment);
+        $downloadUrl = route('pswdo.enrollments.endorsement-letter-draft.download', $this->enrollment);
+        $payload = $this->endorsementLetterPayload();
+
+        $this->actingAs($this->pswdo)->putJson($saveUrl, [
+            'revision' => 0,
+            'draft' => array_replace($payload, [
+                'beneficiaries' => [
+                    ['name' => 'Partially Completed Beneficiary'],
+                    ['name' => '', 'address' => '', 'amount' => ''],
+                ],
+            ]),
+        ])->assertOk()->assertJsonPath('revision', 1);
+        $draft = PswdoEnrollmentDocumentDraft::query()->sole();
+        $this->assertCount(1, $draft->payload['beneficiaries']);
+        $this->assertSame('Partially Completed Beneficiary', $draft->payload['beneficiaries'][0]['name']);
+
+        $beneficiaries = $this->endorsementBeneficiaries(7);
+        $beneficiaries[] = ['name' => '', 'address' => '', 'pending_cases' => ''];
+        $this->actingAs($this->pswdo)->putJson($saveUrl, [
+            'revision' => 1,
+            'draft' => array_replace($payload, [
+                'beneficiaries' => $beneficiaries,
+                'grand_total' => 'PHP 77,000.00',
+                'assistance_summary' => [[
+                    'immediate_assistance' => 7,
+                    'livelihood_assistance' => 0,
+                    'firearms_remuneration' => 0,
+                    'reintegration_assistance' => 0,
+                    'fr' => 4,
+                    'fve' => 3,
+                ]],
+            ]),
+        ])->assertOk()->assertJsonPath('revision', 2);
+
+        $draft->refresh();
+        $this->assertCount(7, $draft->payload['beneficiaries']);
+        $this->assertSame('Dynamic Beneficiary 1', $draft->payload['beneficiaries'][0]['name']);
+        $this->assertSame('Dynamic Beneficiary 7', $draft->payload['beneficiaries'][6]['name']);
+        $this->assertStringNotContainsString('Dynamic Beneficiary 7', DB::table('pswdo_enrollment_document_drafts')->value('payload'));
+
+        $workspace = $this->actingAs($this->pswdo)->get(route('pswdo.enrollments.workspace', [
+            'pswdoEnrollment' => $this->enrollment,
+            'document_type' => PswdoEnrollmentDocumentType::EndorsementLetter->value,
+        ]))->assertOk()
+            ->assertSee('name="draft[beneficiaries][6][name]"', false)
+            ->assertSee('value="Dynamic Beneficiary 7"', false);
+        $this->assertSame(7, substr_count($workspace->getContent(), 'aria-label="Remove beneficiary row'));
+
+        $preview = $this->actingAs($this->pswdo)->get($previewUrl)->assertOk()
+            ->assertSee('data-endorsement-page="1"', false)
+            ->assertSee('data-endorsement-page="2"', false)
+            ->assertSee('data-endorsement-page="3"', false)
+            ->assertSee('data-beneficiary-count="3"', false)
+            ->assertSee('data-beneficiary-count="1"', false)
+            ->assertSeeInOrder([
+                'Dynamic Beneficiary 1', 'Dynamic Beneficiary 2', 'Dynamic Beneficiary 3',
+                'Dynamic Beneficiary 4', 'Dynamic Beneficiary 5', 'Dynamic Beneficiary 6',
+                'Dynamic Beneficiary 7', 'GRAND TOTAL:', 'PHP 77,000.00',
+            ])
+            ->assertSee('Immediate Assistance')
+            ->assertDontSee('Dynamic Beneficiary 8');
+        $this->assertSame(3, substr_count($preview->getContent(), '<table class="beneficiary-table">'));
+        foreach (range(1, 7) as $number) {
+            $this->assertSame(1, substr_count($preview->getContent(), "Dynamic Beneficiary {$number}"));
+        }
+
+        $this->mock(OfficialDocumentPdf::class, function ($mock): void {
+            $mock->shouldReceive('render')->once()->withArgs(function (string $html): bool {
+                $positions = collect(range(1, 7))->map(
+                    fn (int $number): int|false => strpos($html, "Dynamic Beneficiary {$number}"),
+                );
+
+                return $positions->every(fn (int|false $position): bool => $position !== false)
+                    && $positions->values()->all() === $positions->sort()->values()->all()
+                    && substr_count($html, '<table class="beneficiary-table">') === 3
+                    && substr_count($html, 'Dynamic Beneficiary 7') === 1
+                    && str_contains($html, 'PHP 77,000.00')
+                    && str_contains($html, '@page { size: A4 portrait; margin: 25.4mm; }')
+                    && ! str_contains($html, 'FORM 7');
+            })->andReturn("%PDF-1.4\nendorsement-overflow\n%%EOF");
+        });
+        $this->actingAs($this->pswdo)->get($downloadUrl)
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_endorsement_letter_dynamic_assistance_rows_persist_in_order_and_paginate_without_truncation(): void
+    {
+        $saveUrl = route('pswdo.enrollments.endorsement-letter-draft.update', $this->enrollment);
+        $previewUrl = route('pswdo.enrollments.endorsement-letter-draft.preview', $this->enrollment);
+        $downloadUrl = route('pswdo.enrollments.endorsement-letter-draft.download', $this->enrollment);
+        $workspaceUrl = route('pswdo.enrollments.workspace', [
+            'pswdoEnrollment' => $this->enrollment,
+            'document_type' => PswdoEnrollmentDocumentType::EndorsementLetter->value,
+        ]);
+        $payload = $this->endorsementLetterPayload();
+
+        $this->actingAs($this->pswdo)->putJson($saveUrl, [
+            'revision' => 0,
+            'draft' => array_replace($payload, [
+                'assistance_summary' => [
+                    ['immediate_assistance' => 9],
+                    [
+                        'immediate_assistance' => '', 'livelihood_assistance' => '',
+                        'firearms_remuneration' => '', 'reintegration_assistance' => '',
+                        'fr' => '', 'fve' => '',
+                    ],
+                ],
+            ]),
+        ])->assertOk()->assertJsonPath('revision', 1);
+
+        $draft = PswdoEnrollmentDocumentDraft::query()->sole();
+        $this->assertCount(1, $draft->payload['assistance_summary']);
+        $this->assertSame(9, $draft->payload['assistance_summary'][0]['immediate_assistance']);
+        $this->assertArrayNotHasKey('livelihood_assistance', $draft->payload['assistance_summary'][0]);
+
+        $assistanceRows = $this->endorsementAssistanceRows(15);
+        $assistanceRows[] = [
+            'immediate_assistance' => '', 'livelihood_assistance' => '',
+            'firearms_remuneration' => '', 'reintegration_assistance' => '',
+            'fr' => '', 'fve' => '',
+        ];
+        $this->actingAs($this->pswdo)->putJson($saveUrl, [
+            'revision' => 1,
+            'draft' => array_replace($payload, [
+                'grand_total' => 'PHP 987,654.32',
+                'assistance_summary' => $assistanceRows,
+            ]),
+        ])->assertOk()->assertJsonPath('revision', 2);
+
+        $draft->refresh();
+        $this->assertCount(15, $draft->payload['assistance_summary']);
+        $this->assertSame($this->endorsementAssistanceRows(15), $draft->payload['assistance_summary']);
+        $this->assertSame('PHP 987,654.32', $draft->payload['grand_total']);
+        $this->assertStringNotContainsString('987,654.32', DB::table('pswdo_enrollment_document_drafts')->value('payload'));
+
+        $workspace = $this->actingAs($this->pswdo)->get($workspaceUrl)->assertOk()
+            ->assertSee('name="draft[assistance_summary][14][immediate_assistance]"', false)
+            ->assertSee('value="115"', false)
+            ->assertSee('Add Assistance')
+            ->assertSee('Remove assistance row 15');
+        $this->assertSame(15, substr_count($workspace->getContent(), 'aria-label="Remove assistance row'));
+
+        $preview = $this->actingAs($this->pswdo)->get($previewUrl)->assertOk()
+            ->assertSee('data-endorsement-page="1"', false)
+            ->assertSee('data-endorsement-page="2"', false)
+            ->assertSee('data-endorsement-page="3"', false)
+            ->assertSee('data-assistance-count="4"', false)
+            ->assertSee('data-assistance-count="10"', false)
+            ->assertSee('data-assistance-count="1"', false)
+            ->assertSeeInOrder(['>101<', '>102<', '>103<', '>104<', '>105<', '>114<', '>115<'])
+            ->assertSee('PHP 987,654.32')
+            ->assertDontSee('>116<', false)
+            ->assertDontSee('FORM 7');
+        $this->assertSame(3, substr_count($preview->getContent(), '<table class="summary-table">'));
+        $this->assertSame(3, substr_count($preview->getContent(), '<th>Immediate Assistance</th>'));
+        foreach (range(101, 115) as $value) {
+            $this->assertSame(1, substr_count($preview->getContent(), ">{$value}<"));
+        }
+
+        $this->mock(OfficialDocumentPdf::class, function ($mock): void {
+            $mock->shouldReceive('render')->once()->withArgs(function (string $html): bool {
+                $positions = collect(range(101, 115))->map(
+                    fn (int $value): int|false => strpos($html, ">{$value}<"),
+                );
+
+                return $positions->every(fn (int|false $position): bool => $position !== false)
+                    && $positions->values()->all() === $positions->sort()->values()->all()
+                    && substr_count($html, '<table class="summary-table">') === 3
+                    && substr_count($html, '<th>Immediate Assistance</th>') === 3
+                    && substr_count($html, '>115<') === 1
+                    && str_contains($html, 'PHP 987,654.32')
+                    && str_contains($html, '@page { size: A4 portrait; margin: 25.4mm; }')
+                    && ! str_contains($html, 'FORM 7');
+            })->andReturn("%PDF-1.4\nendorsement-assistance-overflow\n%%EOF");
+        });
+        $this->actingAs($this->pswdo)->get($downloadUrl)
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
     public function test_profiling_interview_dynamic_family_rows_are_normalized_and_flow_without_truncation(): void
     {
         $saveUrl = route('pswdo.enrollments.profiling-interview-draft.update', $this->enrollment);
@@ -833,6 +1141,61 @@ class PswdoFinalDocumentTest extends TestCase
             'no_join_reason' => null, 'not_sure_join_reason' => null,
             'registered_voter' => 'yes', 'plans_to_vote' => 'yes', 'plans_to_run_for_office' => 'not_sure',
         ];
+    }
+
+    private function endorsementLetterPayload(): array
+    {
+        return [
+            'fiscal_year' => '2026',
+            'letter_date' => '2026-10-25',
+            'addressee_lines' => ['Saved Addressee', 'Saved Addressee Title', 'Saved Addressee Office'],
+            'salutation' => 'Saved Sir/Madam',
+            'beneficiaries' => [[
+                'name' => 'Saved Beneficiary',
+                'address' => 'Saved Address',
+                'fr_group_type' => 'NPA',
+                'fve_group_type' => null,
+                'assistance_type' => 'Immediate Assistance',
+                'amount' => 'PHP 15,000.00',
+                'pending_cases' => 'Saved Pending Case',
+            ]],
+            'grand_total' => 'PHP 15,000.00',
+            'assistance_summary' => [[
+                'immediate_assistance' => 1,
+                'livelihood_assistance' => 0,
+                'firearms_remuneration' => 0,
+                'reintegration_assistance' => 0,
+                'fr' => 1,
+                'fve' => 0,
+            ]],
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function endorsementBeneficiaries(int $count): array
+    {
+        return collect(range(1, $count))->map(fn (int $number): array => [
+            'name' => "Dynamic Beneficiary {$number}",
+            'address' => "Dynamic Address {$number}",
+            'fr_group_type' => $number % 2 === 0 ? '' : 'NPA',
+            'fve_group_type' => $number % 2 === 0 ? 'Turaife' : '',
+            'assistance_type' => 'Immediate Assistance',
+            'amount' => 'PHP '.number_format($number * 1000, 2),
+            'pending_cases' => $number === 7 ? 'Synthetic pending-case information' : '',
+        ])->all();
+    }
+
+    /** @return array<int, array<string, int>> */
+    private function endorsementAssistanceRows(int $count): array
+    {
+        return collect(range(1, $count))->map(fn (int $number): array => [
+            'immediate_assistance' => 100 + $number,
+            'livelihood_assistance' => 200 + $number,
+            'firearms_remuneration' => 300 + $number,
+            'reintegration_assistance' => 400 + $number,
+            'fr' => 500 + $number,
+            'fve' => 600 + $number,
+        ])->all();
     }
 
     /** @return array<int, array<string, mixed>> */

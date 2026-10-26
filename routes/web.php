@@ -309,6 +309,9 @@ Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->grou
     Route::put('/enrollments/{pswdoEnrollment}/documents/profiling-interview-form/draft', [Pswdo\EnrollmentDocumentController::class, 'saveProfilingInterviewDraft'])->name('enrollments.profiling-interview-draft.update');
     Route::get('/enrollments/{pswdoEnrollment}/documents/profiling-interview-form/preview', [Pswdo\EnrollmentDocumentController::class, 'previewProfilingInterviewDraft'])->name('enrollments.profiling-interview-draft.preview');
     Route::get('/enrollments/{pswdoEnrollment}/documents/profiling-interview-form/download', [Pswdo\EnrollmentDocumentController::class, 'downloadProfilingInterviewDraft'])->name('enrollments.profiling-interview-draft.download');
+    Route::put('/enrollments/{pswdoEnrollment}/documents/endorsement-letter/draft', [Pswdo\EnrollmentDocumentController::class, 'saveEndorsementLetterDraft'])->name('enrollments.endorsement-letter-draft.update');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/endorsement-letter/preview', [Pswdo\EnrollmentDocumentController::class, 'previewEndorsementLetterDraft'])->name('enrollments.endorsement-letter-draft.preview');
+    Route::get('/enrollments/{pswdoEnrollment}/documents/endorsement-letter/download', [Pswdo\EnrollmentDocumentController::class, 'downloadEndorsementLetterDraft'])->name('enrollments.endorsement-letter-draft.download');
     Route::post('/enrollments/{pswdoEnrollment}/documents/{documentType}/final-document', [Pswdo\EnrollmentDocumentController::class, 'store'])->name('enrollments.documents.store');
     Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/preview', [Pswdo\EnrollmentDocumentController::class, 'preview'])->name('enrollments.documents.preview');
     Route::get('/enrollments/{pswdoEnrollment}/documents/{document}/download', [Pswdo\EnrollmentDocumentController::class, 'download'])->name('enrollments.documents.download');

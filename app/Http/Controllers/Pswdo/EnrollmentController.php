@@ -132,6 +132,25 @@ class EnrollmentController extends Controller
         );
         $profilingInterviewReadOnly = $activeDocument?->document_type === PswdoEnrollmentDocumentType::ProfilingInterviewForm
             && $activeDocument->isConfirmedFinal();
+        $endorsementLetterDraft = $pswdoEnrollment->documentDrafts->first(
+            fn ($draft): bool => $draft->document_type === PswdoEnrollmentDocumentType::EndorsementLetter
+        );
+        $endorsementLetterPayload = array_replace(
+            $this->initialEndorsementLetterPayload($pswdoEnrollment),
+            $endorsementLetterDraft?->payload ?? [],
+        );
+        if ($endorsementLetterDraft && ! array_key_exists('assistance_summary', $endorsementLetterDraft->payload)) {
+            $endorsementLetterPayload['assistance_summary'] = [[
+                'immediate_assistance' => $endorsementLetterDraft->payload['summary_immediate_assistance'] ?? '',
+                'livelihood_assistance' => $endorsementLetterDraft->payload['summary_livelihood_assistance'] ?? '',
+                'firearms_remuneration' => $endorsementLetterDraft->payload['summary_firearms_remuneration'] ?? '',
+                'reintegration_assistance' => $endorsementLetterDraft->payload['summary_reintegration_assistance'] ?? '',
+                'fr' => $endorsementLetterDraft->payload['summary_fr'] ?? '',
+                'fve' => $endorsementLetterDraft->payload['summary_fve'] ?? '',
+            ]];
+        }
+        $endorsementLetterReadOnly = $activeDocument?->document_type === PswdoEnrollmentDocumentType::EndorsementLetter
+            && $activeDocument->isConfirmedFinal();
 
         return view('pswdo.enrollments.workspace', [
             'enrollment' => $pswdoEnrollment,
@@ -153,6 +172,11 @@ class EnrollmentController extends Controller
             'profilingInterviewReadOnly' => $profilingInterviewReadOnly,
             'canEditProfilingInterviewDraft' => $isProcessor && Gate::allows('editDraft', [$pswdoEnrollment, PswdoEnrollmentDocumentType::ProfilingInterviewForm]),
             'profilingInterviewUpdateUrl' => route('pswdo.enrollments.profiling-interview-draft.update', $pswdoEnrollment),
+            'endorsementLetterDraft' => $endorsementLetterDraft,
+            'endorsementLetterPayload' => $endorsementLetterPayload,
+            'endorsementLetterReadOnly' => $endorsementLetterReadOnly,
+            'canEditEndorsementLetterDraft' => $isProcessor && Gate::allows('editDraft', [$pswdoEnrollment, PswdoEnrollmentDocumentType::EndorsementLetter]),
+            'endorsementLetterUpdateUrl' => route('pswdo.enrollments.endorsement-letter-draft.update', $pswdoEnrollment),
             'canComment' => Gate::allows('comment', $pswdoEnrollment),
             'workspaceEvents' => ProcessingWorkspaceHistory::pswdo($pswdoEnrollment),
         ]);
@@ -306,6 +330,53 @@ class EnrollmentController extends Controller
             'respondent_last_name' => (string) $record?->last_name,
             'respondent_first_name' => (string) $record?->first_name,
             'respondent_middle_name' => '',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function initialEndorsementLetterPayload(PswdoEnrollment $enrollment): array
+    {
+        $record = $enrollment->surfacedFormerRebel;
+        $address = collect([
+            $record?->specific_location,
+            $record?->barangay?->name,
+            $record?->municipality?->name,
+            $record?->province,
+        ])->filter(fn ($part): bool => filled($part))->join(', ');
+
+        return [
+            'fiscal_year' => '',
+            'letter_date' => '',
+            'addressee_lines' => ['', '', ''],
+            'salutation' => '',
+            'beneficiaries' => [
+                [
+                    'name' => (string) $record?->display_name,
+                    'address' => $address,
+                    'fr_group_type' => '',
+                    'fve_group_type' => '',
+                    'assistance_type' => '',
+                    'amount' => '',
+                    'pending_cases' => '',
+                ],
+                [
+                    'name' => '', 'address' => '', 'fr_group_type' => '', 'fve_group_type' => '',
+                    'assistance_type' => '', 'amount' => '', 'pending_cases' => '',
+                ],
+                [
+                    'name' => '', 'address' => '', 'fr_group_type' => '', 'fve_group_type' => '',
+                    'assistance_type' => '', 'amount' => '', 'pending_cases' => '',
+                ],
+            ],
+            'grand_total' => '',
+            'assistance_summary' => [[
+                'immediate_assistance' => '',
+                'livelihood_assistance' => '',
+                'firearms_remuneration' => '',
+                'reintegration_assistance' => '',
+                'fr' => '',
+                'fve' => '',
+            ]],
         ];
     }
 }

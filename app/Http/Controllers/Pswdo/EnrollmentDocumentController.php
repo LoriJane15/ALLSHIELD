@@ -221,6 +221,52 @@ class EnrollmentDocumentController extends Controller
         ]);
     }
 
+    public function saveEndorsementLetterDraft(Request $request, PswdoEnrollment $pswdoEnrollment): RedirectResponse|JsonResponse
+    {
+        $type = PswdoEnrollmentDocumentType::EndorsementLetter;
+        Gate::authorize('editDraft', [$pswdoEnrollment, $type]);
+        $validated = $request->validate($this->endorsementLetterRules());
+
+        return $this->saveDraftResponse(
+            $request,
+            $pswdoEnrollment,
+            $type,
+            $this->normalizeEndorsementLetterPayload($validated['draft']),
+            (int) $validated['revision'],
+            'A newer Endorsement Letter draft exists. Reload before saving.',
+            'Endorsement Letter draft saved.',
+        );
+    }
+
+    public function previewEndorsementLetterDraft(PswdoEnrollment $pswdoEnrollment): View
+    {
+        Gate::authorize('view', $pswdoEnrollment);
+        $draft = $this->documentDraft($pswdoEnrollment, PswdoEnrollmentDocumentType::EndorsementLetter);
+
+        return view(
+            'pswdo.enrollments.documents.endorsement-letter',
+            $this->endorsementLetterViewData($pswdoEnrollment, $draft, false),
+        );
+    }
+
+    public function downloadEndorsementLetterDraft(PswdoEnrollment $pswdoEnrollment, OfficialDocumentPdf $pdf): Response
+    {
+        Gate::authorize('view', $pswdoEnrollment);
+        $draft = $this->documentDraft($pswdoEnrollment, PswdoEnrollmentDocumentType::EndorsementLetter);
+        $html = view(
+            'pswdo.enrollments.documents.endorsement-letter',
+            $this->endorsementLetterViewData($pswdoEnrollment, $draft, true),
+        )->render();
+
+        return response($pdf->render($html), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="endorsement-letter-'.$pswdoEnrollment->id.'.pdf"',
+            'Cache-Control' => 'private, no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function preview(Request $request, PswdoEnrollment $pswdoEnrollment, PswdoEnrollmentDocument $document, PswdoEnrollmentDocumentService $documents): StreamedResponse|RedirectResponse
     {
         $unavailable = $this->unavailable($request, $pswdoEnrollment, $document);
@@ -391,6 +437,77 @@ class EnrollmentDocumentController extends Controller
         }
 
         return $normalized;
+    }
+
+    /** @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeEndorsementLetterPayload(array $payload): array
+    {
+        $normalize = function (mixed $value) use (&$normalize): mixed {
+            if (! is_array($value)) {
+                return is_string($value) ? trim($value) : $value;
+            }
+
+            return collect($value)->map(fn (mixed $item): mixed => $normalize($item))->all();
+        };
+        $normalized = $normalize($payload);
+        $normalized['addressee_lines'] = array_values(array_pad(
+            array_slice($normalized['addressee_lines'] ?? [], 0, 3),
+            3,
+            '',
+        ));
+        $normalizeRows = static function (mixed $rows): array {
+            $rows = array_values(array_filter(
+                is_array($rows) ? $rows : [],
+                fn (mixed $row): bool => is_array($row),
+            ));
+            while ($rows !== []) {
+                $last = $rows[array_key_last($rows)];
+                if (collect($last)->contains(fn (mixed $value): bool => filled($value))) {
+                    break;
+                }
+                array_pop($rows);
+            }
+
+            return array_values($rows);
+        };
+        $normalized['beneficiaries'] = $normalizeRows($normalized['beneficiaries'] ?? []);
+        $normalized['assistance_summary'] = $normalizeRows($normalized['assistance_summary'] ?? []);
+
+        return $normalized;
+    }
+
+    /** @return array<string, mixed> */
+    private function endorsementLetterViewData(
+        PswdoEnrollment $enrollment,
+        PswdoEnrollmentDocumentDraft $draft,
+        bool $printMode,
+    ): array {
+        $payload = $draft->payload;
+        if (! array_key_exists('assistance_summary', $payload)) {
+            $payload['assistance_summary'] = [[
+                'immediate_assistance' => $payload['summary_immediate_assistance'] ?? '',
+                'livelihood_assistance' => $payload['summary_livelihood_assistance'] ?? '',
+                'firearms_remuneration' => $payload['summary_firearms_remuneration'] ?? '',
+                'reintegration_assistance' => $payload['summary_reintegration_assistance'] ?? '',
+                'fr' => $payload['summary_fr'] ?? '',
+                'fve' => $payload['summary_fve'] ?? '',
+            ]];
+        }
+        $payload['addressee_lines'] = array_values(array_pad(array_slice($payload['addressee_lines'] ?? [], 0, 3), 3, ''));
+        $payload['beneficiaries'] = array_values(array_pad($payload['beneficiaries'] ?? [], 3, []));
+        $payload['assistance_summary'] = array_values(array_pad($payload['assistance_summary'] ?? [], 1, []));
+
+        return [
+            'payload' => $payload,
+            'printMode' => $printMode,
+            'backUrl' => $printMode ? '' : route('pswdo.enrollments.workspace', [
+                'pswdoEnrollment' => $enrollment,
+                'document_type' => PswdoEnrollmentDocumentType::EndorsementLetter->value,
+            ]),
+            'downloadUrl' => $printMode ? '' : route('pswdo.enrollments.endorsement-letter-draft.download', $enrollment),
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -653,6 +770,38 @@ class EnrollmentDocumentController extends Controller
             'draft.children.*.income_sources.regex' => 'Each child Source/s of Income must contain codes 1 to 8 separated by commas or slashes.',
             'draft.other_family_members.*.income_sources.regex' => 'Each family member Source/s of Income must contain codes 1 to 8 separated by commas or slashes.',
             'draft.other_family_members.*.relation.in' => 'The Relationship Code must be a code from 1 to 7.',
+        ];
+    }
+
+    /** @return array<string, array<int, mixed>> */
+    private function endorsementLetterRules(): array
+    {
+        return [
+            'revision' => ['required', 'integer', 'min:0'],
+            'draft' => ['required', 'array:fiscal_year,letter_date,addressee_lines,salutation,beneficiaries,grand_total,assistance_summary'],
+            'draft.fiscal_year' => ['nullable', 'string', 'max:30'],
+            'draft.letter_date' => ['nullable', 'date'],
+            'draft.addressee_lines' => ['nullable', 'array', 'max:3'],
+            'draft.addressee_lines.*' => ['nullable', 'string', 'max:255'],
+            'draft.salutation' => ['nullable', 'string', 'max:255'],
+            'draft.beneficiaries' => ['nullable', 'array'],
+            'draft.beneficiaries.*' => ['array:name,address,fr_group_type,fve_group_type,assistance_type,amount,pending_cases'],
+            'draft.beneficiaries.*.name' => ['nullable', 'string', 'max:255'],
+            'draft.beneficiaries.*.address' => ['nullable', 'string', 'max:500'],
+            'draft.beneficiaries.*.fr_group_type' => ['nullable', 'string', 'max:100'],
+            'draft.beneficiaries.*.fve_group_type' => ['nullable', 'string', 'max:100'],
+            'draft.beneficiaries.*.assistance_type' => ['nullable', 'string', 'max:255'],
+            'draft.beneficiaries.*.amount' => ['nullable', 'string', 'max:100'],
+            'draft.beneficiaries.*.pending_cases' => ['nullable', 'string', 'max:1000'],
+            'draft.grand_total' => ['nullable', 'string', 'max:100'],
+            'draft.assistance_summary' => ['nullable', 'array'],
+            'draft.assistance_summary.*' => ['array:immediate_assistance,livelihood_assistance,firearms_remuneration,reintegration_assistance,fr,fve'],
+            'draft.assistance_summary.*.immediate_assistance' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'draft.assistance_summary.*.livelihood_assistance' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'draft.assistance_summary.*.firearms_remuneration' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'draft.assistance_summary.*.reintegration_assistance' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'draft.assistance_summary.*.fr' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'draft.assistance_summary.*.fve' => ['nullable', 'integer', 'min:0', 'max:999999'],
         ];
     }
 

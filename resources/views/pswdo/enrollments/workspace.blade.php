@@ -695,6 +695,77 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
 }
+.pswdo-endorsement-editor .pswdo-eclip-group {
+    margin-bottom: 1.5rem;
+    padding: 1.1rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 10px;
+    background: #fff;
+}
+.pswdo-endorsement-editor .pswdo-eclip-group > h3 {
+    margin: -1.1rem -1.1rem 1rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid #dbe3ee;
+    border-radius: 10px 10px 0 0;
+    background: #f8fafc;
+}
+.pswdo-endorsement-editor .form-control {
+    width: 100%;
+    min-height: 2.7rem;
+    padding: 0.5rem 0.7rem;
+    border-color: #cbd5e1;
+    border-radius: 7px;
+}
+.pswdo-endorsement-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #dbe3ee;
+    border-radius: 9px;
+}
+.pswdo-endorsement-table {
+    width: 100%;
+    min-width: 1460px;
+    border-collapse: collapse;
+}
+.pswdo-endorsement-assistance-table { min-width: 900px; }
+.pswdo-endorsement-table th,
+.pswdo-endorsement-table td {
+    padding: 0.65rem;
+    border: 1px solid #dbe3ee;
+    vertical-align: top;
+}
+.pswdo-endorsement-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    text-align: center;
+}
+.pswdo-endorsement-table td:first-child,
+.pswdo-endorsement-table th:first-child {
+    width: 3.25rem;
+    min-width: 3.25rem;
+    text-align: center;
+}
+.pswdo-endorsement-cell-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.35;
+}
+.pswdo-endorsement-row-action {
+    width: 7rem;
+    min-width: 7rem;
+    vertical-align: middle !important;
+}
+.pswdo-endorsement-row-action .btn { width: 100%; }
+.pswdo-endorsement-row-number {
+    color: #334155;
+    font-weight: 800;
+    vertical-align: middle !important;
+}
 
 @media(max-width: 991px) {
     .pswdo-stepper-list {
@@ -738,6 +809,37 @@
     .pswdo-upload-actions-compact .pswdo-upload-submit {
         align-self: flex-end;
     }
+    .pswdo-endorsement-table {
+        min-width: 0;
+    }
+    .pswdo-endorsement-table thead {
+        display: none;
+    }
+    .pswdo-endorsement-table tbody,
+    .pswdo-endorsement-table tr,
+    .pswdo-endorsement-table td {
+        display: block;
+        width: 100%;
+    }
+    .pswdo-endorsement-table tr {
+        padding: 0.8rem;
+        border-bottom: 2px solid #cbd5e1;
+    }
+    .pswdo-endorsement-table tr:last-child { border-bottom: 0; }
+    .pswdo-endorsement-table td {
+        padding: 0.45rem 0;
+        border: 0;
+    }
+    .pswdo-endorsement-table td:first-child {
+        width: 100%;
+        padding-bottom: 0.65rem;
+        text-align: left;
+    }
+    .pswdo-endorsement-row-action {
+        width: 100%;
+        min-width: 0;
+    }
+    .pswdo-endorsement-row-action .btn { width: auto; }
 }
 @media(max-width: 575px) {
     .pswdo-pif-editor .pswdo-eclip-group {
@@ -755,6 +857,13 @@
     }
     .pswdo-pif-table-heading .btn {
         width: 100%;
+    }
+    .pswdo-endorsement-editor .pswdo-eclip-group {
+        padding: 0.85rem;
+    }
+    .pswdo-endorsement-editor .pswdo-eclip-group > h3 {
+        margin: -0.85rem -0.85rem 0.9rem;
+        padding: 0.8rem 0.85rem;
     }
 }
 </style>
@@ -890,6 +999,7 @@
                 \App\Enums\PswdoEnrollmentDocumentType::EclipEnrollmentForm,
                 \App\Enums\PswdoEnrollmentDocumentType::InitialInterviewForm,
                 \App\Enums\PswdoEnrollmentDocumentType::ProfilingInterviewForm,
+                \App\Enums\PswdoEnrollmentDocumentType::EndorsementLetter,
             ], true);
         @endphp
         <section id="{{ $type->value }}" class="pswdo-doc-section-card {{ $structuredDraftType ? 'pswdo-final-upload-card' : '' }}">
@@ -1529,6 +1639,41 @@
                     ])
                 </div>
             </section>
+        @elseif($type === \App\Enums\PswdoEnrollmentDocumentType::EndorsementLetter)
+            <section class="pswdo-eclip-toolbar" aria-label="Endorsement Letter drafting controls">
+                <div class="pswdo-save-state {{ $endorsementLetterReadOnly ? '' : 'saved' }}" id="pswdoEndorsementSaveState" aria-live="polite">
+                    <i class="mdi {{ $endorsementLetterReadOnly ? 'mdi-lock-outline' : 'mdi-cloud-check' }}" id="pswdoEndorsementSaveIcon"></i>
+                    <span id="pswdoEndorsementSaveText">{{ $endorsementLetterReadOnly ? 'Completed / Read-only' : 'All changes saved' }}</span>
+                </div>
+                <a id="pswdoEndorsementPreview"
+                   class="btn btn-outline-primary btn-sm {{ $endorsementLetterDraft ? '' : 'disabled' }}"
+                   href="{{ route('pswdo.enrollments.endorsement-letter-draft.preview', $enrollment) }}"
+                   target="_blank" rel="noopener"
+                   @unless($endorsementLetterDraft) aria-disabled="true" tabindex="-1" @endunless>
+                    <i class="mdi mdi-eye-outline mr-1"></i> Preview Draft
+                </a>
+            </section>
+
+            <section class="pswdo-doc-section-card" aria-label="Endorsement Letter drafting area">
+                <div class="pswdo-doc-head">
+                    <div class="pswdo-doc-head-title">
+                        <div class="pswdo-doc-head-icon" style="background:#eef2ff;color:#4338ca;"><i class="mdi mdi-file-document-edit-outline"></i></div>
+                        <div>
+                            <span style="font-size:.72rem;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.05em;">Structured official draft</span>
+                            <div style="font-size:1rem;font-weight:800;color:#0f172a;">Endorsement Letter</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pswdo-doc-body">
+                    @include('pswdo.enrollments.partials.endorsement-letter-editor', [
+                        'payload' => $endorsementLetterPayload,
+                        'draft' => $endorsementLetterDraft,
+                        'readOnly' => $endorsementLetterReadOnly,
+                        'canEdit' => $canEditEndorsementLetterDraft,
+                        'updateUrl' => $endorsementLetterUpdateUrl,
+                    ])
+                </div>
+            </section>
         @endif
     @endforeach
     @endif
@@ -1749,6 +1894,69 @@ function wirePifDynamicRows() {
     });
 }
 
+function wireEndorsementDynamicRows() {
+    const form = document.getElementById('pswdoEndorsementDraftForm');
+    if (!form || form.dataset.editable !== 'true') return;
+
+    const clearRow = row => {
+        row.querySelectorAll('input, textarea').forEach(field => { field.value = ''; });
+    };
+    const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));
+
+    form.querySelectorAll('[data-endorsement-dynamic-table]').forEach(table => {
+        const collection = table.dataset.endorsementDynamicTable;
+        const minimumRows = Number.parseInt(table.dataset.minRows || '1', 10);
+        const rows = table.querySelector('[data-endorsement-rows]');
+        const add = form.querySelector(`[data-endorsement-add-row="${collection}"]`);
+        if (!rows || !add) return;
+
+        const reindex = () => {
+            rows.querySelectorAll('[data-endorsement-row]').forEach((row, index) => {
+                const number = row.querySelector('[data-endorsement-row-number]');
+                if (number) number.textContent = String(index + 1);
+                row.querySelectorAll('[name]').forEach(field => {
+                    field.name = field.name.replace(
+                        new RegExp(`^draft\\[${collection}\\]\\[\\d+\\]`),
+                        `draft[${collection}][${index}]`,
+                    );
+                });
+                row.querySelectorAll('[id]').forEach(field => {
+                    field.id = field.id.replace(/-\d+$/, `-${index}`);
+                });
+                row.querySelectorAll('label[for]').forEach(label => {
+                    label.htmlFor = label.htmlFor.replace(/-\d+$/, `-${index}`);
+                });
+                const remove = row.querySelector('[data-endorsement-remove-row]');
+                const rowType = collection === 'beneficiaries' ? 'beneficiary' : 'assistance';
+                remove?.setAttribute('aria-label', `Remove ${rowType} row ${index + 1}`);
+            });
+        };
+
+        add.addEventListener('click', () => {
+            const source = rows.querySelector('[data-endorsement-row]');
+            const row = source.cloneNode(true);
+            clearRow(row);
+            rows.appendChild(row);
+            reindex();
+            changed();
+            row.querySelector('input, textarea')?.focus();
+        });
+        table.addEventListener('click', event => {
+            const remove = event.target.closest('[data-endorsement-remove-row]');
+            if (!remove) return;
+            const row = remove.closest('[data-endorsement-row]');
+            if (rows.querySelectorAll('[data-endorsement-row]').length <= minimumRows) {
+                clearRow(row);
+            } else {
+                row.remove();
+            }
+            reindex();
+            changed();
+        });
+        reindex();
+    });
+}
+
 wirePswdoDraftForm({
     formId: 'pswdoEclipDraftForm',
     revisionId: 'pswdoEclipRevision',
@@ -1776,6 +1984,16 @@ wirePswdoDraftForm({
     previewId: 'pswdoPifPreview',
     errorMessage: 'Profiling Interview Form draft save failed.',
 });
+wirePswdoDraftForm({
+    formId: 'pswdoEndorsementDraftForm',
+    revisionId: 'pswdoEndorsementRevision',
+    stateId: 'pswdoEndorsementSaveState',
+    iconId: 'pswdoEndorsementSaveIcon',
+    textId: 'pswdoEndorsementSaveText',
+    previewId: 'pswdoEndorsementPreview',
+    errorMessage: 'Endorsement Letter draft save failed.',
+});
 wirePifDynamicRows();
+wireEndorsementDynamicRows();
 </script>
 @endsection
