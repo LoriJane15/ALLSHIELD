@@ -12,7 +12,13 @@ class RcspActivity extends Model
 {
     protected $fillable = [
         'rcsp_phase_id', 'rcsp_barangay_id', 'created_by_user_id', 'description', 'normalized_title',
+        'catalog_order', 'expected_result',
     ];
+
+    protected function casts(): array
+    {
+        return ['catalog_order' => 'integer'];
+    }
 
     public static function normalizeTitle(string $title): string
     {

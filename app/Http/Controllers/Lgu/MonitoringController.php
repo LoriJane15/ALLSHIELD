@@ -14,6 +14,7 @@ use App\Models\RcspPhase;
 use App\Services\RcspWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -27,21 +28,30 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class MonitoringController extends Controller
 {
-    public function show(RcspBarangay $rcspBarangay): View
+    public function show(Request $request, RcspBarangay $rcspBarangay): View
     {
         Gate::authorize('view', $rcspBarangay);
         $rcspBarangay->load('barangay', 'municipality');
 
         $phases = RcspPhase::where('catalog_key', $rcspBarangay->catalog_key)->orderBy('number')->get();
-        $currentPhase = $phases->firstWhere('number', $rcspBarangay->current_phase) ?? $phases->first();
-        abort_unless($currentPhase, 422, 'No phase catalog is available for this RCSP barangay.');
+        $requestedPhase = $request->query('phase');
+        $selectedPhaseNumber = is_string($requestedPhase) && preg_match('/^[0-5]$/D', $requestedPhase)
+            ? (int) $requestedPhase
+            : (int) $rcspBarangay->current_phase;
+        $selectedPhase = $phases->firstWhere('number', $selectedPhaseNumber)
+            ?? $phases->firstWhere('number', $rcspBarangay->current_phase)
+            ?? $phases->first();
+        abort_unless($selectedPhase, 422, 'No phase catalog is available for this RCSP barangay.');
+        $selectedPhaseNumber = (int) $selectedPhase->number;
+        $selectedPhaseEditable = $rcspBarangay->status !== 'Completed'
+            && $selectedPhaseNumber === (int) $rcspBarangay->current_phase;
 
-        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)
-            ->withCount('forms')->orderBy('id')->get();
+        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $selectedPhase)
+            ->withCount('forms')->orderBy('catalog_order')->orderBy('id')->get();
 
         // latest form row per activity for this barangay + phase (+ its comment thread)
         $forms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
-            ->where('rcsp_phase_id', $currentPhase->id)
+            ->where('rcsp_phase_id', $selectedPhase->id)
             ->with('fileComments.user')
             ->orderByDesc('submission_version')->orderByDesc('id')->get()
             ->groupBy('rcsp_activity_id')
@@ -58,8 +68,8 @@ class MonitoringController extends Controller
         $maxEvidenceMegabytes = SubmitRcspPhaseRequest::maxEvidenceMegabytes();
 
         return view('lgu.monitoring.show', compact(
-            'rcspBarangay', 'phases', 'currentPhase', 'activities', 'forms', 'approvedForms',
-            'maxEvidenceMegabytes'
+            'rcspBarangay', 'phases', 'selectedPhase', 'selectedPhaseNumber', 'selectedPhaseEditable',
+            'activities', 'forms', 'approvedForms', 'maxEvidenceMegabytes'
         ));
     }
 

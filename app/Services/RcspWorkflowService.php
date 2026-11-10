@@ -78,13 +78,15 @@ class RcspWorkflowService
         $rows = [];
 
         foreach ($phases as $phase) {
-            foreach (RcspActivityCatalog::ACTIVITIES[(int) $phase->number] ?? [] as $description) {
+            foreach (RcspActivityCatalog::entriesForPhase((int) $phase->number) as $entry) {
                 $rows[] = [
                     'rcsp_phase_id' => $phase->id,
                     'rcsp_barangay_id' => $barangay->id,
                     'created_by_user_id' => null,
-                    'description' => $description,
-                    'normalized_title' => RcspActivity::normalizeTitle($description),
+                    'description' => $entry['description'],
+                    'normalized_title' => RcspActivity::normalizeTitle($entry['description']),
+                    'catalog_order' => $entry['order'],
+                    'expected_result' => $entry['expected_result'],
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -251,7 +253,7 @@ class RcspWorkflowService
             Gate::forUser($actor)->authorize('update', $lockedBarangay);
             $phase = $this->currentPhase($lockedBarangay);
             $activities = RcspActivity::forBarangayPhase($lockedBarangay, $phase)
-                ->orderBy('id')->lockForUpdate()->get();
+                ->orderBy('catalog_order')->orderBy('id')->lockForUpdate()->get();
             if ($activities->isEmpty()) {
                 throw ValidationException::withMessages([
                     'phase' => 'At least one current-phase activity is required before proceeding.',

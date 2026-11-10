@@ -23,7 +23,10 @@
 @push('styles')
 <style>
     .progress-tracker { display: flex; align-items: center; justify-content: space-evenly; width: 100%; margin: 0 auto; }
-    .phase { display: flex; align-items: center; text-align: center; flex: 1 1 auto; }
+    .phase { display: flex; align-items: center; text-align: center; flex: 1 1 auto; color: inherit; text-decoration: none; }
+    .phase:hover { color: inherit; text-decoration: none; }
+    .phase:focus-visible { outline: 2px solid #403e92; outline-offset: 4px; border-radius: 4px; }
+    .phase.selected { box-shadow: inset 0 -2px 0 #403e92; }
     .circle { width: 24px; height: 24px; background-color: #403e92; border-radius: 50%; margin-right: 10px; display: flex; align-items: center; justify-content: center; }
     .checkmark { font-size: 20px; color: #fff; font-weight: 600; }
     .phase-text { display: flex; align-items: center; }
@@ -33,7 +36,7 @@
     .phase-desc { color: #777; font-size: .85em; }
     .separator { height: 2px; background-color: #403e92; margin: 0 10px; flex-grow: 1; }
     .phase.current .circle { animation: pulse 2s infinite; background-color: #403e92; }
-    .phase.disabled { opacity: .5; }
+    .phase.future { opacity: .5; }
     .phase.completed .circle { background-color: #28a745; }
     @keyframes pulse {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgb(64, 62, 146); }
@@ -60,6 +63,9 @@
     .file-drop.has-file .file-drop-icon { color: #28a745; }
     .file-drop-text { font-size: .8rem; color: #555; font-weight: 500; }
     .file-name { font-size: .75rem; color: #28a745; word-break: break-all; }
+    .expected-result-reference { margin-bottom: .5rem; text-align: left; }
+    .expected-result-label { display: block; margin-bottom: .1rem; color: #6c757d; font-size: .75rem; font-weight: 500; }
+    .expected-result-value { display: block; color: #343a40; font-size: .875rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 </style>
 @endpush
 
@@ -96,8 +102,14 @@
                 <div class="progress-tracker">
                     @php $allDone = $rcspBarangay->status === 'Completed'; @endphp
                     @foreach ($phases as $p)
-                        @php $state = ($allDone || $p->number < $cur) ? 'completed' : ($p->number === $cur ? 'current' : 'disabled'); @endphp
-                        <div class="phase {{ $state }}">
+                        @php
+                            $state = ($allDone || $p->number < $cur) ? 'completed' : ($p->number === $cur ? 'current' : 'future');
+                            $isSelected = (int) $p->number === $selectedPhaseNumber;
+                        @endphp
+                        <a class="phase {{ $state }} {{ $isSelected ? 'selected' : '' }}"
+                           href="{{ route('lgu.monitoring.show', [$rcspBarangay, 'phase' => $p->number]) }}"
+                           aria-label="View Phase {{ $p->number }}: {{ $p->display_name }} activities"
+                           @if ($isSelected) aria-current="page" @endif>
                             <div class="circle">@if ($state === 'completed')<span class="checkmark">✓</span>@endif</div>
                             <div class="phase-text">
                                 <span class="number">{{ str_pad($p->number, 2, '0', STR_PAD_LEFT) }}</span>
@@ -106,7 +118,7 @@
                                     <span class="phase-desc">{{ $p->display_name }}</span>
                                 </div>
                             </div>
-                        </div>
+                        </a>
                         @if (! $loop->last)<div class="separator"></div>@endif
                     @endforeach
                 </div>
@@ -116,7 +128,10 @@
 
     <div class="row mb-3">
         <div class="col-12">
-            <h4 class="font-weight-bold" style="color: #403e92;">Phase {{ $cur }}: {{ $currentPhase->display_name }}</h4>
+            <h4 class="font-weight-bold" style="color: #403e92;">Phase {{ $selectedPhaseNumber }}: {{ $selectedPhase->display_name }}</h4>
+            @if ($selectedPhaseNumber > $cur && $rcspBarangay->status !== 'Completed')
+                <p class="text-muted mb-0">Complete the previous phase to unlock evidence submission.</p>
+            @endif
         </div>
     </div>
 
@@ -125,7 +140,7 @@
             <i class="mdi mdi-check-decagram text-success" style="font-size:2.5rem"></i>
             <p class="mt-2 font-weight-bold mb-0">RCSP monitoring completed for this barangay.</p>
         </div></div>
-    @else
+    @endif
         <div class="card">
             <div class="card-body pb-2">
                 <div class="table-responsive">
@@ -144,29 +159,40 @@
                                 @forelse ($activities as $activity)
                                     @php
                                         $form = $forms->get($activity->id);
-                                        $canSubmit = ! $form || in_array($form->status, $returnedStatuses, true);
+                                        $canSubmit = $selectedPhaseEditable
+                                            && (! $form || in_array($form->status, $returnedStatuses, true));
                                         $submissionFormId = 'activity-submission-'.$activity->id;
                                     @endphp
                                     <tr class="{{ $form?->status === 'approved' ? 'bg-light' : '' }}">
                                         <td class="text-wrap">
-                                            <form id="{{ $submissionFormId }}" method="POST"
-                                                  action="{{ route('lgu.monitoring.submit', [$rcspBarangay, $activity]) }}"
-                                                  enctype="multipart/form-data">@csrf</form>
+                                            @if ($canSubmit)
+                                                <form id="{{ $submissionFormId }}" method="POST"
+                                                      action="{{ route('lgu.monitoring.submit', [$rcspBarangay, $activity, 'phase' => $selectedPhaseNumber]) }}"
+                                                      enctype="multipart/form-data">@csrf</form>
+                                            @endif
                                             <div>{{ $activity->description }}</div>
                                         </td>
                                         <td>
-                                            <div class="conduct-options">
-                                                @foreach (['yes' => '<i class="ti-check text-success"></i>', 'no' => '<i class="ti-close text-danger"></i>', 'n/a' => '<span class="text-dark small">N/A</span>'] as $val => $icon)
-                                                    <label class="conduct-opt">
-                                                        <input type="radio" name="conduct" value="{{ $val }}" form="{{ $submissionFormId }}"
-                                                               class="form-check-input" @checked(old('conduct', $form?->conduct) === $val)
-                                                               @disabled(! $canSubmit) @required($canSubmit)>
-                                                        {!! $icon !!}
-                                                    </label>
-                                                @endforeach
-                                            </div>
+                                            @if ($selectedPhaseEditable)
+                                                <div class="conduct-options">
+                                                    @foreach (['yes' => '<i class="ti-check text-success"></i>', 'no' => '<i class="ti-close text-danger"></i>', 'n/a' => '<span class="text-dark small">N/A</span>'] as $val => $icon)
+                                                        <label class="conduct-opt">
+                                                            <input type="radio" name="conduct" value="{{ $val }}" form="{{ $submissionFormId }}"
+                                                                   class="form-check-input" @checked(old('conduct', $form?->conduct) === $val)
+                                                                   @disabled(! $canSubmit) @required($canSubmit)>
+                                                            {!! $icon !!}
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                            @else
+                                                <span class="text-muted">{{ $form?->conduct ? strtoupper($form->conduct) : '—' }}</span>
+                                            @endif
                                         </td>
                                         <td>
+                                            <div class="expected-result-reference" id="expected-result-{{ $activity->id }}">
+                                                <span class="expected-result-label">Expected Result/Output</span>
+                                                <span class="expected-result-value">{{ $activity->expected_result }}</span>
+                                            </div>
                                             @if ($canSubmit)
                                                 <label class="file-drop">
                                                      <input type="file" name="evidence" form="{{ $submissionFormId }}"
@@ -182,7 +208,7 @@
                                                     Evidence is required when the activity is marked as Conducted.
                                                 </small>
                                                 <small class="text-muted d-block mt-1">PDF, JPG, PNG, DOC or DOCX · max {{ $maxEvidenceMegabytes }} MB.</small>
-                                            @else
+                                            @elseif ($selectedPhaseEditable)
                                                 <span class="badge bg-secondary">Submission locked</span>
                                             @endif
                                             @if ($form?->file)
@@ -202,10 +228,12 @@
                                                 @if ($form->remarks)
                                                     <p class="small text-danger mb-1"><strong>Admin:</strong> {{ $form->remarks }}</p>
                                                 @endif
-                                                <a href="{{ route('lgu.monitoring.file', $form->id) }}" class="btn btn-sm btn-outline-secondary" title="View file & discussion">
-                                                    <i class="fa fa-comments"></i>
-                                                    @if ($form->fileComments->count())<span class="badge bg-primary">{{ $form->fileComments->count() }}</span>@endif
-                                                </a>
+                                                @if ($selectedPhaseEditable)
+                                                    <a href="{{ route('lgu.monitoring.file', $form->id) }}" class="btn btn-sm btn-outline-secondary" title="View file & discussion">
+                                                        <i class="fa fa-comments"></i>
+                                                        @if ($form->fileComments->count())<span class="badge bg-primary">{{ $form->fileComments->count() }}</span>@endif
+                                                    </a>
+                                                @endif
                                             @else
                                                 <span class="text-muted small">—</span>
                                             @endif
@@ -230,7 +258,7 @@
                 </div>
             </div>
 
-        @if ($allApproved)
+        @if ($selectedPhaseEditable && $allApproved)
             <div class="d-flex justify-content-end mt-2 mb-3">
                 <form method="POST" action="{{ route('lgu.monitoring.proceed', $rcspBarangay) }}">
                     @csrf
@@ -240,7 +268,6 @@
                 </form>
             </div>
         @endif
-    @endif
 
     {{-- View Phases modal (approved compliance report) --}}
     <div class="modal fade" id="phasesModal" tabindex="-1" aria-hidden="true">

@@ -64,7 +64,8 @@ class RcspReviewController extends Controller
         $currentPhase = $phases->firstWhere('number', $phaseNumber) ?? $phases->first();
         abort_unless($currentPhase, 422, 'No phase catalog is available for this RCSP barangay.');
 
-        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)->orderBy('id')->get();
+        $activities = RcspActivity::forBarangayPhase($rcspBarangay, $currentPhase)
+            ->orderBy('catalog_order')->orderBy('id')->get();
 
         $forms = RcspForm::where('rcsp_barangay_id', $rcspBarangay->id)
             ->where('rcsp_phase_id', $currentPhase->id)
