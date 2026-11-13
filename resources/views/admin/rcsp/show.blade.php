@@ -14,7 +14,10 @@
     @if ($errors->any())
         <div class="alert alert-danger"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
     @endif
-    <div class="d-flex justify-content-end mb-2">
+    <div class="d-flex justify-content-end gap-2 mb-2">
+        <a href="{{ route('admin.rcsp.timeline.show', $rcspBarangay) }}" class="btn btn-sm btn-outline-primary">
+            Implementation Timeline
+        </a>
         <a href="{{ route('admin.rcsp.index') }}" class="btn btn-sm btn-light bg-white">
             <i class="mdi mdi-arrow-left"></i> Back to list
         </a>

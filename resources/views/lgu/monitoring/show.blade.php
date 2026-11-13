@@ -90,6 +90,7 @@
         <div class="col-3 col-xl-4">
             <div class="justify-content-end d-flex gap-2">
                 <button data-bs-toggle="modal" data-bs-target="#phasesModal" class="btn btn-sm btn-primary">View Phases</button>
+                <a href="{{ route('lgu.rcsp.timeline.show', $rcspBarangay) }}" class="btn btn-sm btn-outline-primary">Implementation Timeline</a>
                 <a href="{{ route('lgu.rcsp.index') }}" class="btn btn-sm btn-light bg-white">Back</a>
             </div>
         </div>

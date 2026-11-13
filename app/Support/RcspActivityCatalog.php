@@ -102,6 +102,45 @@ final class RcspActivityCatalog
         'ensure_sustainability' => 'LGU continuous support of the program and re-echoing of the program to other barangays',
     ];
 
+    /** @var array<string, string> */
+    public const RESPONSIBLE_PARTIES = [
+        'orient_lce' => 'C/MLGOO',
+        'list_lgu_team' => 'RCSP Team',
+        'clear_target_barangay' => 'PLEDS Team',
+        'profile_target_barangays' => 'RCSP Team',
+        'gather_lgu_plans' => 'C/MPDC',
+        'orient_local_core_team' => 'C/MLGOO',
+        'secure_lgu_support' => 'Sanggunian Panlungsod/Bayan',
+        'initial_summing_up' => 'C/MLGOO, C/MPDC',
+        'team_action_plan' => 'RCSP Team',
+        'orient_barangay_core_team' => 'C/MLGOO',
+        'prepare_immersion' => 'RCSP Core Team',
+        'serbisyo_caravan' => 'CCPT',
+        'immersion' => 'RCSP Local Team (Headed)',
+        'identify_development_gaps' => 'CCPT, RCSP Core Team',
+        'match_lgu_interventions' => 'C/MPDC',
+        'convergence_meeting' => 'MPDC, NGAs',
+        'participatory_governance' => 'CCPT',
+        'enhance_local_plans' => 'Sanggunian Barangay',
+        'capacitate_bbis' => 'C/MLGOO, C/MPDC, CCPT',
+        'secure_ppa_funding' => 'Sanggunian Barangay',
+        'address_immediate_gaps' => 'LCE',
+        'themed_peace_meetings' => 'CCPT',
+        'peace_information_drive' => 'CCPT, PLEDS',
+        'strengthen_security_mechanisms' => 'PLEDS Team',
+        'monitor_peace_development' => 'PLEDS Team',
+        'implement_primary_issue_ppas' => 'C/M LGU, Province, Barangay',
+        'evaluate_program' => 'C/MPDC, C/MLGOO',
+        'incentivize_barangays' => 'C/M LGU',
+        'peace_status_report' => 'PLEDS Team',
+        'satisfaction_surveys' => 'CCPT',
+        'conclude_program' => 'City/Municipal Mayor, C/MLGOO',
+        'turnover_program' => 'City/Municipal and Barangay RCSP Team',
+        'ensure_sustainability' => 'City/Municipal Mayor, Barangay RCSP Team',
+    ];
+
+    public const UNSPECIFIED_RESPONSIBILITY = 'Not specified in the official activity mapping';
+
     /** @var array<int, list<string|null>> */
     public const LEGACY_ACTIVITIES = [
         0 => [
@@ -151,7 +190,7 @@ final class RcspActivityCatalog
         ],
     ];
 
-    /** @return list<array{key: string, order: int, description: string, expected_result: string, accepted_titles: list<string>}> */
+    /** @return list<array{key: string, order: int, description: string, expected_result: string, responsible_office_person: string, accepted_titles: list<string>}> */
     public static function entriesForPhase(int $phaseNumber): array
     {
         $entries = [];
@@ -168,6 +207,7 @@ final class RcspActivityCatalog
                 'order' => $offset + 1,
                 'description' => $description,
                 'expected_result' => self::EXPECTED_RESULTS[$key],
+                'responsible_office_person' => self::RESPONSIBLE_PARTIES[$key],
                 'accepted_titles' => array_values(array_unique(array_map(
                     static fn (string $title): string => RcspActivity::normalizeTitle($title),
                     $accepted,
@@ -176,6 +216,19 @@ final class RcspActivityCatalog
         }
 
         return $entries;
+    }
+
+    public static function responsibilityFor(int $phaseNumber, string $activityTitle): string
+    {
+        $normalizedTitle = RcspActivity::normalizeTitle($activityTitle);
+
+        foreach (self::entriesForPhase($phaseNumber) as $entry) {
+            if (in_array($normalizedTitle, $entry['accepted_titles'], true)) {
+                return $entry['responsible_office_person'];
+            }
+        }
+
+        return self::UNSPECIFIED_RESPONSIBILITY;
     }
 
     /** @return array<int, int> */

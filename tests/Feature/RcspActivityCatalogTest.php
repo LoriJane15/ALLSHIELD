@@ -21,6 +21,47 @@ class RcspActivityCatalogTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_catalog_resolves_official_and_legacy_activity_responsibilities(): void
+    {
+        $expectedByPhase = [
+            0 => ['C/MLGOO', 'RCSP Team', 'PLEDS Team', 'RCSP Team', 'C/MPDC'],
+            1 => ['C/MLGOO', 'Sanggunian Panlungsod/Bayan', 'C/MLGOO, C/MPDC', 'RCSP Team', 'C/MLGOO', 'RCSP Core Team'],
+            2 => ['CCPT', 'RCSP Local Team (Headed)', 'CCPT, RCSP Core Team', 'C/MPDC', 'MPDC, NGAs', 'CCPT'],
+            3 => ['Sanggunian Barangay', 'C/MLGOO, C/MPDC, CCPT', 'Sanggunian Barangay', 'LCE'],
+            4 => ['CCPT', 'CCPT, PLEDS', 'PLEDS Team', 'PLEDS Team', 'C/M LGU, Province, Barangay'],
+            5 => ['C/MPDC, C/MLGOO', 'C/M LGU', 'PLEDS Team', 'CCPT', 'City/Municipal Mayor, C/MLGOO', 'City/Municipal and Barangay RCSP Team', 'City/Municipal Mayor, Barangay RCSP Team'],
+        ];
+
+        foreach ($expectedByPhase as $phaseNumber => $expectedResponsibilities) {
+            $entries = RcspActivityCatalog::entriesForPhase($phaseNumber);
+            $this->assertSame($expectedResponsibilities, array_column($entries, 'responsible_office_person'));
+            foreach ($entries as $entry) {
+                $this->assertSame(
+                    $entry['responsible_office_person'],
+                    RcspActivityCatalog::responsibilityFor($phaseNumber, $entry['description'])
+                );
+                foreach ($entry['accepted_titles'] as $acceptedTitle) {
+                    $this->assertSame(
+                        $entry['responsible_office_person'],
+                        RcspActivityCatalog::responsibilityFor($phaseNumber, strtoupper($acceptedTitle))
+                    );
+                }
+            }
+        }
+
+        $this->assertSame(
+            'CCPT, PLEDS',
+            RcspActivityCatalog::responsibilityFor(
+                4,
+                '  Conduct an information drive on peace, security and development  '
+            )
+        );
+        $this->assertSame(
+            RcspActivityCatalog::UNSPECIFIED_RESPONSIBILITY,
+            RcspActivityCatalog::responsibilityFor(2, 'Unmatched legacy activity title')
+        );
+    }
+
     public function test_new_rcsp_barangay_receives_the_complete_operational_catalog(): void
     {
         $municipality = Municipality::create(['name' => 'Catalog Municipality']);

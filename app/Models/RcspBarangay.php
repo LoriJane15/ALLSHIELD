@@ -41,6 +41,11 @@ class RcspBarangay extends Model
         return $this->hasMany(RcspPhaseTransition::class);
     }
 
+    public function implementationTimeline(): HasOne
+    {
+        return $this->hasOne(RcspImplementationTimeline::class);
+    }
+
     /** Progress percentage across the 6 phases (0..5). */
     public function getProgressAttribute(): int
     {

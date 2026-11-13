@@ -49,6 +49,7 @@
                             <th>Status</th>
                             <th style="width:16rem">Progress</th>
                             <th>Uploaded</th>
+                            <th>Timeline</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -67,9 +68,10 @@
                                     </div>
                                 </td>
                                 <td>{{ $b->created_at?->format('Y/m/d') ?? '—' }}</td>
+                                <td><a href="{{ route('afp.rcsp.timeline.show', $b) }}" class="btn btn-sm btn-outline-primary">View timeline</a></td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-muted py-5">No RCSP barangays.</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted py-5">No RCSP barangays.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

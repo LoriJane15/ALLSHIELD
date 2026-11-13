@@ -12,6 +12,7 @@ use App\Http\Controllers\Mblrc;
 use App\Http\Controllers\ProcessingCommentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Pswdo;
+use App\Http\Controllers\RcspTimelineController;
 use App\Http\Controllers\SuperAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -90,6 +91,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('katuparan')->name('admin.')->
     // RCSP form review
     Route::get('/rcsp', [Admin\RcspReviewController::class, 'index'])->name('rcsp.index');
     Route::get('/rcsp/{rcspBarangay}', [Admin\RcspReviewController::class, 'show'])->name('rcsp.show');
+    Route::get('/rcsp/{rcspBarangay}/timeline', [RcspTimelineController::class, 'show'])->name('rcsp.timeline.show');
     Route::post('/rcsp/{rcspBarangay}/review', [Admin\RcspReviewController::class, 'updateStatus'])->name('rcsp.review');
     Route::get('/rcsp-form/{form}/file', [Admin\RcspReviewController::class, 'file'])->name('rcsp.file');
     Route::post('/rcsp-form/{form}/comment', [Admin\RcspReviewController::class, 'storeComment'])->name('rcsp.comment');
@@ -124,6 +126,8 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
 
     // Monitoring form (per barangay)
     Route::get('/rcsp/{rcspBarangay}/monitoring', [Lgu\MonitoringController::class, 'show'])->name('monitoring.show');
+    Route::get('/rcsp/{rcspBarangay}/timeline', [RcspTimelineController::class, 'show'])->name('rcsp.timeline.show');
+    Route::put('/rcsp/{rcspBarangay}/timeline', [RcspTimelineController::class, 'update'])->name('rcsp.timeline.update');
     Route::post('/rcsp/{rcspBarangay}/activities/{activity}/submit', [Lgu\MonitoringController::class, 'submit'])->name('monitoring.submit');
     Route::post('/rcsp/{rcspBarangay}/proceed', [Lgu\MonitoringController::class, 'proceed'])->name('monitoring.proceed');
     Route::get('/rcsp-form/{form}/file', [Lgu\MonitoringController::class, 'file'])->name('monitoring.file');
@@ -327,6 +331,7 @@ Route::middleware(['auth', 'role:pswdo'])->prefix('pswdo')->name('pswdo.')->grou
 Route::middleware(['auth', 'role:afp'])->prefix('afp')->name('afp.')->group(function () {
     Route::get('/', [Afp\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/rcsp', [Afp\RcspController::class, 'index'])->name('rcsp.index');
+    Route::get('/rcsp/{rcspBarangay}/timeline', [RcspTimelineController::class, 'show'])->name('rcsp.timeline.show');
 });
 
 require __DIR__.'/auth.php';
