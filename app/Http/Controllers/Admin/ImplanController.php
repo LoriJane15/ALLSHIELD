@@ -67,8 +67,8 @@ class ImplanController extends Controller
             ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
             ->where('status', '!=', 'not yet started')
             ->with([
-                'lguUser.municipality', 'originalFiles', 'originalPhotos',
-                'responses.govAgency', 'responses.files', 'responses.photos',
+                'lguUser.municipality', 'originalPhotos',
+                'responses.govAgency', 'responses.photos',
             ])
             ->oldest('uploaded_at')
             ->oldest('id')

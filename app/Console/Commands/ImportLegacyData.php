@@ -63,7 +63,7 @@ class ImportLegacyData extends Command
     {
         foreach ([
             'implementation_taggings', 'agency_implan_responses', 'implementation_photos',
-            'implementation_files', 'implementations', 'implementation_plans', 'rcsp_lgu_comments', 'rcsp_file_comments',
+            'implementations', 'implementation_plans', 'rcsp_lgu_comments', 'rcsp_file_comments',
             'rcsp_forms', 'rcsp_phase_statuses', 'rcsp_barangays', 'rcsp_activities', 'rcsp_phases',
             'color_histories', 'map_barangays', 'fr_government_assistances', 'fr_skills',
             'fr_location_histories', 'fr_education_works', 'fr_program_statuses', 'former_rebels',
@@ -427,16 +427,6 @@ class ImportLegacyData extends Command
 
         $implIds = DB::table('implementations')->pluck('id')->flip();
         $agencyIds = DB::table('gov_agencies')->pluck('id')->flip();
-
-        $this->insertChunked('implementation_files', $this->legacy->table('fr_rscp_implan_file')->get()
-            ->filter(fn ($r) => isset($implIds[$r->fr_rcsp_imp_id]))
-            ->map(fn ($r) => [
-                'id' => $r->fr_rscp_implan_file_id,
-                'implementation_id' => $r->fr_rcsp_imp_id,
-                'file_name' => $r->fr_rcsp_imp_file_name,
-                'description' => $this->nn($r->fr_rcsp_imp_description),
-                'pdf' => $r->fr_rcsp_imp_pdf,
-            ])->values()->all());
 
         $this->insertChunked('implementation_photos', $this->legacy->table('fr_rscp_implan_photo')->get()
             ->filter(fn ($r) => isset($implIds[$r->fr_rcsp_imp_id]))

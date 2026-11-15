@@ -24,11 +24,6 @@ class AgencyImplanResponse extends Model
         return $this->belongsTo(Implementation::class);
     }
 
-    public function files(): HasMany
-    {
-        return $this->hasMany(ImplementationFile::class);
-    }
-
     public function photos(): HasMany
     {
         return $this->hasMany(ImplementationPhoto::class);

@@ -60,7 +60,7 @@
             <div class="card-body">
                 <div class="mb-3">
                     <h4 class="font-weight-bold mb-1">Municipality IMPLAN Monitoring</h4>
-                    <p class="text-muted mb-0">Read-only access to the complete official IMPLAN of municipalities where your agency participates.</p>
+                    <p class="text-muted mb-0">Read-only access to actions assigned to your agency, grouped by municipality.</p>
                 </div>
 
                 <div class="implementation-list">
@@ -78,13 +78,13 @@
                                 </div>
                                 <div class="action-buttons">
                                     <a href="{{ route('gov_agency.implan.municipality', $municipality) }}" class="btn-view">
-                                        <i class="mdi mdi-eye"></i> View Full IMPLAN
+                                        <i class="mdi mdi-eye"></i> View Assigned Actions
                                     </a>
                                 </div>
                             </div>
                         </div>
                     @empty
-                        <div class="no-data">No municipality IMPLANs are available for monitoring.</div>
+                        <div class="no-data">No IMPLAN actions are currently assigned to your agency.</div>
                     @endforelse
                 </div>
             </div>

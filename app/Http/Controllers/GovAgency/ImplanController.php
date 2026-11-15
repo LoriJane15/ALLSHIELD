@@ -4,9 +4,7 @@ namespace App\Http\Controllers\GovAgency;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgencyImplanResponse;
-use App\Models\GovAgency;
 use App\Models\Implementation;
-use App\Models\ImplementationFile;
 use App\Models\ImplementationPhoto;
 use App\Models\Municipality;
 use App\Models\RcspBarangay;
@@ -20,16 +18,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Government-agency side of the IMPLAN workflow: view assigned plans,
- * accept/reject them, and maintain agenda files + documentation photos.
+ * accept/reject them, and maintain documentation photos.
  */
 class ImplanController extends Controller
 {
     public function index(): View
     {
-        $agencyId = auth()->user()->gov_agency_id;
+        $agencyId = $this->agencyId();
 
-        $assigned = Implementation::whereJsonContains('agencies', $agencyId)
-            ->where('status', '!=', 'not yet started')
+        $assigned = Implementation::visibleToAgency($agencyId)
+            ->with('lguUser.municipality')
             ->latest()->get();
 
         $responses = AgencyImplanResponse::where('gov_agency_id', $agencyId)
@@ -41,24 +39,12 @@ class ImplanController extends Controller
             'rejected' => $assigned->filter(fn ($i) => ($responses[$i->id] ?? null) === 'rejected'),
         ];
 
-        $eligibleMunicipalityIds = DB::table('implementations')
-            ->join('users', 'users.id', '=', 'implementations.lgu_user_id')
-            ->whereJsonContains('implementations.agencies', $agencyId)
-            ->where('implementations.status', '!=', 'not yet started')
-            ->whereNotNull('users.municipality_id')
-            ->distinct()
-            ->pluck('users.municipality_id');
-
-        $monitoringCounts = DB::table('implementations')
-            ->join('users', 'users.id', '=', 'implementations.lgu_user_id')
-            ->whereIn('users.municipality_id', $eligibleMunicipalityIds)
-            ->where('implementations.status', '!=', 'not yet started')
-            ->groupBy('users.municipality_id')
-            ->selectRaw('users.municipality_id, COUNT(*) as total')
-            ->pluck('total', 'municipality_id');
+        $monitoringCounts = $assigned
+            ->filter(fn (Implementation $implan) => $implan->lguUser?->municipality_id)
+            ->countBy(fn (Implementation $implan) => $implan->lguUser->municipality_id);
 
         $monitoringMunicipalities = Municipality::query()
-            ->whereIn('id', $eligibleMunicipalityIds)
+            ->whereIn('id', $monitoringCounts->keys())
             ->orderBy('name')
             ->get();
 
@@ -72,12 +58,15 @@ class ImplanController extends Controller
 
     public function municipality(Municipality $municipality): View
     {
-        abort_unless($this->canMonitorMunicipality($municipality), 403);
+        $agencyId = $this->agencyId();
+        abort_unless($this->canMonitorMunicipality($municipality, $agencyId), 403);
 
-        $implans = Implementation::query()
-            ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
-            ->where('status', '!=', 'not yet started')
-            ->with(['lguUser.municipality', 'responses.govAgency'])
+        $implans = Implementation::visibleToAgency($agencyId)
+            ->forMunicipality($municipality->id)
+            ->with([
+                'lguUser.municipality',
+                'responses' => fn ($query) => $query->where('gov_agency_id', $agencyId)->with('govAgency'),
+            ])
             ->oldest('uploaded_at')
             ->oldest('id')
             ->get();
@@ -92,15 +81,12 @@ class ImplanController extends Controller
             ->mapWithKeys(fn ($area) => [
                 $area->id => $area->barangay?->name ?? "Barangay #{$area->barangay_id}",
             ]);
-        $agencyIds = $implans->flatMap(fn (Implementation $implan) => $implan->agencies ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
 
         return view('gov_agency.implan.municipality', [
             'municipality' => $municipality,
             'implans' => $implans,
-            'agenciesById' => GovAgency::whereIn('id', $agencyIds)->get()->keyBy('id'),
+            'agencyScopeId' => $agencyId,
+            'agenciesById' => collect([$agencyId => auth()->user()->govAgency]),
             'areaNamesByImplan' => $implans->mapWithKeys(fn (Implementation $implan) => [
                 $implan->id => collect($implan->target_areas ?? [])->map(
                     fn ($id) => $areaNamesById->get((int) $id, "Barangay #{$id}")
@@ -112,19 +98,23 @@ class ImplanController extends Controller
     public function show(Implementation $implan): View
     {
         $this->authorizeAssigned($implan);
-        $agencyId = auth()->user()->gov_agency_id;
+        $agencyId = $this->agencyId();
         $implan->load([
-            'originalFiles', 'originalPhotos',
-            'responses.govAgency', 'responses.files', 'responses.photos',
+            'lguUser.municipality',
+            'responses' => fn ($query) => $query->where('gov_agency_id', $agencyId)
+                ->with(['govAgency', 'photos']),
         ]);
-        $response = $implan->responses->firstWhere('gov_agency_id', (int) $agencyId);
+        $response = $implan->responses->first();
 
         return view('gov_agency.implan.show', [
             'implan' => $implan,
             'response' => $response,
             'areaNames' => RcspBarangay::with('barangay')->whereIn('id', $implan->target_areas ?? [])
                 ->get()->map(fn ($row) => $row->barangay?->name ?? "Barangay #{$row->barangay_id}"),
-            'agenciesById' => GovAgency::all()->keyBy('id'),
+            'agencyScopeId' => $agencyId,
+            'currentAgency' => auth()->user()->govAgency,
+            'agenciesById' => collect([$agencyId => auth()->user()->govAgency]),
+            'isSharedAction' => count($implan->agencies ?? []) > 1,
         ]);
     }
 
@@ -187,31 +177,6 @@ class ImplanController extends Controller
         return back()->with('success', 'Your agency response was saved.');
     }
 
-    public function uploadAgenda(Request $request, Implementation $implan): RedirectResponse
-    {
-        $this->authorizeAssigned($implan);
-
-        $request->validate([
-            'file_name' => ['required', 'string', 'max:250'],
-            'description' => ['nullable', 'string'],
-            'files' => ['required', 'array'],
-            'files.*' => ['file', 'mimes:pdf,doc,docx', 'max:25600'],
-        ]);
-
-        $response = $this->responseFor($implan);
-
-        foreach ($request->file('files') as $file) {
-            $response->files()->create([
-                'implementation_id' => $implan->id,
-                'file_name' => $request->file_name,
-                'description' => $request->description,
-                'pdf' => $file->store('implan/agenda', 'public'),
-            ]);
-        }
-
-        return back()->with('success', 'Agenda file(s) uploaded.');
-    }
-
     public function uploadPhoto(Request $request, Implementation $implan): RedirectResponse
     {
         $this->authorizeAssigned($implan);
@@ -233,15 +198,6 @@ class ImplanController extends Controller
         return back()->with('success', 'Documentation photo(s) uploaded.');
     }
 
-    public function viewFile(Implementation $implan, ImplementationFile $file): StreamedResponse
-    {
-        $this->authorizeAssigned($implan);
-        $this->authorizeAttachment($implan, $file->implementation_id, $file->agencyResponse);
-        abort_unless($file->pdf && Storage::disk('public')->exists($file->pdf), 404);
-
-        return Storage::disk('public')->response($file->pdf, $file->file_name ?: basename($file->pdf));
-    }
-
     public function viewPhoto(Implementation $implan, ImplementationPhoto $photo): StreamedResponse
     {
         $this->authorizeAssigned($implan);
@@ -253,23 +209,19 @@ class ImplanController extends Controller
 
     private function authorizeAssigned(Implementation $implan): void
     {
-        $agencyId = auth()->user()->gov_agency_id;
+        $agencyId = $this->agencyId();
         abort_if($implan->status === 'not yet started', 403, 'This IMPLAN has not been submitted.');
         abort_unless(
-            in_array($agencyId, $implan->agencies ?? [], true),
+            $implan->isAssignedToAgency($agencyId),
             403,
             'This plan is not assigned to your agency.'
         );
     }
 
-    private function canMonitorMunicipality(Municipality $municipality): bool
+    private function canMonitorMunicipality(Municipality $municipality, int $agencyId): bool
     {
-        $agencyId = auth()->user()->gov_agency_id;
-
-        return $agencyId && Implementation::query()
-            ->whereJsonContains('agencies', $agencyId)
-            ->where('status', '!=', 'not yet started')
-            ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
+        return Implementation::visibleToAgency($agencyId)
+            ->forMunicipality($municipality->id)
             ->exists();
     }
 
@@ -287,14 +239,19 @@ class ImplanController extends Controller
         ?AgencyImplanResponse $agencyResponse
     ): void {
         abort_unless($implementationId === $implan->id, 404);
-
-        if ($agencyResponse) {
-            abort_unless(
-                $agencyResponse->implementation_id === $implan->id
-                    && in_array($agencyResponse->gov_agency_id, $implan->agencies ?? [], true),
-                404
-            );
-        }
+        abort_unless(
+            $agencyResponse
+                && $agencyResponse->implementation_id === $implan->id
+                && $agencyResponse->gov_agency_id === $this->agencyId(),
+            404
+        );
     }
 
+    private function agencyId(): int
+    {
+        $agencyId = auth()->user()->gov_agency_id;
+        abort_unless($agencyId, 403, 'No government agency is linked to this account.');
+
+        return (int) $agencyId;
+    }
 }

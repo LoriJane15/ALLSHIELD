@@ -73,8 +73,14 @@
             <tbody>
                 @forelse ($implans as $row)
                     @php
+                        $visibleAgencyIds = collect($row->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId);
+                        if (isset($agencyScopeId)) {
+                            $visibleAgencyIds = $visibleAgencyIds->filter(
+                                fn ($agencyId) => $agencyId === (int) $agencyScopeId
+                            );
+                        }
                         $responseByAgency = $row->responses->keyBy('gov_agency_id');
-                        $responses = collect($row->agencies ?? [])
+                        $responses = $visibleAgencyIds
                             ->map(fn ($agencyId) => $responseByAgency->get((int) $agencyId))
                             ->filter();
                         $rowAreaNames = $areaNamesByImplan[$row->id] ?? collect();
@@ -86,7 +92,7 @@
                         <td data-lgu-original="beneficiaries">{{ filled($row->beneficiaries) ? $row->beneficiaries : '—' }}</td>
                         <td data-lgu-original="outcome">{{ filled($row->outcome) ? $row->outcome : '—' }}</td>
                         <td data-lgu-original="agencies">
-                            @forelse (($row->agencies ?? []) as $agencyId)
+                            @forelse ($visibleAgencyIds as $agencyId)
                                 @php
                                     $assignedAgency = $agenciesById[$agencyId] ?? null;
                                     $assignedResponse = $responseByAgency[$agencyId] ?? null;

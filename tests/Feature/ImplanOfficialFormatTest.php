@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\AgencyImplanResponse;
 use App\Models\GovAgency;
 use App\Models\Implementation;
-use App\Models\ImplementationFile;
 use App\Models\ImplementationPhoto;
 use App\Models\Municipality;
 use App\Models\User;
@@ -117,22 +116,17 @@ class ImplanOfficialFormatTest extends TestCase
         $matanaoImplan = $this->createImplan($this->matanaoLgu, 'Matanao excluded supporting records');
         $doh = GovAgency::create(['name' => 'Department of Health', 'acronym' => 'DOH']);
 
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $implanA->id,
-            'file_name' => 'LGU Agenda A.pdf',
-            'description' => 'Road agenda',
-            'pdf' => 'implan/agenda/agenda-a.pdf',
+            'image' => 'implan/photos/lgu-a.jpg',
         ]);
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $implanB->id,
-            'file_name' => 'LGU Agenda B.pdf',
-            'description' => 'Health agenda',
-            'pdf' => 'implan/agenda/agenda-b.pdf',
+            'image' => 'implan/photos/lgu-b.jpg',
         ]);
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $matanaoImplan->id,
-            'file_name' => 'Matanao hidden agenda.pdf',
-            'pdf' => 'implan/agenda/matanao.pdf',
+            'image' => 'implan/photos/matanao-hidden.jpg',
         ]);
 
         $dilgResponse = AgencyImplanResponse::create([
@@ -153,11 +147,10 @@ class ImplanOfficialFormatTest extends TestCase
             'agency_implan_response_id' => $dohResponse->id,
             'image' => 'implan/photos/doh-b.jpg',
         ]);
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $implanB->id,
             'agency_implan_response_id' => $dilgResponse->id,
-            'file_name' => 'Inconsistent ownership must not render.pdf',
-            'pdf' => 'implan/agenda/inconsistent.pdf',
+            'image' => 'implan/photos/inconsistent.jpg',
         ]);
 
         $admin = User::factory()->role('admin')->create();
@@ -165,8 +158,9 @@ class ImplanOfficialFormatTest extends TestCase
             ->get(route('admin.implan.municipality', $this->sulop))
             ->assertOk()
             ->assertSee('IMPLAN Supporting Records')
-            ->assertDontSee('Matanao hidden agenda.pdf')
-            ->assertDontSee('Inconsistent ownership must not render.pdf');
+            ->assertDontSee('matanao-hidden.jpg')
+            ->assertDontSee('inconsistent.jpg')
+            ->assertDontSee('Agenda File');
 
         $document = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
@@ -185,19 +179,18 @@ class ImplanOfficialFormatTest extends TestCase
         $this->assertNotNull($implanBGroup);
         $this->assertNotNull($emptyGroup);
         $this->assertStringContainsString('Road Accessibility', $implanAGroup->textContent);
-        $this->assertStringContainsString('LGU Agenda A.pdf', $implanAGroup->textContent);
+        $this->assertStringContainsString('implan/photos/lgu-a.jpg', $document->saveHTML($implanAGroup));
         $this->assertSame(1, $xpath->query('.//*[@data-agency-photo="'.$this->agency->id.'"]', $implanAGroup)->count());
-        $this->assertStringNotContainsString('LGU Agenda B.pdf', $implanAGroup->textContent);
+        $this->assertStringNotContainsString('implan/photos/lgu-b.jpg', $document->saveHTML($implanAGroup));
         $this->assertStringNotContainsString('DOH', $implanAGroup->textContent);
 
         $this->assertStringContainsString('Health Services', $implanBGroup->textContent);
-        $this->assertStringContainsString('LGU Agenda B.pdf', $implanBGroup->textContent);
+        $this->assertStringContainsString('implan/photos/lgu-b.jpg', $document->saveHTML($implanBGroup));
         $this->assertSame(1, $xpath->query('.//*[@data-agency-photo="'.$doh->id.'"]', $implanBGroup)->count());
-        $this->assertStringNotContainsString('LGU Agenda A.pdf', $implanBGroup->textContent);
+        $this->assertStringNotContainsString('implan/photos/lgu-a.jpg', $document->saveHTML($implanBGroup));
         $this->assertStringNotContainsString('DILG', $implanBGroup->textContent);
 
         $this->assertStringContainsString('Water Supply', $emptyGroup->textContent);
-        $this->assertStringContainsString('No LGU agenda/supporting file uploaded.', $emptyGroup->textContent);
         $this->assertStringContainsString('No documentation uploaded.', $emptyGroup->textContent);
         $this->assertSame(0, $xpath->query('.//form', $supportingArea)->count());
         $this->assertSame(0, $xpath->query('.//input', $supportingArea)->count());
@@ -211,11 +204,9 @@ class ImplanOfficialFormatTest extends TestCase
         $doh = GovAgency::create(['name' => 'Department of Health', 'acronym' => 'DOH']);
         $implan->update(['agencies' => [$this->agency->id, $dswd->id, $doh->id]]);
 
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $implan->id,
-            'file_name' => 'Municipal Agenda.pdf',
-            'description' => 'LGU meeting agenda',
-            'pdf' => 'implan/agenda/municipal.pdf',
+            'image' => 'implan/photos/municipal.jpg',
         ]);
 
         $responses = collect([
@@ -238,12 +229,10 @@ class ImplanOfficialFormatTest extends TestCase
             'agency_implan_response_id' => $responses['DILG']->id,
             'image' => 'implan/photos/dilg.jpg',
         ]);
-        ImplementationFile::create([
+        ImplementationPhoto::create([
             'implementation_id' => $implan->id,
             'agency_implan_response_id' => $responses['DSWD']->id,
-            'file_name' => 'DSWD Documentation.pdf',
-            'description' => 'Beneficiary validation report',
-            'pdf' => 'implan/agenda/dswd.pdf',
+            'image' => 'implan/photos/dswd.jpg',
         ]);
         ImplementationPhoto::create([
             'implementation_id' => $implan->id,
@@ -262,10 +251,9 @@ class ImplanOfficialFormatTest extends TestCase
         $implanGroup = $xpath->query('//*[@data-implan-supporting="'.$implan->id.'"]')->item(0);
 
         $this->assertNotNull($implanGroup);
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-agenda]//*[@data-lgu-attachment][contains(., "Municipal Agenda.pdf")]', $implanGroup)->count());
-        $this->assertStringContainsString('LGU Original', $xpath->query('.//*[@data-implan-agenda]', $implanGroup)->item(0)->textContent);
+        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-lgu-photo]', $implanGroup)->count());
         $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$this->agency->id.'"]', $implanGroup)->count());
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-attachment="'.$dswd->id.'"]', $implanGroup)->count());
+        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$dswd->id.'"]', $implanGroup)->count());
         $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$doh->id.'"]', $implanGroup)->count());
         $this->assertStringContainsString('DILG', $xpath->query('.//*[@data-agency-documentation="'.$this->agency->id.'"]', $implanGroup)->item(0)->textContent);
         $this->assertStringContainsString('DSWD', $xpath->query('.//*[@data-agency-documentation="'.$dswd->id.'"]', $implanGroup)->item(0)->textContent);
@@ -299,12 +287,6 @@ class ImplanOfficialFormatTest extends TestCase
                 'remarks' => $remarks,
             ]));
         }
-        ImplementationFile::create([
-            'implementation_id' => $sulop->id,
-            'agency_implan_response_id' => $agencyResponses['DILG']->id,
-            'file_name' => 'DILG supporting document',
-            'pdf' => 'implan/agenda/dilg.pdf',
-        ]);
         ImplementationPhoto::create([
             'implementation_id' => $sulop->id,
             'agency_implan_response_id' => $agencyResponses['DOH']->id,

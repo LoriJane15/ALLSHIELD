@@ -15,11 +15,9 @@
     .status-card .icon-wrap { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
     .status-card h2 { font-size: 24px; font-weight: 600; margin: 0; }
     .status-card p { color: #808191; font-size: 14px; margin: 0; }
-    .implementation-list { display: flex; flex-direction: column; gap: 10px; }
-    .implementation-item { display: flex; align-items: center; padding: 18px 20px; background: #fff; border: 1px solid #eee; border-radius: 10px; transition: all .2s ease; }
-    .implementation-item:hover { box-shadow: 0 4px 8px rgba(0,0,0,.08); }
-    .impl-logo { width: 45px; height: 45px; min-width: 45px; margin-right: 20px; border-radius: 50%; background: #f4f5f7; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .impl-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .implan-monitoring-table th { white-space: nowrap; }
+    .implan-monitoring-table td { vertical-align: top; white-space: normal; min-width: 120px; }
+    .implan-monitoring-table td:first-child { min-width: 220px; }
     .btn-open { background: #FFE0D3; color: #000; border: none; padding: 6px 18px; border-radius: 20px; font-size: 14px; text-decoration: none; }
     .btn-open:hover { background: #ffd0bd; color: #000; }
 </style>
@@ -77,37 +75,55 @@
     <div class="col-md-12 grid-margin stretch-card">
         <div class="card">
             <div class="card-body">
-                <div class="implementation-list">
-                    @forelse ($implans as $im)
-                        <div class="implementation-item">
-                            <div class="impl-logo">
-                                <img src="{{ asset('assets/img/agencies/dilg.png') }}" alt="logo" onerror="this.style.display='none'">
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                    <div>
-                                        <div class="d-flex align-items-center gap-2 mb-1">
-                                            <h5 class="mb-0" style="font-size:1rem;font-weight:600;">{{ $im->issues ?: 'Untitled IMPLAN' }}</h5>
-                                            <span class="badge rounded-pill {{ $badge($im->status) }}">{{ $im->status }}</span>
+                <div class="table-responsive">
+                    <table class="table table-hover implan-monitoring-table" data-lgu-municipality-implans>
+                        <thead>
+                            <tr>
+                                <th>Action/Activity</th>
+                                <th>Objective / Expected Output</th>
+                                <th>Responsible Agency/Agencies</th>
+                                <th>Target Area</th>
+                                <th>Planned Schedule</th>
+                                <th>Overall Status</th>
+                                <th>Documentation Progress</th>
+                                <th>Last Updated</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($implans as $im)
+                                <tr data-implementation-row="{{ $im->id }}">
+                                    <td class="font-weight-medium">{{ $im->issues ?: 'Untitled IMPLAN' }}</td>
+                                    <td>{{ $im->outcome ?: 'Not specified' }}</td>
+                                    <td>{{ collect($im->agencies ?? [])->map(fn ($id) => $agenciesById->get((int) $id)?->acronym)->filter()->join(', ') ?: 'Not assigned' }}</td>
+                                    <td>{{ ($areaNamesByImplan[$im->id] ?? collect())->join(', ') ?: 'Not specified' }}</td>
+                                    <td>
+                                        {{ $im->uploaded_at?->format('M d, Y') ?? 'Not specified' }}
+                                        @if (filled($im->duration))<div class="text-muted small">{{ $im->duration }}</div>@endif
+                                    </td>
+                                    <td><span class="badge rounded-pill {{ $badge($im->status) }}">{{ $im->status }}</span></td>
+                                    <td data-documentation-progress>{{ $im->documentation_submitted_count }} of {{ $im->responsible_agency_count }} responsible agencies submitted documentation</td>
+                                    <td>{{ $im->updated_at?->format('M d, Y g:i A') ?? '—' }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <a href="{{ route('lgu.implan.show', $im) }}" class="btn-open">Open</a>
+                                            @if ($im->can_manage)
+                                                <form method="POST" action="{{ route('lgu.implan.destroy', $im) }}"
+                                                      data-confirm="Delete this IMPLAN?" data-confirm-title="Confirm delete" data-confirm-action="Delete" style="display:inline;">
+                                                    @csrf @method('DELETE')
+                                                    <button type="submit" class="btn btn-link p-0" title="Delete" aria-label="Delete IMPLAN">
+                                                        <i class="icon-trash delete-icon" style="font-size:18px;"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
                                         </div>
-                                        <small class="text-muted"><i>{{ $im->uploaded_at?->format('M d, Y') ?? '—' }} · {{ count($im->agencies ?? []) }} agency(ies)</i></small>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <a href="{{ route('lgu.implan.show', $im) }}" class="btn-open">Open</a>
-                                        <form method="POST" action="{{ route('lgu.implan.destroy', $im) }}"
-                                              data-confirm="Delete this IMPLAN?" data-confirm-title="Confirm delete" data-confirm-action="Delete" style="display:inline;">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" style="background:none;border:none;padding:0;cursor:pointer;" title="Delete">
-                                                <i class="icon-trash delete-icon" style="font-size:18px;"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    @empty
-                        <div class="text-center text-muted py-4">No implementation plans yet.</div>
-                    @endforelse
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="9" class="text-center text-muted py-4">No IMPLAN actions exist for this municipality.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
 
                 <div class="mt-3">{{ $implans->links() }}</div>

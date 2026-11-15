@@ -13,9 +13,6 @@
 @push('styles')
 <style>
     .table td { word-wrap: break-word; white-space: normal; max-width: 220px; padding: 15px; }
-    .agenda-file-item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
-    .agenda-file-item .file-name { font-weight: 500; color: #35127d; text-decoration: none; }
-    .agenda-file-item .file-description { font-size: 13px; color: #666; margin: 4px 0 0; }
 </style>
 @endpush
 
@@ -28,12 +25,12 @@
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">Implementation Plan</h3>
             <h6 class="mb-0" style="color: rgba(156,156,156,1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">Manage implementation details</span>, agenda files, and documentation.
+                <span style="color: #280274; font-weight: bold;">Manage implementation details</span> and documentation.
             </h6>
         </div>
         <div class="col-4 col-xl-4">
             <div class="justify-content-end d-flex gap-2">
-                @if ($implan->status === 'not yet started')
+                @if ($canManage && $implan->status === 'not yet started')
                     <form method="POST" action="{{ route('lgu.implan.submit', $implan) }}"
                           data-confirm="Submit this IMPLAN directly to its responsible agencies?" data-confirm-title="Submit IMPLAN" data-confirm-action="Submit" data-confirm-danger="false">
                         @csrf
@@ -66,16 +63,17 @@
                 <div class="card-body">
                     <ul class="nav nav-tabs" role="tablist">
                         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button">Information</button></li>
-                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#documents" type="button">Agenda File</button></li>
                         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">Documentation</button></li>
                     </ul>
 
                     <div class="tab-content pt-3">
                         {{-- Information --}}
                         <div class="tab-pane fade show active" id="info" role="tabpanel">
-                            <div class="d-flex justify-content-end mb-3">
-                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editImplanModal"><i class="mdi mdi-pencil"></i> Edit</button>
-                            </div>
+                            @if ($canManage)
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editImplanModal"><i class="mdi mdi-pencil"></i> Edit</button>
+                                </div>
+                            @endif
                             <div class="table-responsive">
                                 <table class="table">
                                     <thead>
@@ -93,30 +91,14 @@
                             </div>
                         </div>
 
-                        {{-- Agenda File --}}
-                        <div class="tab-pane fade" id="documents" role="tabpanel">
-                            <div class="d-flex justify-content-end mb-3">
-                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addFileModal">Add File</button>
-                            </div>
-                            @forelse ($implan->files as $file)
-                                <div class="agenda-file-item">
-                                    <a href="{{ $file->pdf ? Storage::url($file->pdf) : '#' }}" target="_blank" class="file-name">{{ $file->file_name }}</a>
-                                    @if ($file->agencyResponse)<span class="badge badge-info ms-2">{{ $file->agencyResponse->govAgency?->acronym }}</span>@else<span class="badge badge-secondary ms-2">LGU original</span>@endif
-                                    <p class="file-description">{{ $file->description }}</p>
-                                </div>
-                            @empty
-                                <p class="text-muted">No agenda files uploaded.</p>
-                            @endforelse
-                        </div>
-
                         {{-- Documentation (agency-uploaded, read-only) --}}
                         <div class="tab-pane fade" id="monitoring" role="tabpanel">
                             @if ($implan->photos->isNotEmpty())
                                 <div class="row g-2">
                                     @foreach ($implan->photos as $photo)
                                         <div class="col-4 col-sm-3">
-                                            <a href="{{ Storage::url($photo->image) }}" target="_blank">
-                                                <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
+                                            <a href="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" target="_blank">
+                                                <img src="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
                                             </a>
                                             <div class="small text-center mt-1">{{ $photo->agencyResponse?->govAgency?->acronym ?? 'LGU original' }}</div>
                                         </div>
@@ -180,6 +162,7 @@
         </div>
     </div>
 
+    @if ($canManage)
     {{-- Edit modal --}}
     <div class="modal fade" id="editImplanModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -235,37 +218,5 @@
         </div>
     </div>
 
-    {{-- Add File modal --}}
-    <div class="modal fade" id="addFileModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
-                <div class="modal-body">
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
-                    <h3 style="color:#35127d;font-weight:bold;">Add Agenda File</h3>
-                    <p class="text-muted">Upload new agenda file with description</p>
-                    <form method="POST" action="{{ route('lgu.implan.agenda', $implan) }}" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label class="form-label">File Name</label>
-                            <input type="text" name="file_name" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <textarea name="description" class="form-control" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Upload File</label>
-                            <input type="file" name="pdf" class="form-control" accept=".pdf,.doc,.docx" required>
-                            <small class="text-muted">Accepted formats: PDF, DOC, DOCX</small>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Upload File</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+    @endif
 @endsection

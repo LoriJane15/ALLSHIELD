@@ -4,6 +4,7 @@ namespace App\Http\Controllers\GovAgency;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgencyImplanResponse;
+use App\Models\GovAgency;
 use App\Models\Implementation;
 use Illuminate\View\View;
 
@@ -11,31 +12,42 @@ class DashboardController extends Controller
 {
     public function index(): View
     {
-        $agencyId = auth()->user()->gov_agency_id;
+        $agencyId = (int) auth()->user()->gov_agency_id;
+        abort_unless($agencyId, 403, 'No government agency is linked to this account.');
 
-        $assigned = Implementation::whereJsonContains('agencies', $agencyId)
-            ->where('status', '!=', 'not yet started');
+        $assigned = Implementation::visibleToAgency($agencyId);
+        $assignedIds = (clone $assigned)->pluck('id');
 
-        $acceptedIds = AgencyImplanResponse::where('gov_agency_id', $agencyId)
-            ->where('response_status', 'accepted')->pluck('implementation_id');
+        $responseStatuses = AgencyImplanResponse::where('gov_agency_id', $agencyId)
+            ->whereIn('implementation_id', $assignedIds)
+            ->pluck('response_status', 'implementation_id');
+        $acceptedIds = $responseStatuses->filter(fn ($status) => $status === 'accepted')->keys();
+        $rejectedIds = $responseStatuses->filter(fn ($status) => $status === 'rejected')->keys();
 
         $stats = [
-            'assigned' => (clone $assigned)->count(),
+            'assigned' => $assignedIds->count(),
             'accepted' => $acceptedIds->count(),
-            'pending' => AgencyImplanResponse::where('gov_agency_id', $agencyId)
-                ->where('response_status', 'pending')->count(),
-            'rejected' => AgencyImplanResponse::where('gov_agency_id', $agencyId)
-                ->where('response_status', 'rejected')->count(),
+            'pending' => $assignedIds->diff($acceptedIds)->diff($rejectedIds)->count(),
+            'rejected' => $rejectedIds->count(),
         ];
 
         $accepted = Implementation::whereIn('id', $acceptedIds)
             ->latest()->take(10)->get();
+        $responsibleAgencyIds = $accepted
+            ->flatMap(fn (Implementation $implan) => $implan->agencies ?? [])
+            ->map(fn ($responsibleAgencyId) => (int) $responsibleAgencyId)
+            ->unique()
+            ->values();
 
         return view('gov_agency.dashboard', [
             'stats' => $stats,
             'accepted' => $accepted,
             'agency' => auth()->user()->govAgency,
-            'agenciesById' => \App\Models\GovAgency::all()->keyBy('id'),
+            'responseStatuses' => $responseStatuses,
+            'agenciesById' => GovAgency::query()
+                ->whereIn('id', $responsibleAgencyIds)
+                ->get()
+                ->keyBy('id'),
         ]);
     }
 }

@@ -16,7 +16,7 @@
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">Implementation Plan</h3>
             <h6 class="mb-0" style="color: rgba(156, 156, 156, 1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">RCSP implementation details</span> — information, agenda files, and documentation.
+                <span style="color: #280274; font-weight: bold;">RCSP implementation details</span> — information and documentation.
             </h6>
         </div>
         <div class="col-4 col-xl-4">
@@ -108,9 +108,6 @@
                             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab">Information</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab">Agenda File</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
                             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button" role="tab">Documentation</button>
                         </li>
                     </ul>
@@ -167,23 +164,6 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        {{-- Agenda File --}}
-                        <div class="tab-pane fade" id="documents" role="tabpanel">
-                            <div class="p-2">
-                                @forelse ($implan->files as $file)
-                                    <div class="border rounded p-3 mb-2">
-                                        <a href="{{ $file->pdf ? Storage::url($file->pdf) : '#' }}" target="_blank" class="fw-medium">
-                                            {{ $file->file_name }}
-                                        </a>
-                                        <div class="text-muted small">{{ $file->pdf }}</div>
-                                        <p class="text-muted small mb-0">{{ $file->description }}</p>
-                                    </div>
-                                @empty
-                                    <p class="text-muted mb-0">No agenda files uploaded.</p>
-                                @endforelse
                             </div>
                         </div>
 

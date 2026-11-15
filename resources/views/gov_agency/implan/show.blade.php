@@ -7,27 +7,12 @@
         'verified' => 'badge-success', 'ongoing' => 'badge-primary',
         'submitted' => 'badge-info', 'not yet started' => 'badge-danger', default => 'badge-secondary',
     };
-    $assignedAgencyIds = collect($implan->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId);
-    $sharedResponses = $implan->responses->whereIn('gov_agency_id', $assignedAgencyIds);
-    $visibleFiles = $implan->originalFiles
-        ->map(fn ($file) => ['file' => $file, 'agency' => null])
-        ->concat($sharedResponses->flatMap(fn ($agencyResponse) => $agencyResponse->files->map(
-            fn ($file) => ['file' => $file, 'agency' => $agencyResponse->govAgency]
-        )));
-    $visiblePhotos = $implan->originalPhotos
-        ->map(fn ($photo) => ['photo' => $photo, 'agency' => null])
-        ->concat($sharedResponses->flatMap(fn ($agencyResponse) => $agencyResponse->photos->map(
-            fn ($photo) => ['photo' => $photo, 'agency' => $agencyResponse->govAgency]
-        )));
+    $visiblePhotos = $response?->photos ?? collect();
 @endphp
 
 @push('styles')
 <style>
     .table td { word-wrap: break-word; white-space: normal; max-width: 220px; padding: 15px; line-height: 1.5; }
-    .agenda-file-item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
-    .agenda-file-item .file-name { font-weight: 500; color: #35127d; text-decoration: none; }
-    .agenda-file-item .file-link { font-size: 12px; color: #999; word-break: break-all; }
-    .agenda-file-item .file-description { font-size: 13px; color: #666; margin: 4px 0 0; }
 </style>
 @endpush
 
@@ -36,7 +21,7 @@
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">Implementation Plan</h3>
             <h6 class="mb-0" style="color: rgba(156,156,156,1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">Manage implementation details</span>, agenda files, and documentation.
+                <span style="color: #280274; font-weight: bold;">Manage implementation details</span> and documentation.
             </h6>
         </div>
         <div class="col-4 col-xl-4">
@@ -79,6 +64,8 @@
                 'implans' => collect([$implan->loadMissing('responses.govAgency')]),
                 'municipality' => $implan->lguUser?->municipality,
                 'areaNamesByImplan' => collect([$implan->id => $areaNames]),
+                'agenciesById' => collect([$agencyScopeId => $currentAgency]),
+                'agencyScopeId' => $agencyScopeId,
             ])
         </div>
     </div>
@@ -90,7 +77,6 @@
                 <div class="card-body">
                     <ul class="nav nav-tabs" role="tablist">
                         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button">Information</button></li>
-                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#documents" type="button">Agenda File</button></li>
                         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">Documentation</button></li>
                     </ul>
 
@@ -117,26 +103,6 @@
                             </div>
                         </div>
 
-                        {{-- Agenda File --}}
-                        <div class="tab-pane fade" id="documents" role="tabpanel">
-                            <div class="d-flex justify-content-end mb-3">
-                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addFileModal">Add File</button>
-                            </div>
-                            <div class="agenda-files-list">
-                                @forelse ($visibleFiles as $item)
-                                    @php $file = $item['file']; @endphp
-                                    <div class="agenda-file-item" @if($item['agency']) data-agency-attachment="{{ $item['agency']->id }}" @endif>
-                                        <a href="{{ route('gov_agency.implan.files.show', [$implan, $file]) }}" target="_blank" class="file-name">{{ $file->file_name }}</a>
-                                        <span class="badge {{ $item['agency'] ? 'badge-info' : 'badge-secondary' }} ms-2">{{ $item['agency']?->acronym ?? 'LGU original' }}</span>
-                                        <div class="file-link">{{ $file->pdf }}</div>
-                                        <p class="file-description">{{ $file->description }}</p>
-                                    </div>
-                                @empty
-                                    <p class="text-muted">No agenda files uploaded.</p>
-                                @endforelse
-                            </div>
-                        </div>
-
                         {{-- Documentation --}}
                         <div class="tab-pane fade" id="monitoring" role="tabpanel">
                             <div class="d-flex justify-content-end mb-3">
@@ -144,13 +110,12 @@
                             </div>
                             @if ($visiblePhotos->isNotEmpty())
                                 <div class="row g-2">
-                                    @foreach ($visiblePhotos as $item)
-                                        @php $photo = $item['photo']; @endphp
-                                        <div class="col-4 col-sm-3" @if($item['agency']) data-agency-photo="{{ $item['agency']->id }}" @endif>
+                                    @foreach ($visiblePhotos as $photo)
+                                        <div class="col-4 col-sm-3" data-agency-photo="{{ $agencyScopeId }}">
                                             <a href="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" target="_blank">
                                                 <img src="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
                                             </a>
-                                            <div class="small text-center mt-1">{{ $item['agency']?->acronym ?? 'LGU original' }}</div>
+                                            <div class="small text-center mt-1">{{ $currentAgency?->acronym }}</div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -192,7 +157,7 @@
                     </div>
 
                     <div>
-                        <p class="text-muted mb-2" style="font-size:.85rem;">Other Responsible Agency</p>
+                        <p class="text-muted mb-2" style="font-size:.85rem;">Your Agency Assignment</p>
                         <div class="d-flex flex-wrap gap-2">
                             @forelse (($implan->agencies ?? []) as $aid)
                                 @php $ag = $agenciesById[$aid] ?? null; @endphp
@@ -205,6 +170,9 @@
                             @empty
                                 <span class="text-muted">—</span>
                             @endforelse
+                            @if ($isSharedAction)
+                                <span class="badge badge-info">Shared action</span>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -235,40 +203,6 @@
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-info">Save changes</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Add File modal --}}
-    <div class="modal fade" id="addFileModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="border-radius:15px;overflow:hidden;">
-                <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
-                <div class="modal-body">
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
-                    <h3 style="color:#35127d;font-weight:bold;">Add Agenda File</h3>
-                    <p class="text-muted">Upload new agenda file with description</p>
-                    <form method="POST" action="{{ route('gov_agency.implan.agenda', $implan) }}" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label class="form-label">File Name</label>
-                            <input type="text" name="file_name" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <textarea name="description" class="form-control" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Upload Files</label>
-                            <input type="file" name="files[]" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx" multiple required>
-                            <small class="text-muted">Accepted formats: PDF, DOC, DOCX, XLS, XLSX</small>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Upload Files</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         </div>
                     </form>

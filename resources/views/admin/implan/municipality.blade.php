@@ -20,7 +20,7 @@
     <div class="mt-4 no-print" data-implan-supporting-records>
         <div class="mb-3">
             <h4 class="font-weight-bold mb-1">IMPLAN Supporting Records</h4>
-            <p class="text-muted mb-0">Agenda files and documentation are grouped by the official IMPLAN record that owns them.</p>
+            <p class="text-muted mb-0">Documentation is grouped by the official IMPLAN record that owns it.</p>
         </div>
 
         @forelse ($implans as $implan)
@@ -28,10 +28,9 @@
                 $agencyDocumentation = $implan->responses->map(function ($agencyResponse) use ($implan) {
                     return [
                         'response' => $agencyResponse,
-                        'files' => $agencyResponse->files->where('implementation_id', $implan->id),
                         'photos' => $agencyResponse->photos->where('implementation_id', $implan->id),
                     ];
-                })->filter(fn ($documentation) => $documentation['files']->isNotEmpty() || $documentation['photos']->isNotEmpty());
+                })->filter(fn ($documentation) => $documentation['photos']->isNotEmpty());
                 $hasDocumentation = $implan->originalPhotos->isNotEmpty() || $agencyDocumentation->isNotEmpty();
             @endphp
 
@@ -50,27 +49,7 @@
                 </div>
 
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-lg-5 mb-4 mb-lg-0" data-implan-agenda>
-                            <h6 class="font-weight-bold mb-3">Agenda / Supporting Files</h6>
-                            @forelse ($implan->originalFiles as $file)
-                                <div class="border rounded p-3 mb-2" data-lgu-attachment>
-                                    <a href="{{ Storage::url($file->pdf) }}" target="_blank" rel="noopener" class="font-weight-medium">
-                                        {{ $file->file_name }}
-                                    </a>
-                                    <div class="small text-muted mt-1">
-                                        <span class="badge badge-secondary mr-1">LGU Original</span>
-                                        @if (filled($file->description))
-                                            {{ $file->description }}
-                                        @endif
-                                    </div>
-                                </div>
-                            @empty
-                                <p class="small text-muted mb-0" data-empty-agenda>No LGU agenda/supporting file uploaded.</p>
-                            @endforelse
-                        </div>
-
-                        <div class="col-lg-7" data-implan-documentation>
+                    <div data-implan-documentation>
                             <h6 class="font-weight-bold mb-3">Documentation</h6>
 
                             @if ($implan->originalPhotos->isNotEmpty())
@@ -97,17 +76,6 @@
                                 <div class="border rounded p-3 mb-3" data-agency-documentation="{{ $agencyResponse->gov_agency_id }}">
                                     <div class="font-weight-bold mb-2">{{ $agencyAcronym }}</div>
 
-                                    @foreach ($documentation['files'] as $file)
-                                        <div class="border rounded p-2 mb-2" data-agency-attachment="{{ $agencyResponse->gov_agency_id }}">
-                                            <a href="{{ Storage::url($file->pdf) }}" target="_blank" rel="noopener" class="font-weight-medium">
-                                                {{ $file->file_name }}
-                                            </a>
-                                            <div class="small text-muted mt-1">
-                                                {{ $agencyAcronym }}@if (filled($file->description)) &middot; {{ $file->description }}@endif
-                                            </div>
-                                        </div>
-                                    @endforeach
-
                                     @if ($documentation['photos']->isNotEmpty())
                                         <div class="row g-2">
                                             @foreach ($documentation['photos'] as $photo)
@@ -126,7 +94,6 @@
                             @unless ($hasDocumentation)
                                 <p class="small text-muted mb-0" data-empty-documentation>No documentation uploaded.</p>
                             @endunless
-                        </div>
                     </div>
                 </div>
             </div>

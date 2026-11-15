@@ -141,10 +141,10 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
     Route::post('/implan', [Lgu\ImplanController::class, 'store'])->name('implan.store');
     Route::get('/implan/official', [Lgu\ImplanController::class, 'official'])->name('implan.official');
     Route::get('/implan/official/download', [Lgu\ImplanController::class, 'download'])->name('implan.download');
+    Route::get('/implan/{implan}/photos/{photo}', [Lgu\ImplanController::class, 'viewPhoto'])->name('implan.photos.show');
     Route::get('/implan/{implan}', [Lgu\ImplanController::class, 'show'])->name('implan.show');
     Route::put('/implan/{implan}', [Lgu\ImplanController::class, 'update'])->name('implan.update');
     Route::put('/implan/{implan}/implementation', [Lgu\ImplanController::class, 'updateImplementation'])->name('implan.implementation');
-    Route::post('/implan/{implan}/agenda', [Lgu\ImplanController::class, 'uploadAgenda'])->name('implan.agenda');
     Route::post('/implan/{implan}/submit', [Lgu\ImplanController::class, 'submit'])->name('implan.submit');
     Route::delete('/implan/{implan}', [Lgu\ImplanController::class, 'destroy'])->name('implan.destroy');
 });
@@ -153,12 +153,10 @@ Route::middleware(['auth', 'role:gov_agency'])->prefix('agency')->name('gov_agen
     Route::get('/', [GovAgency\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/implan', [GovAgency\ImplanController::class, 'index'])->name('implan.index');
     Route::get('/implan/municipalities/{municipality}', [GovAgency\ImplanController::class, 'municipality'])->name('implan.municipality');
-    Route::get('/implan/{implan}/files/{file}', [GovAgency\ImplanController::class, 'viewFile'])->name('implan.files.show');
     Route::get('/implan/{implan}/photos/{photo}', [GovAgency\ImplanController::class, 'viewPhoto'])->name('implan.photos.show');
     Route::get('/implan/{implan}', [GovAgency\ImplanController::class, 'show'])->name('implan.show');
     Route::post('/implan/{implan}/respond', [GovAgency\ImplanController::class, 'respond'])->name('implan.respond');
     Route::put('/implan/{implan}', [GovAgency\ImplanController::class, 'update'])->name('implan.update');
-    Route::post('/implan/{implan}/agenda', [GovAgency\ImplanController::class, 'uploadAgenda'])->name('implan.agenda');
     Route::post('/implan/{implan}/photos', [GovAgency\ImplanController::class, 'uploadPhoto'])->name('implan.photos');
 });
 

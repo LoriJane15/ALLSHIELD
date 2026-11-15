@@ -19,6 +19,13 @@
     .table th { font-weight: 600; background-color: #f8f9fa; }
     .table td, .table th { vertical-align: middle; border-bottom: 1px solid #dee2e6; }
     .table tbody tr:hover { background-color: #fff8e8; }
+    .implan-responsible-agencies { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; max-width:240px; }
+    .implan-responsible-agency {
+        display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px;
+        flex:0 0 34px; border:1px solid #e5e7eb; border-radius:.5rem; background:#fff;
+    }
+    .implan-responsible-agency img { width:28px; height:28px; object-fit:contain; }
+    .implan-responsible-agency-fallback { font-size:.65rem; font-weight:700; line-height:1; color:#5f6673; }
 </style>
 @endpush
 
@@ -58,27 +65,35 @@
                     </thead>
                     <tbody>
                         @forelse ($accepted as $row)
-                            <tr>
+                            <tr data-dashboard-implan="{{ $row->id }}">
                                 <td class="py-3"><div>{{ $row->issues ?: 'No issue specified' }}</div></td>
                                 <td class="py-3"><div>{{ $row->program ?: 'No program specified' }}</div></td>
                                 <td class="py-3">
-                                    <div class="d-flex gap-2">
+                                    <div class="implan-responsible-agencies">
                                         @forelse (($row->agencies ?? []) as $aid)
                                             @php $ag = $agenciesById[$aid] ?? null; @endphp
-                                            @if ($ag && $ag->profile)
-                                                <img src="{{ asset('assets/logoAgency/'.$ag->profile) }}"
-                                                     alt="{{ $ag->acronym }}" title="{{ $ag->acronym }}"
-                                                     style="width:40px;height:40px;object-fit:contain;"
-                                                     onerror="this.style.display='none'">
-                                            @elseif ($ag)
-                                                <span class="badge badge-secondary">{{ $ag->acronym }}</span>
+                                            @if ($ag)
+                                                <div class="implan-responsible-agency"
+                                                     data-responsible-agency="{{ $ag->id }}"
+                                                     title="{{ $ag->name }} ({{ $ag->acronym }})"
+                                                     aria-label="{{ $ag->name }} ({{ $ag->acronym }})">
+                                                    @if ($ag->profile)
+                                                        <img src="{{ asset('assets/logoAgency/'.$ag->profile) }}"
+                                                             alt="{{ $ag->name }} ({{ $ag->acronym }})"
+                                                             title="{{ $ag->name }} ({{ $ag->acronym }})">
+                                                    @else
+                                                        <span class="implan-responsible-agency-fallback" aria-hidden="true">
+                                                            {{ Str::upper(Str::substr($ag->acronym ?: $ag->name, 0, 4)) }}
+                                                        </span>
+                                                    @endif
+                                                </div>
                                             @endif
                                         @empty
                                             <div class="text-muted">—</div>
                                         @endforelse
                                     </div>
                                 </td>
-                                <td class="py-3"><div>{{ ucfirst($row->status ?? 'Pending') }}</div></td>
+                                <td class="py-3"><div>{{ ucfirst($responseStatuses[$row->id] ?? 'pending') }}</div></td>
                                 <td class="py-3">
                                     <a href="{{ route('gov_agency.implan.show', $row) }}" class="btn btn-warning btn-sm px-3">View</a>
                                 </td>

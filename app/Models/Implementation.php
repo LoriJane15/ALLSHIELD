@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,6 +24,32 @@ class Implementation extends Model
         ];
     }
 
+    public function scopeForMunicipality(Builder $query, int $municipalityId): Builder
+    {
+        return $query->whereHas(
+            'lguUser',
+            fn (Builder $userQuery) => $userQuery->where('municipality_id', $municipalityId)
+        );
+    }
+
+    public function scopeAssignedToAgency(Builder $query, int $agencyId): Builder
+    {
+        return $query->whereJsonContains('agencies', $agencyId);
+    }
+
+    public function scopeVisibleToAgency(Builder $query, int $agencyId): Builder
+    {
+        return $query->assignedToAgency($agencyId)
+            ->where('status', '!=', 'not yet started');
+    }
+
+    public function isAssignedToAgency(int $agencyId): bool
+    {
+        return collect($this->agencies ?? [])
+            ->map(fn ($assignedAgencyId) => (int) $assignedAgencyId)
+            ->contains($agencyId);
+    }
+
     public function lguUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'lgu_user_id');
@@ -31,16 +58,6 @@ class Implementation extends Model
     public function implementationPlan(): BelongsTo
     {
         return $this->belongsTo(ImplementationPlan::class);
-    }
-
-    public function files(): HasMany
-    {
-        return $this->hasMany(ImplementationFile::class);
-    }
-
-    public function originalFiles(): HasMany
-    {
-        return $this->hasMany(ImplementationFile::class)->whereNull('agency_implan_response_id');
     }
 
     public function photos(): HasMany
