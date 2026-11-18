@@ -8,11 +8,46 @@
         'submitted' => 'badge-info', 'for verification' => 'badge-info',
         'not yet started' => 'badge-danger', default => 'badge-secondary',
     };
+    $assignedAgencyIds = collect($implan->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId)->unique()->values();
+    $responseByAgency = $implan->responses->keyBy('gov_agency_id');
+    $firstAgencyId = $assignedAgencyIds->first();
 @endphp
 
 @push('styles')
 <style>
     .table td { word-wrap: break-word; white-space: normal; max-width: 220px; padding: 15px; }
+    .lgu-agency-implan-modal .modal-dialog { width: 96vw; max-width: 1700px; }
+    .lgu-agency-implan-modal .modal-body { max-height: 76vh; overflow-y: auto; }
+    .lgu-agency-implan-modal .nav-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+    .lgu-agency-implan-modal .nav-link { white-space: nowrap; }
+    .lgu-agency-implan-modal .agency-mov { display: flex; align-items: flex-start; justify-content: center; }
+    .lgu-agency-implan-modal .agency-mov-preview { display: inline-flex; align-items: flex-start; justify-content: center; max-width: 100%; padding: .5rem; border: 1px solid #dbe2ea; border-radius: .5rem; background: #f8fafc; }
+    .lgu-agency-implan-modal .agency-mov img { display: block; width: auto; height: auto; max-width: 100%; max-height: 520px; object-fit: contain; object-position: center; }
+    @media print {
+        .content-wrapper > :not(#agencyImplanResponsesModal) { display: none !important; }
+        .content-wrapper { padding: 0 !important; }
+        #agencyImplanResponsesModal { display: block !important; position: static !important; width: auto !important; height: auto !important; overflow: visible !important; padding: 0 !important; opacity: 1 !important; background: transparent !important; }
+        #agencyImplanResponsesModal .modal-dialog { width: 100% !important; max-width: none !important; height: auto !important; min-height: 0 !important; margin: 0 !important; transform: none !important; }
+        #agencyImplanResponsesModal .modal-content { border: 0 !important; box-shadow: none !important; overflow: visible !important; }
+        #agencyImplanResponsesModal .modal-body { max-height: none !important; overflow: visible !important; padding: 0 !important; }
+        #agencyImplanResponsesModal .modal-header,
+        #agencyImplanResponsesModal .modal-footer,
+        #agencyImplanResponsesModal .nav-tabs { display: none !important; }
+        #agencyImplanResponsesModal .tab-pane { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+        #agencyImplanResponsesModal .tab-pane.active { display: block !important; visibility: visible !important; opacity: 1 !important; }
+        #agencyImplanResponsesModal .tab-pane.active,
+        #agencyImplanResponsesModal .tab-pane.active * { visibility: visible !important; }
+        #agencyImplanResponsesModal .tab-pane.active > :not(.implan-official-document) { display: none !important; }
+        #agencyImplanResponsesModal .agency-response-heading,
+        #agencyImplanResponsesModal [data-agency-mov-gallery] { display: none !important; }
+        #agencyImplanResponsesModal .implan-official-document { position: static !important; inset: auto !important; width: 100% !important; }
+        #agencyImplanResponsesModal .implan-official-scroll { overflow: visible !important; }
+        #agencyImplanResponsesModal .implan-official-table { width: 100% !important; min-width: 0 !important; }
+        #agencyImplanResponsesModal .implan-official-table tr { break-inside: avoid; page-break-inside: avoid; }
+        #agencyImplanResponsesModal .implan-official-banner,
+        #agencyImplanResponsesModal .implan-official-table th,
+        #agencyImplanResponsesModal .implan-official-table td { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
 </style>
 @endpush
 
@@ -23,10 +58,7 @@
 
     <div class="row mb-4">
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
-            <h3 class="font-weight-bold">Implementation Plan</h3>
-            <h6 class="mb-0" style="color: rgba(156,156,156,1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">Manage implementation details</span> and documentation.
-            </h6>
+            <h3 class="font-weight-bold mb-0">Implementation Plan</h3>
         </div>
         <div class="col-4 col-xl-4">
             <div class="justify-content-end d-flex gap-2">
@@ -42,72 +74,50 @@
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-                <div><h5 class="mb-1">Official IMPLAN Format</h5><p class="text-muted mb-0">LGU original and responsible-agency responses.</p></div>
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()" data-print-implan><i class="mdi mdi-printer"></i> Print</button>
+    <div class="card mb-4 no-print" data-agency-response-summary>
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <h5 class="mb-2">{{ filled($implan->program) ? $implan->program : $implan->issues }}</h5>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-muted small">Responsible agencies</span>
+                    @forelse ($assignedAgencyIds as $agencyId)
+                        <span class="badge badge-secondary">{{ ($agenciesById[$agencyId] ?? null)?->acronym ?? "Agency #{$agencyId}" }}</span>
+                    @empty
+                        <span class="text-muted small">Not assigned</span>
+                    @endforelse
+                </div>
             </div>
-            @include('implan._official_format', [
-                'implans' => collect([$implan]),
-                'municipality' => $implan->lguUser?->municipality,
-                'areaNamesByImplan' => collect([$implan->id => $areaNames]),
-            ])
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#agencyImplanResponsesModal" @disabled($assignedAgencyIds->isEmpty())>
+                View Agency IMPLANs
+            </button>
         </div>
     </div>
 
     <div class="row">
-        {{-- LEFT: tabbed detail --}}
+        {{-- LEFT: implementation information --}}
         <div class="col-md-8">
             <div class="card">
                 <div class="card-body">
-                    <ul class="nav nav-tabs" role="tablist">
-                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button">Information</button></li>
-                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">Documentation</button></li>
-                    </ul>
-
-                    <div class="tab-content pt-3">
-                        {{-- Information --}}
-                        <div class="tab-pane fade show active" id="info" role="tabpanel">
-                            @if ($canManage)
-                                <div class="d-flex justify-content-end mb-3">
-                                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editImplanModal"><i class="mdi mdi-pencil"></i> Edit</button>
-                                </div>
-                            @endif
-                            <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
-                                        <tr><th>Expected Results/Outcome</th><th>Resources Needed<br>(Funding)</th><th>Support Needed</th><th>Duration</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr class="wrap">
-                                            <td>{{ $implan->outcome ?: '—' }}</td>
-                                            <td>{{ $implan->resources ?: '—' }}</td>
-                                            <td>{{ $implan->support ?: '—' }}</td>
-                                            <td>{{ $implan->duration ?: '—' }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {{-- Documentation (agency-uploaded, read-only) --}}
-                        <div class="tab-pane fade" id="monitoring" role="tabpanel">
-                            @if ($implan->photos->isNotEmpty())
-                                <div class="row g-2">
-                                    @foreach ($implan->photos as $photo)
-                                        <div class="col-4 col-sm-3">
-                                            <a href="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" target="_blank">
-                                                <img src="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
-                                            </a>
-                                            <div class="small text-center mt-1">{{ $photo->agencyResponse?->govAgency?->acronym ?? 'LGU original' }}</div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            @else
-                                <p class="text-muted">No documentation photos yet.</p>
-                            @endif
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Information</h5>
+                        @if ($canManage)
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editImplanModal"><i class="mdi mdi-pencil"></i> Edit</button>
+                        @endif
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr><th>Expected Results/Outcome</th><th>Resources Needed<br>(Funding)</th><th>Support Needed</th><th>Duration</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr class="wrap">
+                                    <td>{{ $implan->outcome ?: '—' }}</td>
+                                    <td>{{ $implan->resources ?: '—' }}</td>
+                                    <td>{{ $implan->support ?: '—' }}</td>
+                                    <td>{{ $implan->duration ?: '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -141,22 +151,113 @@
                         </div>
                     </div>
 
-                    <div>
-                        <p class="text-muted mb-2" style="font-size:.85rem;">Other Responsible Agency</p>
-                        <div class="d-flex flex-wrap gap-2">
-                            @forelse (($implan->agencies ?? []) as $aid)
-                                @php $ag = $agenciesById[$aid] ?? null; @endphp
-                                @if ($ag && $ag->profile)
-                                    <img src="{{ asset('assets/logoAgency/'.$ag->profile) }}" alt="{{ $ag->acronym }}" title="{{ $ag->acronym }}"
-                                         style="width:40px;height:40px;object-fit:contain;" onerror="this.style.display='none'">
-                                @elseif ($ag)
-                                    <span class="badge badge-secondary">{{ $ag->acronym }}</span>
-                                @endif
-                            @empty
-                                <span class="text-muted">—</span>
-                            @endforelse
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Agency-specific official IMPLAN responses --}}
+    <div class="modal fade lgu-agency-implan-modal" id="agencyImplanResponsesModal" tabindex="-1" aria-labelledby="agencyImplanResponsesTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h4 class="modal-title" id="agencyImplanResponsesTitle">Agency IMPLAN Responses</h4>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    @if ($assignedAgencyIds->isNotEmpty())
+                        <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Responsible agencies">
+                            @foreach ($assignedAgencyIds as $agencyId)
+                                @php
+                                    $agency = $agenciesById[$agencyId] ?? null;
+                                    $agencyAcronym = $agency?->acronym ?? "Agency #{$agencyId}";
+                                @endphp
+                                <li class="nav-item" role="presentation">
+                                    <button
+                                        class="nav-link {{ $loop->first ? 'active' : '' }}"
+                                        id="agency-implan-tab-{{ $agencyId }}"
+                                        data-bs-toggle="tab"
+                                        data-bs-target="#agency-implan-pane-{{ $agencyId }}"
+                                        data-agency-implan-tab
+                                        type="button"
+                                        role="tab"
+                                        aria-controls="agency-implan-pane-{{ $agencyId }}"
+                                        aria-selected="{{ $loop->first ? 'true' : 'false' }}">
+                                        {{ $agencyAcronym }}
+                                    </button>
+                                </li>
+                            @endforeach
+                        </ul>
+
+                        <div class="tab-content">
+                            @foreach ($assignedAgencyIds as $agencyId)
+                                @php
+                                    $agency = $agenciesById[$agencyId] ?? null;
+                                    $agencyAcronym = $agency?->acronym ?? "Agency #{$agencyId}";
+                                    $agencyResponse = $responseByAgency->get($agencyId);
+                                    $responseStatus = ucfirst($agencyResponse?->response_status ?? 'pending');
+                                    $responseBadge = match ($agencyResponse?->response_status) {
+                                        'accepted' => 'badge-success',
+                                        'rejected' => 'badge-danger',
+                                        default => 'badge-secondary',
+                                    };
+                                    $agencyMovs = $agencyResponse?->photos ?? collect();
+                                @endphp
+                                <section
+                                    class="tab-pane fade {{ $loop->first ? 'show active' : '' }}"
+                                    id="agency-implan-pane-{{ $agencyId }}"
+                                    role="tabpanel"
+                                    aria-labelledby="agency-implan-tab-{{ $agencyId }}"
+                                    data-agency-implan-pane>
+                                    <div class="agency-response-heading d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                                        <h5 class="mb-0">{{ $agencyAcronym }}</h5>
+                                        <span class="badge {{ $responseBadge }}">{{ $responseStatus }}</span>
+                                    </div>
+
+                                    @include('implan._official_format', [
+                                        'implans' => collect([$implan]),
+                                        'municipality' => $implan->lguUser?->municipality,
+                                        'areaNamesByImplan' => collect([$implan->id => $areaNames]),
+                                        'agenciesById' => $agenciesById,
+                                        'agencyScopeId' => $agencyId,
+                                        'showAgencyResponseAttribution' => false,
+                                        'showAllResponsibleAgencies' => true,
+                                        'emptyResponseValue' => 'Not yet submitted',
+                                    ])
+
+                                    <div class="mt-4" data-agency-mov-gallery>
+                                        <h6 class="font-weight-bold mb-3">Mode of Verification</h6>
+                                        @if ($agencyMovs->isNotEmpty())
+                                            <div class="row g-2">
+                                                @foreach ($agencyMovs as $photo)
+                                                    <div class="col-6 col-sm-4 col-lg-3 agency-mov">
+                                                        <a href="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" class="agency-mov-preview" target="_blank" rel="noopener" aria-label="Preview mode of verification">
+                                                            <img src="{{ route('lgu.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" alt="Mode of verification">
+                                                        </a>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <p class="text-muted mb-0">No mode of verification available.</p>
+                                        @endif
+                                    </div>
+                                </section>
+                            @endforeach
                         </div>
-                    </div>
+                    @else
+                        <p class="text-muted mb-0">No responsible agencies are assigned.</p>
+                    @endif
+                </div>
+                <div class="modal-footer">
+                    @if ($firstAgencyId)
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            id="printActiveAgencyImplan">
+                            <i class="mdi mdi-printer"></i> Print
+                        </button>
+                    @endif
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -220,3 +321,22 @@
 
     @endif
 @endsection
+
+@push('scripts')
+<script>
+    (function () {
+        const modal = document.getElementById('agencyImplanResponsesModal');
+        const printButton = document.getElementById('printActiveAgencyImplan');
+
+        if (!modal || !printButton || modal.dataset.printBinding === 'ready') {
+            return;
+        }
+
+        modal.dataset.printBinding = 'ready';
+
+        printButton.addEventListener('click', function () {
+            window.print();
+        });
+    })();
+</script>
+@endpush

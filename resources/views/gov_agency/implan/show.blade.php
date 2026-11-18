@@ -19,10 +19,7 @@
 @section('content')
     <div class="row mb-4">
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
-            <h3 class="font-weight-bold">Implementation Plan</h3>
-            <h6 class="mb-0" style="color: rgba(156,156,156,1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">Manage implementation details</span> and documentation.
-            </h6>
+            <h3 class="font-weight-bold mb-0">Implementation Plan</h3>
         </div>
         <div class="col-4 col-xl-4">
             <div class="justify-content-end d-flex">
@@ -57,15 +54,17 @@
     <div class="card mb-4">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-                <div><h5 class="mb-1">Official IMPLAN Format</h5><p class="text-muted mb-0">LGU baseline with attributed agency responses.</p></div>
+                <h5 class="mb-0">Official IMPLAN Format</h5>
                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()" data-print-implan><i class="mdi mdi-printer"></i> Print</button>
             </div>
             @include('implan._official_format', [
                 'implans' => collect([$implan->loadMissing('responses.govAgency')]),
                 'municipality' => $implan->lguUser?->municipality,
                 'areaNamesByImplan' => collect([$implan->id => $areaNames]),
-                'agenciesById' => collect([$agencyScopeId => $currentAgency]),
+                'agenciesById' => $responsibleAgenciesById,
                 'agencyScopeId' => $agencyScopeId,
+                'showAgencyResponseAttribution' => false,
+                'showAllResponsibleAgencies' => true,
             ])
         </div>
     </div>
@@ -77,7 +76,7 @@
                 <div class="card-body">
                     <ul class="nav nav-tabs" role="tablist">
                         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button">Information</button></li>
-                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">Documentation</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">Mode of Verification</button></li>
                     </ul>
 
                     <div class="tab-content pt-3">
@@ -103,24 +102,23 @@
                             </div>
                         </div>
 
-                        {{-- Documentation --}}
+                        {{-- Mode of Verification --}}
                         <div class="tab-pane fade" id="monitoring" role="tabpanel">
                             <div class="d-flex justify-content-end mb-3">
-                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addPhotoModal">Add Photo</button>
+                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addPhotoModal">Add MOV</button>
                             </div>
                             @if ($visiblePhotos->isNotEmpty())
                                 <div class="row g-2">
                                     @foreach ($visiblePhotos as $photo)
-                                        <div class="col-4 col-sm-3" data-agency-photo="{{ $agencyScopeId }}">
+                                        <div class="col-4 col-sm-3">
                                             <a href="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" target="_blank">
-                                                <img src="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="doc">
+                                                <img src="{{ route('gov_agency.implan.photos.show', [$implan, $photo]) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover;" alt="Mode of verification">
                                             </a>
-                                            <div class="small text-center mt-1">{{ $currentAgency?->acronym }}</div>
                                         </div>
                                     @endforeach
                                 </div>
                             @else
-                                <p class="text-muted">No photos uploaded for this implementation plan.</p>
+                                <p class="text-muted">No mode of verification available.</p>
                             @endif
                         </div>
                     </div>
@@ -211,25 +209,26 @@
         </div>
     </div>
 
-    {{-- Add Photo modal --}}
+    {{-- Add Mode of Verification modal --}}
     <div class="modal fade" id="addPhotoModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius:15px;overflow:hidden;">
                 <div class="modal-header" style="background-color:#35127d;height:8px;padding:.5rem;border:none;"></div>
                 <div class="modal-body">
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="float:right;"></button>
-                    <h3 style="color:#35127d;font-weight:bold;">Add Documentation Photo</h3>
-                    <p class="text-muted">Upload documentation photos</p>
+                    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                        <h3 class="mb-0" style="color:#35127d;font-weight:bold;">Add Mode of Verification</h3>
+                        <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                     <form method="POST" action="{{ route('gov_agency.implan.photos', $implan) }}" enctype="multipart/form-data">
                         @csrf
                         <div class="mb-3">
-                            <label class="form-label">Upload Photo</label>
-                            <input type="file" name="photos[]" class="form-control" accept=".jpg,.jpeg,.png,.gif" multiple required>
+                            <label class="form-label" for="implan-mov-files">Select file(s)</label>
+                            <input id="implan-mov-files" type="file" name="photos[]" class="form-control" accept=".jpg,.jpeg,.png,.gif" multiple required>
                             <small class="text-muted">Accepted formats: JPG, PNG, GIF</small>
                         </div>
                         <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Upload Photo</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-primary">Upload</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         </div>
                     </form>
                 </div>

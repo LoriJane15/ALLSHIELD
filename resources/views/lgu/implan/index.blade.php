@@ -85,7 +85,7 @@
                                 <th>Target Area</th>
                                 <th>Planned Schedule</th>
                                 <th>Overall Status</th>
-                                <th>Documentation Progress</th>
+                                <th>Mode of Verification Progress</th>
                                 <th>Last Updated</th>
                                 <th>Action</th>
                             </tr>
@@ -102,7 +102,7 @@
                                         @if (filled($im->duration))<div class="text-muted small">{{ $im->duration }}</div>@endif
                                     </td>
                                     <td><span class="badge rounded-pill {{ $badge($im->status) }}">{{ $im->status }}</span></td>
-                                    <td data-documentation-progress>{{ $im->documentation_submitted_count }} of {{ $im->responsible_agency_count }} responsible agencies submitted documentation</td>
+                                    <td data-documentation-progress>{{ $im->documentation_submitted_count }} of {{ $im->responsible_agency_count }} responsible agencies submitted MOV</td>
                                     <td>{{ $im->updated_at?->format('M d, Y g:i A') ?? '—' }}</td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">

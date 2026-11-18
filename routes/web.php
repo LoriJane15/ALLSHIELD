@@ -152,6 +152,7 @@ Route::middleware(['auth', 'role:lgu'])->prefix('lgu')->name('lgu.')->group(func
 Route::middleware(['auth', 'role:gov_agency'])->prefix('agency')->name('gov_agency.')->group(function () {
     Route::get('/', [GovAgency\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/implan', [GovAgency\ImplanController::class, 'index'])->name('implan.index');
+    Route::get('/implan/municipalities', [GovAgency\ImplanController::class, 'monitoring'])->name('implan.monitoring');
     Route::get('/implan/municipalities/{municipality}', [GovAgency\ImplanController::class, 'municipality'])->name('implan.municipality');
     Route::get('/implan/{implan}/photos/{photo}', [GovAgency\ImplanController::class, 'viewPhoto'])->name('implan.photos.show');
     Route::get('/implan/{implan}', [GovAgency\ImplanController::class, 'show'])->name('implan.show');

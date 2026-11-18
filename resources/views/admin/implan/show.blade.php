@@ -16,7 +16,7 @@
         <div class="col-8 col-xl-8 mb-3 mb-xl-0">
             <h3 class="font-weight-bold">Implementation Plan</h3>
             <h6 class="mb-0" style="color: rgba(156, 156, 156, 1); font-weight: 300;">
-                <span style="color: #280274; font-weight: bold;">RCSP implementation details</span> — information and documentation.
+                <span style="color: #280274; font-weight: bold;">RCSP implementation details</span> — information and mode of verification.
             </h6>
         </div>
         <div class="col-4 col-xl-4">
@@ -108,7 +108,7 @@
                             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab">Information</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button" role="tab">Documentation</button>
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#monitoring" type="button" role="tab">Mode of Verification</button>
                         </li>
                     </ul>
 
@@ -167,18 +167,18 @@
                             </div>
                         </div>
 
-                        {{-- Documentation --}}
+                        {{-- Mode of Verification --}}
                         <div class="tab-pane fade" id="monitoring" role="tabpanel">
                             <div class="p-2">
                                 @if ($implan->photos->isEmpty())
-                                    <p class="text-muted mb-0">No documentation photos.</p>
+                                    <p class="text-muted mb-0">No mode of verification available.</p>
                                 @else
                                     <div class="row g-2">
                                         @foreach ($implan->photos as $photo)
                                             <div class="col-4 col-sm-3">
                                                 <a href="{{ Storage::url($photo->image) }}" target="_blank">
                                                     <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded"
-                                                         style="height:100px;width:100%;object-fit:cover;" alt="doc">
+                                                         style="height:100px;width:100%;object-fit:cover;" alt="Mode of verification">
                                                 </a>
                                             </div>
                                         @endforeach

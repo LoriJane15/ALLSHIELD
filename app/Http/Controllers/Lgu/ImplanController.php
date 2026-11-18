@@ -90,14 +90,12 @@ class ImplanController extends Controller
     {
         $this->authorizeMunicipality($implan);
         $implan->load([
-            'photos.agencyResponse.govAgency',
             'responses.govAgency', 'responses.photos',
         ]);
 
         return view('lgu.implan.show', [
             'implan' => $implan,
             'areaNames' => $this->areaNames($implan->target_areas ?? []),
-            'agencyNames' => GovAgency::whereIn('id', $implan->agencies ?? [])->pluck('acronym'),
             'agenciesById' => GovAgency::all()->keyBy('id'),
             'canManage' => $implan->lgu_user_id === auth()->id(),
         ]);
@@ -112,22 +110,60 @@ class ImplanController extends Controller
         return Storage::disk('public')->response($photo->image, basename($photo->image));
     }
 
-    public function official(): View
+    public function official(Request $request): View
     {
         $municipality = auth()->user()->municipality;
         abort_unless($municipality, 404, 'No municipality is assigned to this LGU account.');
 
-        $implans = $this->submittedMunicipalityImplans($municipality);
+        if ($request->hasAny(['implan', 'agency'])) {
+            $data = $request->validate([
+                'implan' => ['required', 'integer'],
+                'agency' => ['required', 'integer'],
+                'print' => ['nullable', 'boolean'],
+            ]);
+
+            $implan = Implementation::findOrFail($data['implan']);
+            $this->authorizeMunicipality($implan);
+            abort_unless($implan->isAssignedToAgency((int) $data['agency']), 403);
+
+            $agency = GovAgency::findOrFail($data['agency']);
+            $implan->load([
+                'lguUser.municipality',
+                'responses' => fn ($query) => $query
+                    ->where('gov_agency_id', $agency->id)
+                    ->with('govAgency'),
+            ]);
+
+            return view('lgu.implan.official', [
+                'municipality' => $municipality,
+                'implans' => collect([$implan]),
+                'agenciesById' => collect([$agency->id => $agency]),
+                'areaNamesByImplan' => collect([$implan->id => $this->areaNames($implan->target_areas ?? [])]),
+                'agencyScopeId' => $agency->id,
+                'showAgencyResponseAttribution' => false,
+                'emptyResponseValue' => 'Not yet submitted',
+            ]);
+        }
+
+        $implans = $this->submittedMunicipalityImplans($municipality, includeResponses: false);
 
         return view('lgu.implan.official', $this->officialViewData($municipality, $implans));
     }
 
-    public function download(ImplanWorkbookExporter $exporter): StreamedResponse
+    public function download(Request $request, ImplanWorkbookExporter $exporter): StreamedResponse
     {
         $municipality = auth()->user()->municipality;
         abort_unless($municipality, 404, 'No municipality is assigned to this LGU account.');
 
-        return $exporter->download($municipality, $this->submittedMunicipalityImplans($municipality));
+        $data = $request->validate([
+            'agency' => ['required', 'integer', 'exists:gov_agencies,id'],
+        ]);
+        $agency = GovAgency::findOrFail($data['agency']);
+        $implans = $this->submittedMunicipalityImplans($municipality, $agency->id);
+
+        abort_if($implans->isEmpty(), 403);
+
+        return $exporter->download($municipality, $implans, $agency);
     }
 
     public function update(Request $request, Implementation $implan): RedirectResponse
@@ -213,15 +249,23 @@ class ImplanController extends Controller
             ->map(fn ($r) => $r->barangay?->name ?? "Barangay #{$r->barangay_id}");
     }
 
-    private function submittedMunicipalityImplans(Municipality $municipality): EloquentCollection
-    {
+    private function submittedMunicipalityImplans(
+        Municipality $municipality,
+        ?int $agencyId = null,
+        bool $includeResponses = true
+    ): EloquentCollection {
+        $relations = ['lguUser.municipality'];
+        if ($includeResponses) {
+            $relations['responses'] = fn ($query) => $query
+                ->when($agencyId !== null, fn ($responseQuery) => $responseQuery->where('gov_agency_id', $agencyId))
+                ->with('govAgency');
+        }
+
         return Implementation::query()
             ->whereHas('lguUser', fn ($query) => $query->where('municipality_id', $municipality->id))
             ->where('status', '!=', 'not yet started')
-            ->with([
-                'lguUser.municipality',
-                'responses.govAgency', 'responses.photos',
-            ])
+            ->when($agencyId !== null, fn ($query) => $query->assignedToAgency($agencyId))
+            ->with($relations)
             ->oldest('uploaded_at')
             ->oldest('id')
             ->get();
@@ -229,13 +273,35 @@ class ImplanController extends Controller
 
     private function officialViewData(Municipality $municipality, EloquentCollection $implans): array
     {
+        $assignedAgencyIds = $implans
+            ->flatMap(fn (Implementation $implan) => collect($implan->agencies ?? [])->map(fn ($id) => (int) $id))
+            ->filter()
+            ->unique()
+            ->values();
+        $agenciesById = GovAgency::query()->whereIn('id', $assignedAgencyIds)->get()->keyBy('id');
+        $areaNamesByImplan = $implans->mapWithKeys(fn (Implementation $implan) => [
+            $implan->id => $this->areaNames($implan->target_areas ?? []),
+        ]);
+        $agencyTabs = $assignedAgencyIds
+            ->map(function (int $agencyId) use ($agenciesById, $areaNamesByImplan, $municipality): ?array {
+                $agency = $agenciesById->get($agencyId);
+                if (! $agency) {
+                    return null;
+                }
+
+                return [
+                    'agency' => $agency,
+                    'implans' => $this->submittedMunicipalityImplans($municipality, $agencyId),
+                    'areaNamesByImplan' => $areaNamesByImplan,
+                ];
+            })
+            ->filter()
+            ->values();
+
         return [
             'municipality' => $municipality,
-            'implans' => $implans,
-            'agenciesById' => GovAgency::all()->keyBy('id'),
-            'areaNamesByImplan' => $implans->mapWithKeys(fn (Implementation $implan) => [
-                $implan->id => $this->areaNames($implan->target_areas ?? []),
-            ]),
+            'agencyTabs' => $agencyTabs,
+            'agenciesById' => $agenciesById,
         ];
     }
 

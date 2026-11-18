@@ -1,6 +1,8 @@
 @php
     $implans = $implans ?? collect([$implan]);
     $areaNamesByImplan = $areaNamesByImplan ?? collect();
+    $showAgencyResponseAttribution = $showAgencyResponseAttribution ?? true;
+    $showAllResponsibleAgencies = $showAllResponsibleAgencies ?? false;
 @endphp
 
 @once
@@ -27,6 +29,7 @@
             .implan-official-table th:nth-child(11) { width:14.78%; }
             .implan-response-label { display:block; color:#1f497d; font-size:.72rem; font-weight:700; margin-bottom:2px; }
             .implan-response-block + .implan-response-block { margin-top:8px; padding-top:8px; border-top:1px solid rgba(0,0,0,.22); }
+            .implan-responsible-agencies { font-weight:400; white-space:normal; overflow-wrap:anywhere; }
             @media print {
                 @page { size:landscape; margin:8mm; }
                 body { background:#fff !important; }
@@ -73,14 +76,22 @@
             <tbody>
                 @forelse ($implans as $row)
                     @php
-                        $visibleAgencyIds = collect($row->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId);
+                        $assignedAgencyIds = collect($row->agencies ?? [])->map(fn ($agencyId) => (int) $agencyId);
+                        $responseAgencyIds = $assignedAgencyIds;
                         if (isset($agencyScopeId)) {
-                            $visibleAgencyIds = $visibleAgencyIds->filter(
+                            $responseAgencyIds = $responseAgencyIds->filter(
                                 fn ($agencyId) => $agencyId === (int) $agencyScopeId
                             );
                         }
+                        $responsibleAgencyIds = $showAllResponsibleAgencies ? $assignedAgencyIds : $responseAgencyIds;
+                        $responsibleAgencyLabels = $responsibleAgencyIds->map(function ($agencyId) use ($agenciesById) {
+                            $assignedAgency = $agenciesById[$agencyId] ?? null;
+
+                            return $assignedAgency?->acronym
+                                ?: ($assignedAgency?->name ?: 'Agency unavailable');
+                        });
                         $responseByAgency = $row->responses->keyBy('gov_agency_id');
-                        $responses = $visibleAgencyIds
+                        $responses = $responseAgencyIds
                             ->map(fn ($agencyId) => $responseByAgency->get((int) $agencyId))
                             ->filter();
                         $rowAreaNames = $areaNamesByImplan[$row->id] ?? collect();
@@ -92,24 +103,30 @@
                         <td data-lgu-original="beneficiaries">{{ filled($row->beneficiaries) ? $row->beneficiaries : '—' }}</td>
                         <td data-lgu-original="outcome">{{ filled($row->outcome) ? $row->outcome : '—' }}</td>
                         <td data-lgu-original="agencies">
-                            @forelse ($visibleAgencyIds as $agencyId)
-                                @php
-                                    $assignedAgency = $agenciesById[$agencyId] ?? null;
-                                    $assignedResponse = $responseByAgency[$agencyId] ?? null;
-                                    $assignedStatus = ucfirst($assignedResponse?->response_status ?? 'pending');
-                                @endphp
-                                <div class="implan-response-block" data-responsible-agency="{{ $agencyId }}">
-                                    <strong>{{ $assignedAgency?->acronym ?? "Agency #{$agencyId}" }} ({{ $assignedStatus }})</strong>
-                                </div>
-                            @empty
-                                —
-                            @endforelse
+                            @if ($showAllResponsibleAgencies)
+                                <span class="implan-responsible-agencies" data-responsible-agencies>{{ $responsibleAgencyLabels->join(', ') ?: '—' }}</span>
+                            @else
+                                @forelse ($responsibleAgencyIds as $agencyId)
+                                    @php
+                                        $assignedAgency = $agenciesById[$agencyId] ?? null;
+                                        $assignedResponse = $responseByAgency[$agencyId] ?? null;
+                                        $assignedStatus = ucfirst($assignedResponse?->response_status ?? 'pending');
+                                    @endphp
+                                    <div class="implan-response-block" data-responsible-agency="{{ $agencyId }}">
+                                        <strong>
+                                            {{ $assignedAgency?->acronym ?? "Agency #{$agencyId}" }}@if ($showAgencyResponseAttribution) ({{ $assignedStatus }})@endif
+                                        </strong>
+                                    </div>
+                                @empty
+                                    —
+                                @endforelse
+                            @endif
                         </td>
                         <td data-lgu-original="resources">{{ filled($row->resources) ? $row->resources : '—' }}</td>
                         <td data-lgu-original="support">{{ filled($row->support) ? $row->support : '—' }}</td>
                         <td data-lgu-original="duration">{{ filled($row->duration) ? $row->duration : '—' }}</td>
-                        <td>@include('implan._response_value', ['field' => 'action_taken', 'original' => null, 'responses' => $responses])</td>
-                        <td>@include('implan._response_value', ['field' => 'remarks', 'original' => null, 'responses' => $responses])</td>
+                        <td>@include('implan._response_value', ['field' => 'action_taken', 'original' => null, 'responses' => $responses, 'showAgencyResponseAttribution' => $showAgencyResponseAttribution, 'emptyResponseValue' => $emptyResponseValue ?? '—'])</td>
+                        <td>@include('implan._response_value', ['field' => 'remarks', 'original' => null, 'responses' => $responses, 'showAgencyResponseAttribution' => $showAgencyResponseAttribution, 'emptyResponseValue' => $emptyResponseValue ?? '—'])</td>
                     </tr>
                 @empty
                     <tr><td colspan="11" class="text-center">No submitted IMPLAN records for this municipality.</td></tr>

@@ -23,20 +23,28 @@ class ImplanWorkbookExporter
 
     private const LOGO = 'assets/IMPLANs/ELCAC.png';
 
-    public function download(Municipality $municipality, Collection $implans): StreamedResponse
-    {
-        $spreadsheet = $this->build($municipality, $implans);
+    public function download(
+        Municipality $municipality,
+        Collection $implans,
+        ?GovAgency $agency = null
+    ): StreamedResponse {
+        $spreadsheet = $this->build($municipality, $implans, $agency?->id);
         $safeName = preg_replace('/[^A-Za-z0-9_-]+/', '-', $municipality->name) ?: 'Municipality';
+        $filename = "IMPLAN-{$safeName}.xlsx";
+        if ($agency) {
+            $safeAgency = preg_replace('/[^A-Za-z0-9_-]+/', '-', $agency->acronym ?: $agency->name) ?: 'Agency';
+            $filename = mb_strtolower("{$safeName}-implan-{$safeAgency}.xlsx");
+        }
 
         return response()->streamDownload(function () use ($spreadsheet): void {
             (new Xlsx($spreadsheet))->save('php://output');
             $spreadsheet->disconnectWorksheets();
-        }, "IMPLAN-{$safeName}.xlsx", [
+        }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 
-    public function build(Municipality $municipality, Collection $implans): Spreadsheet
+    public function build(Municipality $municipality, Collection $implans, ?int $agencyScopeId = null): Spreadsheet
     {
         $templatePath = public_path(self::TEMPLATE);
         abort_unless(is_file($templatePath), 500, 'The official IMPLAN workbook template is missing.');
@@ -57,7 +65,7 @@ class ImplanWorkbookExporter
             ->get()
             ->keyBy('id');
         foreach ($implans->values() as $index => $implan) {
-            $this->writeImplanRow($sheet, 5 + $index, $implan, $areaNames, $agenciesById);
+            $this->writeImplanRow($sheet, 5 + $index, $implan, $areaNames, $agenciesById, $agencyScopeId);
         }
 
         $lastRow = max(5, 4 + $implans->count());
@@ -163,7 +171,7 @@ class ImplanWorkbookExporter
         $sheet->getRowDimension(1)->setRowHeight(15);
         $sheet->getRowDimension(2)->setRowHeight(63.8);
 
-        $drawing = new Drawing();
+        $drawing = new Drawing;
         $drawing->setName('ELCAC Logo');
         $drawing->setDescription('Ending Local Communist Armed Conflict logo');
         $drawing->setPath(public_path(self::LOGO));
@@ -177,18 +185,25 @@ class ImplanWorkbookExporter
         int $row,
         Implementation $implan,
         Collection $areaNames,
-        Collection $agenciesById
-    ): void
-    {
-        $agencyNames = collect($implan->agencies ?? [])->map(function ($agencyId) use ($implan, $agenciesById): string {
+        Collection $agenciesById,
+        ?int $agencyScopeId = null
+    ): void {
+        $agencyNames = collect($implan->agencies ?? [])->map(function ($agencyId) use (
+            $implan,
+            $agenciesById,
+            $agencyScopeId
+        ): string {
+            $agency = $agenciesById->get((int) $agencyId);
+            $name = $agency?->acronym ?: ($agency?->name ?: 'Agency unavailable');
+            if ($agencyScopeId !== null) {
+                return $name;
+            }
+
             $response = $implan->responses->firstWhere('gov_agency_id', (int) $agencyId);
-            $name = $response?->govAgency?->acronym
-                ?? $agenciesById->get((int) $agencyId)?->acronym
-                ?? "Agency #{$agencyId}";
             $status = ucfirst($response?->response_status ?? 'pending');
 
             return "{$name} ({$status})";
-        })->implode("\n");
+        })->implode($agencyScopeId !== null ? ', ' : "\n");
 
         $sheet->fromArray([
             $implan->issues,
@@ -200,13 +215,19 @@ class ImplanWorkbookExporter
             $implan->resources,
             $implan->support,
             $implan->duration,
-            $this->responseValue($implan, 'action_taken'),
-            $this->responseValue($implan, 'remarks'),
+            $this->responseValue($implan, 'action_taken', $agencyScopeId),
+            $this->responseValue($implan, 'remarks', $agencyScopeId),
         ], null, "A{$row}");
     }
 
-    private function responseValue(Implementation $implan, string $field): string
+    private function responseValue(Implementation $implan, string $field, ?int $agencyScopeId = null): string
     {
+        if ($agencyScopeId !== null) {
+            $response = $implan->responses->firstWhere('gov_agency_id', $agencyScopeId);
+
+            return filled($response?->{$field}) ? (string) $response->{$field} : '';
+        }
+
         $values = collect();
 
         $responsesByAgency = $implan->responses->keyBy('gov_agency_id');

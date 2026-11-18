@@ -62,10 +62,25 @@ class ImplanMunicipalityMonitoringTest extends TestCase
         $this->implan('Padada', 'Padada DOH row', ['DOH'], 'ongoing');
         $this->implan('Matanao', 'Matanao DSWD row', ['DSWD']);
 
-        $this->actingAs($this->agencyUsers['DILG'])
+        $index = $this->actingAs($this->agencyUsers['DILG'])
             ->get(route('gov_agency.implan.index'))
             ->assertOk()
             ->assertSee('Municipality IMPLAN Monitoring')
+            ->assertSee('Open Monitoring')
+            ->assertSee(route('gov_agency.implan.monitoring'), false)
+            ->assertDontSee('data-municipality-monitoring-list', false)
+            ->assertDontSee('data-monitoring-municipality', false)
+            ->assertDontSee('2 IMPLANs')
+            ->assertDontSee('1 IMPLAN')
+            ->assertDontSee('Sulop DSWD row')
+            ->assertDontSee('Sulop DOH row')
+            ->assertDontSee('Sulop draft row');
+
+        $this->assertSame(1, substr_count($index->getContent(), 'data-open-monitoring'));
+
+        $this->actingAs($this->agencyUsers['DILG'])
+            ->get(route('gov_agency.implan.monitoring'))
+            ->assertOk()
             ->assertSee('Sulop')
             ->assertSee('2 IMPLANs')
             ->assertSee('Padada')
@@ -81,10 +96,55 @@ class ImplanMunicipalityMonitoringTest extends TestCase
         $this->implan('Sulop', 'DILG private action', ['DILG']);
 
         $this->actingAs($this->agencyUsers['DENR'])
-            ->get(route('gov_agency.implan.index'))
+            ->get(route('gov_agency.implan.monitoring'))
             ->assertOk()
-            ->assertSee('No IMPLAN actions are currently assigned to your agency.')
+            ->assertSee('No municipality IMPLANs are currently assigned to your agency.')
+            ->assertSee('data-monitoring-empty', false)
             ->assertDontSee('DILG private action');
+    }
+
+    public function test_monitoring_index_paginates_unique_eligible_municipalities(): void
+    {
+        for ($number = 1; $number <= 11; $number++) {
+            $name = sprintf('Agency Municipality %02d', $number);
+            $municipality = Municipality::create(compact('name'));
+            $lgu = User::factory()->lgu($municipality->id)->create();
+            foreach (['submitted', 'ongoing'] as $status) {
+                Implementation::create([
+                    'lgu_user_id' => $lgu->id,
+                    'uploaded_at' => now()->subDays($number)->toDateString(),
+                    'issues' => "{$name} {$status} action",
+                    'target_areas' => [],
+                    'agencies' => [$this->agencies['DILG']->id],
+                    'status' => $status,
+                ]);
+            }
+        }
+
+        $firstPage = $this->actingAs($this->agencyUsers['DILG'])
+            ->get(route('gov_agency.implan.monitoring'))
+            ->assertOk()
+            ->assertViewHas('municipalities', fn ($municipalities) => $municipalities->perPage() === 10
+                && $municipalities->total() === 11
+                && $municipalities->count() === 10)
+            ->assertSee('Agency Municipality 01')
+            ->assertSee('Agency Municipality 10')
+            ->assertDontSee('Agency Municipality 11');
+
+        $document = new DOMDocument;
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML($firstPage->getContent());
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $xpath = new DOMXPath($document);
+        $this->assertSame(10, $xpath->query('//*[@data-monitoring-municipality]')->count());
+        $this->assertSame(10, $xpath->query('//*[@data-monitoring-count="2"]')->count());
+
+        $this->actingAs($this->agencyUsers['DILG'])
+            ->get(route('gov_agency.implan.monitoring', ['page' => 2]))
+            ->assertOk()
+            ->assertSee('Agency Municipality 11')
+            ->assertDontSee('Agency Municipality 01');
     }
 
     public function test_monitoring_displays_only_assigned_municipality_rows_and_current_agency_response(): void
@@ -126,11 +186,14 @@ class ImplanMunicipalityMonitoringTest extends TestCase
             ->assertDontSee('C - DOH issue')
             ->assertDontSee($draft->issues)
             ->assertDontSee('Other municipality row')
-            ->assertSee('DILG (Accepted)')
-            ->assertSee('DILG — Conducted coordination')
-            ->assertSee('DILG — Awaiting confirmation')
-            ->assertDontSee('DSWD — Validated beneficiaries')
-            ->assertDontSee('DOH — Medical team unavailable')
+            ->assertSee('DILG, DSWD')
+            ->assertDontSee('DILG (Accepted)')
+            ->assertSee('Conducted coordination')
+            ->assertSee('Awaiting confirmation')
+            ->assertDontSee('DILG — Conducted coordination')
+            ->assertDontSee('DILG — Awaiting confirmation')
+            ->assertDontSee('Validated beneficiaries')
+            ->assertDontSee('Medical team unavailable')
             ->assertSee('data-official-implan', false)
             ->assertSee('data-print-implan', false)
             ->assertDontSee('<textarea', false)
@@ -145,8 +208,73 @@ class ImplanMunicipalityMonitoringTest extends TestCase
         $xpath = new DOMXPath($document);
 
         $this->assertSame(2, $xpath->query('//*[@data-official-implan]//*[@data-implementation-row]')->count());
+        $this->assertSame(1, $xpath->query('//*[@data-official-implan]//table')->count());
+        $this->assertSame(1, $xpath->query('//*[@data-monitoring-detail]//*[@class="implan-official-scroll"]')->count());
         $this->assertSame(0, $xpath->query('//*[@data-official-implan]//form')->count());
         $this->assertSame(0, $xpath->query('//*[@data-official-implan]//button')->count());
+        $headings = [];
+        foreach ($xpath->query('//*[@data-official-implan]//thead/tr/th') as $heading) {
+            $headings[] = trim(preg_replace('/\s+/', ' ', $heading->textContent));
+        }
+        $this->assertSame([
+            'Issues and Concerns to be Addressed',
+            'Program/Project/Activity',
+            'Target Area',
+            'Target Beneficiaries',
+            'Expected Results/Outcome',
+            'Responsible Agency',
+            'Resources Needed (Funding)',
+            'Support Needed',
+            'Duration',
+            'Action Taken',
+            'Remarks',
+        ], $headings);
+
+        $sharedAgencyCell = $xpath->query('//*[@data-implementation-row="'.$rowD->id.'"]//*[@data-responsible-agencies]')->item(0);
+        $this->assertNotNull($sharedAgencyCell);
+        $this->assertSame('DILG, DSWD', trim($sharedAgencyCell->textContent));
+        $this->assertSame(0, $xpath->query('.//strong|.//b|.//*[contains(concat(" ", normalize-space(@class), " "), " badge ")]', $sharedAgencyCell)->count());
+
+        $source = file_get_contents(resource_path('views/gov_agency/implan/municipality.blade.php'));
+        $this->assertIsString($source);
+        $printStart = strrpos($source, '@media print');
+        $this->assertNotFalse($printStart);
+        $screenCss = substr($source, 0, $printStart);
+        $printCss = substr($source, $printStart);
+
+        $this->assertStringContainsString('overflow-x:auto', $screenCss);
+        $this->assertStringContainsString('width:2100px', $screenCss);
+        $this->assertStringContainsString('min-width:2100px', $screenCss);
+        $this->assertStringContainsString('@page { size:A4 landscape; margin:8mm; }', $printCss);
+        $this->assertStringContainsString('width:100% !important', $printCss);
+        $this->assertStringContainsString('min-width:0 !important', $printCss);
+        $this->assertStringContainsString('max-width:100% !important', $printCss);
+        $this->assertStringContainsString('table-layout:fixed !important', $printCss);
+        $this->assertStringContainsString('border-collapse:collapse !important', $printCss);
+        $this->assertStringContainsString('overflow:visible !important', $printCss);
+        $this->assertStringContainsString('scrollbar-width:none', $printCss);
+        $this->assertStringContainsString('::-webkit-scrollbar', $printCss);
+        $this->assertStringContainsString('white-space:normal !important', $printCss);
+        $this->assertStringContainsString('overflow-wrap:anywhere', $printCss);
+        $this->assertStringContainsString('word-break:normal', $printCss);
+        $this->assertStringContainsString('height:auto !important', $printCss);
+        $this->assertStringContainsString('display:table-header-group', $printCss);
+        $this->assertStringContainsString('break-inside:avoid', $printCss);
+        $this->assertStringContainsString('page-break-inside:avoid', $printCss);
+        $this->assertStringContainsString('-webkit-print-color-adjust:exact', $printCss);
+        $this->assertStringContainsString('print-color-adjust:exact', $printCss);
+        $this->assertStringContainsString('.content-wrapper > :not(.gov-agency-monitoring-detail)', $printCss);
+        $this->assertStringContainsString('.gov-agency-monitoring-detail > .no-print', $printCss);
+
+        preg_match_all('/th:nth-child\((\d+)\),\s*\R\s*\.gov-agency-monitoring-detail \.implan-official-table td:nth-child\(\1\) \{ width:(\d+)% !important; \}/', $printCss, $printWidths, PREG_SET_ORDER);
+        $this->assertCount(11, $printWidths);
+        $this->assertSame(100, array_sum(array_map(fn (array $match) => (int) $match[2], $printWidths)));
+        $this->assertStringContainsString('onclick="window.print()"', $source);
+        $this->assertStringContainsString('scrollContainer.scrollLeft = 0', $source);
+        $this->assertStringNotContainsString('window.open', $source);
+        $this->assertStringNotContainsString('<iframe', $source);
+        $this->assertStringNotContainsString('target="_blank"', $source);
+        $this->assertStringNotContainsString('window.location', $source);
     }
 
     public function test_monitoring_eligibility_does_not_weaken_assigned_record_authorization(): void
@@ -282,7 +410,7 @@ class ImplanMunicipalityMonitoringTest extends TestCase
             ->assertSee('Shared Sulop municipal action')
             ->assertDontSee('Private Matanao action')
             ->assertSee('Responsible Agency/Agencies')
-            ->assertSee('0 of 2 responsible agencies submitted documentation');
+            ->assertSee('0 of 2 responsible agencies submitted MOV');
         $this->actingAs($this->lguUsers['Sulop'])
             ->get(route('lgu.implan.show', $municipalAction))->assertOk()
             ->assertDontSee(route('lgu.implan.destroy', $municipalAction), false);

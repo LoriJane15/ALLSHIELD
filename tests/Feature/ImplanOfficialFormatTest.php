@@ -44,12 +44,34 @@ class ImplanOfficialFormatTest extends TestCase
 
     public function test_municipality_output_has_exact_official_headings_print_logo_and_one_record_per_row(): void
     {
-        foreach (['Sulop A', 'Sulop B', 'Sulop C'] as $issue) {
-            $this->createImplan($this->sulopLgu, $issue);
-        }
+        $doh = GovAgency::create(['name' => 'Department of Health', 'acronym' => 'DOH']);
+        $dswd = GovAgency::create(['name' => 'Department of Social Welfare and Development', 'acronym' => 'DSWD']);
+        $denr = GovAgency::create(['name' => 'Department of Environment and Natural Resources', 'acronym' => 'DENR']);
+        $sulopA = $this->createImplan($this->sulopLgu, 'Sulop A');
+        $sulopA->update(['agencies' => [$this->agency->id, $doh->id]]);
+        $sulopB = $this->createImplan($this->sulopLgu, 'Sulop B');
+        $sulopB->update(['agencies' => [$this->agency->id, $this->agency->id]]);
+        $sulopC = $this->createImplan($this->sulopLgu, 'Sulop C');
+        $sulopC->update(['agencies' => [$dswd->id]]);
         $this->createImplan($this->sulopLgu, 'Sulop draft', 'not yet started');
-        $this->createImplan($this->matanaoLgu, 'Matanao D');
+        $matanao = $this->createImplan($this->matanaoLgu, 'Matanao D');
+        $matanao->update(['agencies' => [$denr->id]]);
         $this->createImplan($this->matanaoLgu, 'Matanao E');
+
+        foreach ([
+            [$sulopA, $this->agency, 'DILG action A', 'DILG remarks A'],
+            [$sulopA, $doh, 'DOH action A', 'DOH remarks A'],
+            [$sulopB, $this->agency, 'DILG action B', 'DILG remarks B'],
+            [$sulopC, $dswd, 'DSWD action C', 'DSWD remarks C'],
+        ] as [$implan, $agency, $actionTaken, $remarks]) {
+            AgencyImplanResponse::create([
+                'implementation_id' => $implan->id,
+                'gov_agency_id' => $agency->id,
+                'response_status' => 'accepted',
+                'action_taken' => $actionTaken,
+                'remarks' => $remarks,
+            ]);
+        }
 
         $response = $this->actingAs($this->sulopLgu)->get(route('lgu.implan.official'))
             ->assertOk()
@@ -57,7 +79,10 @@ class ImplanOfficialFormatTest extends TestCase
             ->assertDontSee('Sulop draft')->assertDontSee('Matanao D')
             ->assertSee('data-print-implan', false)
             ->assertSee('assets/IMPLANs/ELCAC.png', false)
-            ->assertSee('data-download-implan', false);
+            ->assertSee('data-download-implan', false)
+            ->assertSee('Download XLSX')
+            ->assertDontSee('Download XLXS')
+            ->assertDontSee('DENR');
 
         $document = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
@@ -66,8 +91,49 @@ class ImplanOfficialFormatTest extends TestCase
         libxml_use_internal_errors($previous);
         $xpath = new DOMXPath($document);
 
+        $tabs = [];
+        foreach ($xpath->query('//*[@data-official-agency-tab]') as $tab) {
+            $tabs[] = trim($tab->textContent);
+        }
+        $this->assertSame(['DILG', 'DOH', 'DSWD'], $tabs);
+        $this->assertSame(3, $xpath->query('//*[@data-official-agency-tab]')->count());
+        $this->assertSame(1, $xpath->query('//*[@data-official-agency-tab and contains(concat(" ", normalize-space(@class), " "), " active ")]')->count());
+        $this->assertSame(3, $xpath->query('//*[@data-official-agency-pane]')->count());
+
+        $dilgPane = $xpath->query('//*[@data-official-agency-pane="'.$this->agency->id.'"]')->item(0);
+        $dohPane = $xpath->query('//*[@data-official-agency-pane="'.$doh->id.'"]')->item(0);
+        $dswdPane = $xpath->query('//*[@data-official-agency-pane="'.$dswd->id.'"]')->item(0);
+        $this->assertNotNull($dilgPane);
+        $this->assertNotNull($dohPane);
+        $this->assertNotNull($dswdPane);
+        $this->assertSame(2, $xpath->query('.//*[@data-implementation-row]', $dilgPane)->count());
+        $this->assertSame(1, $xpath->query('.//*[@data-implementation-row]', $dohPane)->count());
+        $this->assertSame(1, $xpath->query('.//*[@data-implementation-row]', $dswdPane)->count());
+        $this->assertStringContainsString('Sulop A', $dilgPane->textContent);
+        $this->assertStringContainsString('Sulop B', $dilgPane->textContent);
+        $this->assertStringNotContainsString('Sulop C', $dilgPane->textContent);
+        $this->assertStringContainsString('Sulop A', $dohPane->textContent);
+        $this->assertStringNotContainsString('Sulop B', $dohPane->textContent);
+        $this->assertStringContainsString('Sulop C', $dswdPane->textContent);
+
+        $this->assertStringContainsString('DILG action A', $dilgPane->textContent);
+        $this->assertStringContainsString('DILG remarks A', $dilgPane->textContent);
+        $this->assertStringNotContainsString('DOH action A', $dilgPane->textContent);
+        $this->assertStringNotContainsString('DOH remarks A', $dilgPane->textContent);
+        $this->assertStringContainsString('DOH action A', $dohPane->textContent);
+        $this->assertStringContainsString('DOH remarks A', $dohPane->textContent);
+        $this->assertStringNotContainsString('DILG action A', $dohPane->textContent);
+        $this->assertStringNotContainsString('DILG remarks A', $dohPane->textContent);
+        $this->assertStringContainsString('DSWD action C', $dswdPane->textContent);
+
+        $responsibleCell = $xpath->query('.//*[@data-implementation-row="'.$sulopA->id.'"]//*[@data-lgu-original="agencies"]', $dilgPane)->item(0);
+        $this->assertNotNull($responsibleCell);
+        $this->assertSame('DILG, DOH', trim(preg_replace('/\s+/', ' ', $responsibleCell->textContent)));
+        $this->assertSame(0, $xpath->query('.//strong|.//b|.//*[contains(concat(" ", normalize-space(@class), " "), " badge ")]', $responsibleCell)->count());
+        $this->assertStringNotContainsString('(Accepted)', $responsibleCell->textContent);
+
         $headings = [];
-        foreach ($xpath->query('//*[@data-official-implan]//thead/tr/th') as $heading) {
+        foreach ($xpath->query('.//*[@data-official-implan]//thead/tr/th', $dilgPane) as $heading) {
             $headings[] = trim(preg_replace('/\s+/', ' ', $heading->textContent));
         }
 
@@ -84,7 +150,33 @@ class ImplanOfficialFormatTest extends TestCase
             'Action Taken',
             'Remarks',
         ], $headings);
-        $this->assertCount(3, $xpath->query('//*[@data-official-implan]//tbody/tr[@data-implementation-row]'));
+        $this->assertSame(0, $xpath->query('//*[@data-official-agency-pane]//*[@data-agency-mov-gallery or @data-mov-item]')->count());
+
+        $source = file_get_contents(resource_path('views/lgu/implan/official.blade.php'));
+        $this->assertIsString($source);
+        $this->assertStringContainsString('onclick="window.print()"', $source);
+        $this->assertStringNotContainsString('window.open', $source);
+        $this->assertStringNotContainsString('<iframe', $source);
+        $this->assertStringContainsString('#municipalityAgencyImplans .tab-pane:not(.active)', $source);
+        $this->assertStringContainsString('#municipalityAgencyImplans .tab-pane.active', $source);
+        $this->assertStringContainsString("tabList.addEventListener('shown.bs.tab'", $source);
+    }
+
+    public function test_municipality_output_has_one_empty_state_and_no_tabs_without_relevant_assignments(): void
+    {
+        $this->createImplan($this->sulopLgu, 'Sulop draft only', 'not yet started');
+        $unassigned = $this->createImplan($this->sulopLgu, 'Submitted without agency');
+        $unassigned->update(['agencies' => []]);
+
+        $response = $this->actingAs($this->sulopLgu)
+            ->get(route('lgu.implan.official'))
+            ->assertOk()
+            ->assertSee('No submitted municipality IMPLANs have responsible agency assignments.')
+            ->assertDontSee('data-official-agency-tab', false)
+            ->assertDontSee('data-download-implan', false)
+            ->assertDontSee('data-print-implan', false);
+
+        $this->assertSame(1, substr_count($response->getContent(), 'data-empty-agency-implan'));
     }
 
     public function test_katuparan_monitors_each_municipality_read_only_without_draft_or_verification_gate(): void
@@ -180,24 +272,24 @@ class ImplanOfficialFormatTest extends TestCase
         $this->assertNotNull($emptyGroup);
         $this->assertStringContainsString('Road Accessibility', $implanAGroup->textContent);
         $this->assertStringContainsString('implan/photos/lgu-a.jpg', $document->saveHTML($implanAGroup));
-        $this->assertSame(1, $xpath->query('.//*[@data-agency-photo="'.$this->agency->id.'"]', $implanAGroup)->count());
+        $this->assertSame(2, $xpath->query('.//*[@data-implan-mov]//*[@data-mov-item]', $implanAGroup)->count());
         $this->assertStringNotContainsString('implan/photos/lgu-b.jpg', $document->saveHTML($implanAGroup));
         $this->assertStringNotContainsString('DOH', $implanAGroup->textContent);
 
         $this->assertStringContainsString('Health Services', $implanBGroup->textContent);
         $this->assertStringContainsString('implan/photos/lgu-b.jpg', $document->saveHTML($implanBGroup));
-        $this->assertSame(1, $xpath->query('.//*[@data-agency-photo="'.$doh->id.'"]', $implanBGroup)->count());
+        $this->assertSame(2, $xpath->query('.//*[@data-implan-mov]//*[@data-mov-item]', $implanBGroup)->count());
         $this->assertStringNotContainsString('implan/photos/lgu-a.jpg', $document->saveHTML($implanBGroup));
         $this->assertStringNotContainsString('DILG', $implanBGroup->textContent);
 
         $this->assertStringContainsString('Water Supply', $emptyGroup->textContent);
-        $this->assertStringContainsString('No documentation uploaded.', $emptyGroup->textContent);
+        $this->assertStringContainsString('No mode of verification available.', $emptyGroup->textContent);
         $this->assertSame(0, $xpath->query('.//form', $supportingArea)->count());
         $this->assertSame(0, $xpath->query('.//input', $supportingArea)->count());
         $this->assertSame(0, $xpath->query('.//button', $supportingArea)->count());
     }
 
-    public function test_katuparan_separates_lgu_originals_and_groups_agency_documentation_with_attribution(): void
+    public function test_katuparan_displays_movs_without_upload_owner_indicators(): void
     {
         $implan = $this->createImplan($this->sulopLgu, 'Multi-agency response');
         $dswd = GovAgency::create(['name' => 'Department of Social Welfare and Development', 'acronym' => 'DSWD']);
@@ -251,26 +343,27 @@ class ImplanOfficialFormatTest extends TestCase
         $implanGroup = $xpath->query('//*[@data-implan-supporting="'.$implan->id.'"]')->item(0);
 
         $this->assertNotNull($implanGroup);
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-lgu-photo]', $implanGroup)->count());
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$this->agency->id.'"]', $implanGroup)->count());
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$dswd->id.'"]', $implanGroup)->count());
-        $this->assertSame(1, $xpath->query('.//*[@data-implan-documentation]//*[@data-agency-photo="'.$doh->id.'"]', $implanGroup)->count());
-        $this->assertStringContainsString('DILG', $xpath->query('.//*[@data-agency-documentation="'.$this->agency->id.'"]', $implanGroup)->item(0)->textContent);
-        $this->assertStringContainsString('DSWD', $xpath->query('.//*[@data-agency-documentation="'.$dswd->id.'"]', $implanGroup)->item(0)->textContent);
-        $this->assertStringContainsString('DOH', $xpath->query('.//*[@data-agency-documentation="'.$doh->id.'"]', $implanGroup)->item(0)->textContent);
+        $this->assertSame(4, $xpath->query('.//*[@data-implan-mov]//*[@data-mov-item]', $implanGroup)->count());
+        $this->assertSame(0, $xpath->query('.//*[@data-implan-mov]//*[@data-agency-photo or @data-agency-documentation or @data-lgu-photo]', $implanGroup)->count());
+        $movText = $xpath->evaluate('string(.//*[@data-implan-mov])', $implanGroup);
+        $this->assertStringNotContainsString('DILG', $movText);
+        $this->assertStringNotContainsString('DSWD', $movText);
+        $this->assertStringNotContainsString('DOH', $movText);
     }
 
-    public function test_xlsx_download_uses_template_keeps_source_unchanged_and_inserts_action_taken_before_remarks(): void
+    public function test_xlsx_download_is_valid_and_contains_only_the_selected_agency_scope(): void
     {
         $template = public_path('assets/IMPLANs/ELCAC-IMPLAN_BSC.xlsx');
         $before = hash_file('sha256', $template);
 
         $sulop = $this->createImplan($this->sulopLgu, 'Sulop export issue');
         $this->createImplan($this->sulopLgu, 'Sulop second export issue');
-        $this->createImplan($this->matanaoLgu, 'Matanao excluded issue');
+        $matanao = $this->createImplan($this->matanaoLgu, 'Matanao excluded issue');
         $dswd = GovAgency::create(['name' => 'Department of Social Welfare and Development', 'acronym' => 'DSWD']);
         $doh = GovAgency::create(['name' => 'Department of Health', 'acronym' => 'DOH']);
+        $denr = GovAgency::create(['name' => 'Department of Environment and Natural Resources', 'acronym' => 'DENR']);
         $sulop->update(['agencies' => [$this->agency->id, $dswd->id, $doh->id]]);
+        $matanao->update(['agencies' => [$denr->id]]);
 
         $agencyResponses = collect();
         foreach ([
@@ -293,13 +386,22 @@ class ImplanOfficialFormatTest extends TestCase
             'image' => 'implan/photos/doh.jpg',
         ]);
 
-        $response = $this->actingAs($this->sulopLgu)->get(route('lgu.implan.download'))
+        $response = $this->actingAs($this->sulopLgu)->get(route('lgu.implan.download', [
+            'agency' => $this->agency->id,
+        ]))
             ->assertOk()
-            ->assertDownload('IMPLAN-Sulop.xlsx')
+            ->assertDownload('sulop-implan-dilg.xlsx')
             ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
+        $binary = $response->streamedContent();
+        $this->assertSame('PK', substr($binary, 0, 2));
+        $this->assertStringNotContainsString('<html', strtolower(substr($binary, 0, 256)));
         $temporary = tempnam(sys_get_temp_dir(), 'implan-test-').'.xlsx';
-        file_put_contents($temporary, $response->streamedContent());
+        file_put_contents($temporary, $binary);
+        $archive = new \ZipArchive;
+        $this->assertTrue($archive->open($temporary) === true);
+        $this->assertNotFalse($archive->locateName('[Content_Types].xml'));
+        $archive->close();
         $workbook = IOFactory::load($temporary);
         $sheet = $workbook->getActiveSheet();
 
@@ -321,17 +423,15 @@ class ImplanOfficialFormatTest extends TestCase
         $this->assertSame('Sulop second export issue', $sheet->getCell('A6')->getValue());
         $this->assertSame('Sulop export issue program', $sheet->getCell('B5')->getValue());
         $responsibleAgencies = (string) $sheet->getCell('F5')->getValue();
-        $this->assertSame("DILG (Accepted)\nDSWD (Pending)\nDOH (Rejected)", $responsibleAgencies);
-        $this->assertStringNotContainsString('Documentation Uploaded', $responsibleAgencies);
-        $this->assertStringNotContainsString('No Documentation Uploaded', $responsibleAgencies);
-        $this->assertSame(
-            "DILG — DILG demo action\nDSWD — DSWD demo action\nDOH — DOH demo action",
-            $sheet->getCell('J5')->getValue()
-        );
-        $this->assertSame(
-            "DILG — DILG demo remarks\nDSWD — DSWD demo remarks\nDOH — DOH demo remarks",
-            $sheet->getCell('K5')->getValue()
-        );
+        $this->assertSame('DILG, DSWD, DOH', $responsibleAgencies);
+        $this->assertStringNotContainsString('MOV Uploaded', $responsibleAgencies);
+        $this->assertStringNotContainsString('No MOV Uploaded', $responsibleAgencies);
+        $this->assertSame('DILG demo action', $sheet->getCell('J5')->getValue());
+        $this->assertSame('DILG demo remarks', $sheet->getCell('K5')->getValue());
+        $this->assertStringNotContainsString('DSWD demo action', json_encode($sheet->toArray()));
+        $this->assertStringNotContainsString('DOH demo action', json_encode($sheet->toArray()));
+        $this->assertStringNotContainsString('DSWD demo remarks', json_encode($sheet->toArray()));
+        $this->assertStringNotContainsString('DOH demo remarks', json_encode($sheet->toArray()));
         $this->assertTrue($sheet->getStyle('J5')->getAlignment()->getWrapText());
         $this->assertTrue($sheet->getStyle('K5')->getAlignment()->getWrapText());
         $this->assertTrue($sheet->getStyle('F5')->getAlignment()->getWrapText());
@@ -343,6 +443,14 @@ class ImplanOfficialFormatTest extends TestCase
         $workbook->disconnectWorksheets();
         unlink($temporary);
         $this->assertSame($before, hash_file('sha256', $template));
+
+        $this->actingAs($this->sulopLgu)
+            ->get(route('lgu.implan.download', ['agency' => $denr->id]))
+            ->assertForbidden();
+        $this->actingAs($this->sulopLgu)
+            ->getJson(route('lgu.implan.download', ['agency' => 'tampered']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('agency');
     }
 
     private function createImplan(User $lgu, string $issue, string $status = 'submitted'): Implementation

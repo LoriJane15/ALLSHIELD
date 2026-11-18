@@ -6,7 +6,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 no-print">
         <div>
             <h3 class="font-weight-bold mb-1">{{ $municipality->name }} IMPLAN</h3>
-            <p class="text-muted mb-0">Read-only LGU originals, agency responses, Action Taken, Remarks, and documentation.</p>
+            <p class="text-muted mb-0">Read-only LGU originals, agency responses, Action Taken, Remarks, and mode of verification.</p>
         </div>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-primary" onclick="window.print()" data-print-implan><i class="mdi mdi-printer"></i> Print</button>
@@ -20,18 +20,16 @@
     <div class="mt-4 no-print" data-implan-supporting-records>
         <div class="mb-3">
             <h4 class="font-weight-bold mb-1">IMPLAN Supporting Records</h4>
-            <p class="text-muted mb-0">Documentation is grouped by the official IMPLAN record that owns it.</p>
+            <p class="text-muted mb-0">Modes of verification are grouped by their official IMPLAN record.</p>
         </div>
 
         @forelse ($implans as $implan)
             @php
-                $agencyDocumentation = $implan->responses->map(function ($agencyResponse) use ($implan) {
-                    return [
-                        'response' => $agencyResponse,
-                        'photos' => $agencyResponse->photos->where('implementation_id', $implan->id),
-                    ];
-                })->filter(fn ($documentation) => $documentation['photos']->isNotEmpty());
-                $hasDocumentation = $implan->originalPhotos->isNotEmpty() || $agencyDocumentation->isNotEmpty();
+                $movs = $implan->originalPhotos
+                    ->concat($implan->responses->flatMap(
+                        fn ($agencyResponse) => $agencyResponse->photos->where('implementation_id', $implan->id)
+                    ))
+                    ->values();
             @endphp
 
             <div class="card mb-4" data-implan-supporting="{{ $implan->id }}">
@@ -49,51 +47,22 @@
                 </div>
 
                 <div class="card-body">
-                    <div data-implan-documentation>
-                            <h6 class="font-weight-bold mb-3">Documentation</h6>
+                    <div data-implan-mov>
+                        <h6 class="font-weight-bold mb-3">Mode of Verification</h6>
 
-                            @if ($implan->originalPhotos->isNotEmpty())
-                                <div class="border rounded p-3 mb-3" data-lgu-documentation>
-                                    <div class="font-weight-bold mb-2">LGU Original</div>
-                                    <div class="row g-2">
-                                        @foreach ($implan->originalPhotos as $photo)
-                                            <div class="col-6 col-md-4" data-lgu-photo>
-                                                <a href="{{ Storage::url($photo->image) }}" target="_blank" rel="noopener">
-                                                    <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover" alt="LGU documentation">
-                                                </a>
-                                                <div class="small text-center mt-1">LGU Original</div>
-                                            </div>
-                                        @endforeach
+                        @if ($movs->isNotEmpty())
+                            <div class="row g-2">
+                                @foreach ($movs as $photo)
+                                    <div class="col-6 col-md-4" data-mov-item>
+                                        <a href="{{ Storage::url($photo->image) }}" target="_blank" rel="noopener">
+                                            <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover" alt="Mode of verification">
+                                        </a>
                                     </div>
-                                </div>
-                            @endif
-
-                            @foreach ($agencyDocumentation as $documentation)
-                                @php
-                                    $agencyResponse = $documentation['response'];
-                                    $agencyAcronym = $agencyResponse->govAgency?->acronym ?? 'Agency';
-                                @endphp
-                                <div class="border rounded p-3 mb-3" data-agency-documentation="{{ $agencyResponse->gov_agency_id }}">
-                                    <div class="font-weight-bold mb-2">{{ $agencyAcronym }}</div>
-
-                                    @if ($documentation['photos']->isNotEmpty())
-                                        <div class="row g-2">
-                                            @foreach ($documentation['photos'] as $photo)
-                                                <div class="col-6 col-md-4" data-agency-photo="{{ $agencyResponse->gov_agency_id }}">
-                                                    <a href="{{ Storage::url($photo->image) }}" target="_blank" rel="noopener">
-                                                        <img src="{{ Storage::url($photo->image) }}" class="img-fluid rounded" style="height:100px;width:100%;object-fit:cover" alt="{{ $agencyAcronym }} documentation">
-                                                    </a>
-                                                    <div class="small text-center mt-1">{{ $agencyAcronym }}</div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                </div>
-                            @endforeach
-
-                            @unless ($hasDocumentation)
-                                <p class="small text-muted mb-0" data-empty-documentation>No documentation uploaded.</p>
-                            @endunless
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="small text-muted mb-0" data-empty-mov>No mode of verification available.</p>
+                        @endif
                     </div>
                 </div>
             </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\GovAgency;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgencyImplanResponse;
+use App\Models\GovAgency;
 use App\Models\Implementation;
 use App\Models\ImplementationPhoto;
 use App\Models\Municipality;
@@ -39,20 +40,38 @@ class ImplanController extends Controller
             'rejected' => $assigned->filter(fn ($i) => ($responses[$i->id] ?? null) === 'rejected'),
         ];
 
-        $monitoringCounts = $assigned
-            ->filter(fn (Implementation $implan) => $implan->lguUser?->municipality_id)
-            ->countBy(fn (Implementation $implan) => $implan->lguUser->municipality_id);
-
-        $monitoringMunicipalities = Municipality::query()
-            ->whereIn('id', $monitoringCounts->keys())
-            ->orderBy('name')
-            ->get();
-
         return view('gov_agency.implan.index', [
             'grouped' => $grouped,
             'agency' => auth()->user()->govAgency,
-            'monitoringMunicipalities' => $monitoringMunicipalities,
-            'monitoringCounts' => $monitoringCounts,
+        ]);
+    }
+
+    public function monitoring(): View
+    {
+        $agencyId = $this->agencyId();
+        $eligibleMunicipalityIds = Implementation::visibleToAgency($agencyId)
+            ->join('users', 'users.id', '=', 'implementations.lgu_user_id')
+            ->whereNotNull('users.municipality_id')
+            ->select('users.municipality_id')
+            ->distinct();
+
+        $municipalities = Municipality::query()
+            ->whereIn('municipalities.id', $eligibleMunicipalityIds)
+            ->orderBy('name')
+            ->paginate(10)
+            ->withQueryString();
+
+        $monitoringSummaries = Implementation::visibleToAgency($agencyId)
+            ->join('users', 'users.id', '=', 'implementations.lgu_user_id')
+            ->whereIn('users.municipality_id', $municipalities->pluck('id'))
+            ->selectRaw('users.municipality_id, COUNT(*) as implan_count, MAX(implementations.uploaded_at) as latest_submission_at')
+            ->groupBy('users.municipality_id')
+            ->get()
+            ->keyBy('municipality_id');
+
+        return view('gov_agency.implan.monitoring', [
+            'municipalities' => $municipalities,
+            'monitoringSummaries' => $monitoringSummaries,
         ]);
     }
 
@@ -81,12 +100,18 @@ class ImplanController extends Controller
             ->mapWithKeys(fn ($area) => [
                 $area->id => $area->barangay?->name ?? "Barangay #{$area->barangay_id}",
             ]);
+        $assignedAgencyIds = $implans
+            ->flatMap(fn (Implementation $implan) => collect($implan->agencies ?? []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
 
         return view('gov_agency.implan.municipality', [
             'municipality' => $municipality,
             'implans' => $implans,
             'agencyScopeId' => $agencyId,
-            'agenciesById' => collect([$agencyId => auth()->user()->govAgency]),
+            'agenciesById' => GovAgency::whereIn('id', $assignedAgencyIds)->get()->keyBy('id'),
             'areaNamesByImplan' => $implans->mapWithKeys(fn (Implementation $implan) => [
                 $implan->id => collect($implan->target_areas ?? [])->map(
                     fn ($id) => $areaNamesById->get((int) $id, "Barangay #{$id}")
@@ -114,6 +139,7 @@ class ImplanController extends Controller
             'agencyScopeId' => $agencyId,
             'currentAgency' => auth()->user()->govAgency,
             'agenciesById' => collect([$agencyId => auth()->user()->govAgency]),
+            'responsibleAgenciesById' => GovAgency::whereIn('id', $implan->agencies ?? [])->get()->keyBy('id'),
             'isSharedAction' => count($implan->agencies ?? []) > 1,
         ]);
     }
@@ -184,6 +210,9 @@ class ImplanController extends Controller
         $request->validate([
             'photos' => ['required', 'array'],
             'photos.*' => ['image', 'max:25600'],
+        ], [], [
+            'photos' => 'mode of verification',
+            'photos.*' => 'mode of verification file',
         ]);
 
         $response = $this->responseFor($implan);
@@ -195,7 +224,7 @@ class ImplanController extends Controller
             ]);
         }
 
-        return back()->with('success', 'Documentation photo(s) uploaded.');
+        return back()->with('success', 'Mode of verification uploaded.');
     }
 
     public function viewPhoto(Implementation $implan, ImplementationPhoto $photo): StreamedResponse
